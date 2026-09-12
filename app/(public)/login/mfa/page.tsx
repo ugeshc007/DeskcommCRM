@@ -4,8 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { MfaForm } from "@/components/auth/MfaForm";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { metadataNoIdiomaDaInstalacao } from "@/lib/i18n/metadata";
+import { env } from "@/lib/env";
 
-export const metadata = { title: "Verificação em duas etapas" };
+export const generateMetadata = () =>
+  metadataNoIdiomaDaInstalacao("Verificação em duas etapas");
 
 export default async function MfaChallengePage({
   searchParams,
@@ -24,7 +27,7 @@ export default async function MfaChallengePage({
   if (!hasVerified) redirect("/app");
 
   const idioma = normalizarIdioma(
-    (user.user_metadata?.locale as string | undefined) ?? null,
+    (user.user_metadata?.locale as string | undefined) ?? env.APP_LOCALE,
   );
   const t = (texto: string) => traduzir(texto, idioma);
 

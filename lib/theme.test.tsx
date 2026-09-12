@@ -57,6 +57,12 @@ import type { ThemeProvider as ThemeProviderType } from "@/lib/theme";
 import type { ThemeToggle as ThemeToggleType } from "@/components/theme/theme-toggle";
 
 vi.mock("react-hotkeys-hook", () => ({ useHotkeys: () => {} }));
+// Este arquivo mede hidratação do TEMA, não a carga do catálogo de idiomas.
+// O catálogo tem sua própria guarda completa e tornaria cada `resetModules`
+// deste teste uma recompilação de milhares de traduções sem acrescentar prova.
+vi.mock("@/lib/i18n/IdiomaProvider", () => ({
+  useT: () => (texto: string) => texto,
+}));
 
 function stubMatchMedia(prefersDark: boolean) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -87,7 +93,7 @@ beforeEach(async () => {
       <ThemeToggle />
     </ThemeProvider>
   );
-});
+}, 30_000);
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -118,16 +124,16 @@ describe("o tema não diverge entre o SSR e a primeira renderização do cliente
     const doServidor = renderizarComoServidor();
     const doCliente = renderizarComoPrimeiraPassadaDoCliente();
 
-    // Os dois precisam dizer "system" — é o valor que `readStoredTheme()`
+    // Os dois precisam dizer "sistema" — é o valor que `readStoredTheme()`
     // devolve sem `window`, e é o que a hidratação tem de bater ANTES do
     // efeito que sincroniza com o localStorage rodar.
-    expect(doServidor).toContain("Tema: system");
+    expect(doServidor).toContain("Tema: sistema");
     expect(
       doCliente,
       "A primeira renderização do cliente leu o localStorage direto no " +
-        "inicializador do useState, produzindo 'Tema: dark' — diferente do " +
-        "que o servidor mandou ('Tema: system'). É o hydration mismatch.",
-    ).toContain("Tema: system");
+        "inicializador do useState, produzindo 'Tema: escuro' — diferente do " +
+        "que o servidor mandou ('Tema: sistema'). É o hydration mismatch.",
+    ).toContain("Tema: sistema");
     expect(doCliente).toBe(doServidor);
   });
 
@@ -151,6 +157,6 @@ describe("o tema não diverge entre o SSR e a primeira renderização do cliente
     act(() => {
       createRoot(container).render(ARVORE);
     });
-    expect(container.innerHTML).toContain("Tema: dark");
+    expect(container.innerHTML).toContain("Tema: escuro");
   });
 });

@@ -36,7 +36,7 @@ export default async function OnboardingLayout({ children }: { children: React.R
   const marca = branding();
 
   return (
-    <IdiomaProvider locale={user.locale}>
+    <IdiomaProvider locale={user.idioma}>
       <div className="flex min-h-screen flex-col bg-muted/40">
         <header className="border-b bg-background">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-4">
@@ -46,7 +46,9 @@ export default async function OnboardingLayout({ children }: { children: React.R
                 <SimboloDoProduto nome={marca.name} decorativo className="h-9 w-9" />
               )}
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">{marca.name}</p>
+                <p className="text-xs tracking-wider text-muted-foreground uppercase">
+                  {marca.name}
+                </p>
                 <h1 className="text-lg font-semibold tracking-tight">{activeOrg.name}</h1>
               </div>
             </div>

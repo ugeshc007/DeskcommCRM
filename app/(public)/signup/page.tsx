@@ -6,8 +6,10 @@ import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { metadataNoIdiomaDaInstalacao } from "@/lib/i18n/metadata";
+import { env } from "@/lib/env";
 
-export const metadata = { title: "Criar conta" };
+export const generateMetadata = () => metadataNoIdiomaDaInstalacao("Criar conta");
 
 /**
  * Aceita `?invite=<token>`: é o caminho de quem foi convidado e ainda não tem
@@ -33,7 +35,7 @@ export default async function SignupPage({
     data: { user },
   } = await supabase.auth.getUser();
   const idioma = normalizarIdioma(
-    (user?.user_metadata?.locale as string | undefined) ?? null,
+    (user?.user_metadata?.locale as string | undefined) ?? env.APP_LOCALE,
   );
   const t = (texto: string) => traduzir(texto, idioma);
 

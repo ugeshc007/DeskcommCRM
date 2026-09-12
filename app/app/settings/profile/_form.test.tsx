@@ -19,7 +19,7 @@ vi.mock("@/app/actions/settings/updateProfile", () => ({
   updateProfile: vi.fn(async () => ({ ok: true })),
 }));
 
-function renderForm(locale: "pt-BR" | "es", initialLocale: "pt-BR" | "es") {
+function renderForm(locale: "pt-BR" | "es" | "en", initialLocale: "pt-BR" | "es" | "en") {
   return render(
     <IdiomaProvider locale={locale}>
       <ProfileForm
@@ -53,5 +53,15 @@ describe("ProfileForm em espanhol", () => {
   it("a voz do espanhol é tuteio neutro — voseo reprova", () => {
     expect(traduzir("Escreva uma mensagem…", "es")).toBe("Escribe un mensaje…");
     expect(traduzir("Escolha um modelo aprovado…", "es")).toBe("Elige una plantilla aprobada…");
+  });
+});
+
+describe("ProfileForm em inglês", () => {
+  it("hidrata o idioma salvo e traduz os rótulos", () => {
+    renderForm("en", "en");
+    expect(screen.getByRole("combobox", { name: "Language" })).toHaveTextContent("English");
+    expect(screen.getByText("Full name")).toBeTruthy();
+    expect(screen.getByText("Time zone")).toBeTruthy();
+    expect(screen.queryByText("Nome completo")).toBeNull();
   });
 });

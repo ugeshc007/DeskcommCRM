@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { moedaServidaOu } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { ZonaDePerigoDaOrganizacao } from "./_danger-zone";
@@ -41,10 +42,12 @@ export default async function TenantSettingsPage() {
     .maybeSingle();
 
   const row = (data ?? null) as OrgRow | null;
-  const lostReasonsExtra =
-    (row?.settings && Array.isArray((row.settings as { lost_reasons_extra?: unknown }).lost_reasons_extra)
+  const lostReasonsExtra = (
+    row?.settings &&
+    Array.isArray((row.settings as { lost_reasons_extra?: unknown }).lost_reasons_extra)
       ? ((row.settings as { lost_reasons_extra?: string[] }).lost_reasons_extra ?? [])
-      : []) as string[];
+      : []
+  ) as string[];
   const idioma = user.idioma;
 
   return (
@@ -62,9 +65,7 @@ export default async function TenantSettingsPage() {
             legal_name: row.legal_name,
             cnpj: row.cnpj,
             timezone: row.timezone,
-            // `en-US` saiu da lista (nunca teve tradução). Uma linha antiga
-            // com ele cai no padrão em vez de quebrar a tela.
-            locale: row.locale === "es" ? "es" : "pt-BR",
+            locale: normalizarIdioma(row.locale),
             currency: moedaServidaOu(row.currency),
             media_retention_days: row.media_retention_days,
             dpo_email: row.dpo_email,

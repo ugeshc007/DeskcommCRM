@@ -271,7 +271,7 @@ export function KanbanBoard({
           pipelineId={pipelineId}
           fieldDefs={camposDoFunil(data.pipeline.settings ?? null)}
           stageName={
-            data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
+            t(data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—")
           }
           ownerNames={ownerNames}
         />

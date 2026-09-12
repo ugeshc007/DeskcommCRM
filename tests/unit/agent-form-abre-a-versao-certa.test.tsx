@@ -22,6 +22,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 
 import { AgentForm } from "@/app/app/ai/agents/[id]/_components/AgentForm";
+import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 const PROMPT_BOM = "# QUEM VOCÊ É\n\nVocê é a Vitória, da recepção da Clínica Vitalis.";
 const PROMPT_PADRAO = "Você é um atendente. Responda de forma educada e clara, em pt-BR.";
@@ -150,5 +151,33 @@ describe("o editor abre a versão que a regra escolheu", () => {
       draftObsoleto: null,
     });
     expect(texto).toBe("rascunho novo em andamento");
+  });
+});
+
+describe("o agente novo respeita o idioma da interface", () => {
+  it("abre com prompt e palavras de transferência em inglês", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <IdiomaProvider locale="en">
+          <AgentForm
+            mode="create"
+            credentials={CREDENCIAIS as never}
+            channelSessions={SESSOES as never}
+          />
+        </IdiomaProvider>
+      </QueryClientProvider>,
+    );
+
+    const prompt = screen
+      .getAllByRole("textbox")
+      .find((el) => el.tagName === "TEXTAREA" && el.className.includes("font-mono"));
+    expect(prompt).toHaveValue(
+      "You are a customer service agent. Respond politely and clearly in English.",
+    );
+    expect(screen.getByRole("button", { name: "remove talk to a person" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "remove human agent" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "remove real person" })).toBeVisible();
+    expect(screen.queryByText("falar com humano")).not.toBeInTheDocument();
   });
 });

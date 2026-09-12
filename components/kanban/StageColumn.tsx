@@ -61,6 +61,10 @@ export function StageColumn({
   onOpen,
 }: StageColumnProps) {
   const t = useT();
+  // Os nomes canônicos são semeados em pt-BR no banco. Na apresentação eles
+  // atravessam o catálogo; nomes criados pelo cliente ficam intactos porque
+  // `t()` devolve o próprio texto quando não conhece a chave.
+  const stageLabel = t(stage.name);
   const totalCents = leads.reduce((sum, l) => sum + (l.value_cents ?? 0), 0);
 
   const idsVisiveis = leads.map((l) => l.id);
@@ -111,8 +115,8 @@ export function StageColumn({
           onChange={alternarEtapa}
           aria-label={
             todosSelecionados
-              ? `${t("Desmarcar todos em")} ${stage.name}`
-              : `${t("Selecionar todos em")} ${stage.name}`
+              ? `${t("Desmarcar todos em")} ${stageLabel}`
+              : `${t("Selecionar todos em")} ${stageLabel}`
           }
           className={cn(
             "h-4 w-4 shrink-0 cursor-pointer accent-accent transition-opacity",
@@ -129,7 +133,7 @@ export function StageColumn({
           aria-hidden
         />
         <h2 className="flex-1 truncate text-sm font-semibold text-text">
-          {stage.name}
+          {stageLabel}
         </h2>
         <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-text-muted">
           {selecionadosAqui > 0 ? `${selecionadosAqui}/${leads.length}` : leads.length}
@@ -156,7 +160,7 @@ export function StageColumn({
               <KanbanCard
                 key={lead.id}
                 card={buildCardInput(lead, {
-                  stageName: stage.name,
+                  stageName: stageLabel,
                   ownerNames,
                   coolingIds,
                   reactivations,

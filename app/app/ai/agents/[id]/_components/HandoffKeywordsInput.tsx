@@ -77,15 +77,15 @@ export function HandoffKeywordsInput({ value, onChange, disabled }: Props) {
         </button>
       </div>
       <div className="flex flex-wrap gap-1">
-        {DEFAULTS.filter((d) => !value.includes(d)).map((d) => (
+        {DEFAULTS.filter((d) => !value.includes(d) && !value.includes(t(d))).map((d) => (
           <button
             key={d}
             type="button"
-            onClick={() => add(d)}
+            onClick={() => add(t(d))}
             disabled={disabled}
             className="rounded-md border border-dashed border-border/60 px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted"
           >
-            + {d}
+            + {t(d)}
           </button>
         ))}
       </div>

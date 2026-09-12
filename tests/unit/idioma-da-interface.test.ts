@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  *
  * Um seletor no perfil, salvo em `user_metadata.locale`, que NINGUÉM lia.
  * Medido: nenhuma biblioteca de i18n, nenhuma pasta de tradução, nenhum
- * consumidor do campo. Escolher "English (US)" não mudava uma letra.
+ * consumidor do campo. Escolher um idioma não mudava uma letra.
  *
  * É a mesma classe do rodapé que mostra uma versão que não é a que roda: o
  * operador configura, nada acontece, e ele conclui que o sistema está quebrado.
@@ -29,6 +29,11 @@ describe("traduzir", () => {
   it("devolve o espanhol quando existe", () => {
     expect(traduzir("Assumir", "es")).toBe("Asumir");
     expect(traduzir("Contatos", "es")).toBe("Contactos");
+  });
+
+  it("devolve o inglês quando existe", () => {
+    expect(traduzir("Assumir", "en")).toBe("Take over");
+    expect(traduzir("Contatos", "en")).toBe("Contacts");
   });
 
   it("em português devolve a própria chave — ela É o texto", () => {
@@ -56,12 +61,12 @@ describe("traduzir", () => {
 describe("normalizar o idioma que veio do perfil", () => {
   it("aceita os que sabemos servir", () => {
     expect(normalizarIdioma("es")).toBe("es");
+    expect(normalizarIdioma("en")).toBe("en");
     expect(normalizarIdioma("pt-BR")).toBe("pt-BR");
   });
 
   it("fecha no padrão para o que não conhece", () => {
-    // `en-US` esteve no seletor por muito tempo e nunca teve tradução. Um
-    // perfil antigo ainda o traz, e deixá-lo passar mostraria a CHAVE na tela.
+    // `en-US` esteve no seletor antigo; o código canônico servido agora é `en`.
     expect(normalizarIdioma("en-US")).toBe(IDIOMA_PADRAO);
     expect(normalizarIdioma("klingon")).toBe(IDIOMA_PADRAO);
     expect(normalizarIdioma(null)).toBe(IDIOMA_PADRAO);
@@ -107,6 +112,28 @@ describe("os elos que somem sem barulho", () => {
     ).not.toMatch(/^import .*auth/m);
   });
 
+  it("o idioma da instalação alcança as portas antes da sessão", () => {
+    const layoutPublico = readFileSync("app/(public)/layout.tsx", "utf8");
+    expect(layoutPublico).toMatch(/\?\? env\.APP_LOCALE/);
+
+    for (const pagina of [
+      "app/(public)/login/page.tsx",
+      "app/(public)/signup/page.tsx",
+      "app/(public)/login/forgot/page.tsx",
+      "app/(public)/login/reset/page.tsx",
+      "app/(public)/login/recovery/page.tsx",
+      "app/(public)/login/mfa/page.tsx",
+    ]) {
+      const fonte = readFileSync(pagina, "utf8");
+      expect(fonte, `${pagina} ignora o idioma da instalação antes da sessão`).toMatch(
+        /\?\? env\.APP_LOCALE/,
+      );
+      expect(fonte, `${pagina} deixa o título da aba preso em português`).toMatch(
+        /metadataNoIdiomaDaInstalacao/,
+      );
+    }
+  });
+
   it("a validação do perfil usa a MESMA lista do dicionário", () => {
     // Duas listas divergem: um idioma aceito no salvamento e desconhecido no
     // dicionário cairia no padrão em silêncio, e o operador veria português
@@ -115,11 +142,11 @@ describe("os elos que somem sem barulho", () => {
   });
 
   it("o seletor oferece só o que MUDA a tela", () => {
-    // `en-US` saiu: nunca teve tradução. Oferecer um idioma que não muda nada é
-    // prometer o que a tela não cumpre.
+    // O código legado `en-US` saiu; o código servido agora é `en`.
     const perfil = readFileSync("app/app/settings/profile/_form.tsx", "utf8");
     expect(perfil).toMatch(/value="es">Español/);
-    expect(perfil, "ainda oferece um idioma sem tradução").not.toMatch(/value="en-US"/);
+    expect(perfil).toMatch(/value="en">English/);
+    expect(perfil, "ainda oferece o código legado").not.toMatch(/value="en-US"/);
   });
 
   it("a barra lateral traduz — ela aparece em TODA tela", () => {

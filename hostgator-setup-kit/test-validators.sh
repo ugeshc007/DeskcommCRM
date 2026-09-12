@@ -1685,7 +1685,7 @@ STUB
   # cria a organização, um operador conferindo — precisa do código. A conversão
   # acontece no install; se ela sumir, `APP_LOCALE=2` chega ao banco e o
   # resolvedor de idioma o descarta em silêncio, deixando tudo em português
-  # depois de a pessoa ter escolhido espanhol.
+  # depois de a pessoa ter escolhido espanhol ou inglês.
   saida="$(rodar install.sh "" "" "$(fila_com "$RESTO_DAS_PERGUNTAS" "$POSICAO_DO_IDIOMA" 2)")"
   chegou_na_deteccao || exit 1
   idioma_gravado="$(valor_no_env "$VPS_PROJ/.env" APP_LOCALE)"
@@ -1695,10 +1695,20 @@ STUB
     printf '     esperava [es]. Três pontos produzem o mesmo sintoma:\n'
     printf '       (a) o campo APP_LOCALE em FIELDS — sem ele a pergunta não existe;\n'
     printf '       (b) o `envq APP_LOCALE` no bloco que fecha com `} > .env`;\n'
-    printf '       (c) a conversão 1/2 → pt-BR/es logo antes do envq — sem ela grava "2".\n'
+    printf '       (c) a conversão 1/2/3 → pt-BR/es/en logo antes do envq — sem ela grava o número.\n'
     exit 1
   fi
   printf '  ✓ o idioma respondido (2) chega ao .env como código (%s)\n' "$idioma_gravado"
+
+  saida="$(rodar install.sh "" "" "$(fila_com "$RESTO_DAS_PERGUNTAS" "$POSICAO_DO_IDIOMA" 3)")"
+  chegou_na_deteccao || exit 1
+  idioma_gravado="$(valor_no_env "$VPS_PROJ/.env" APP_LOCALE)"
+  if [ "$idioma_gravado" != "en" ]; then
+    printf '  ✗ o idioma English não chegou ao .env como código: [%s], esperava [en]\n' \
+      "${idioma_gravado:-(ausente)}"
+    exit 1
+  fi
+  printf '  ✓ o idioma respondido (3) chega ao .env como código (%s)\n' "$idioma_gravado"
 ) || fail=1
 rm -rf "$TMP3B"
 

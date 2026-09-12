@@ -42,10 +42,11 @@
  * Não é só do perfil. A cadeia é `preferência da pessoa → idioma da organização
  * → padrão`, resolvida em `lib/auth/server.ts` e entregue pronta em
  * `AuthUser.idioma`. É o elo do meio que faz o idioma escolhido no instalador
- * alcançar quem entra depois e nunca abriu o próprio perfil.
+ * alcançar quem entra depois e nunca abriu o próprio perfil. Nas telas sem
+ * sessão, `APP_LOCALE` fornece o idioma escolhido durante a instalação.
  */
 
-export const IDIOMAS = ["pt-BR", "es"] as const;
+export const IDIOMAS = ["pt-BR", "es", "en"] as const;
 export type Idioma = (typeof IDIOMAS)[number];
 
 export const IDIOMA_PADRAO: Idioma = "pt-BR";
@@ -54,11 +55,9 @@ export const IDIOMA_PADRAO: Idioma = "pt-BR";
  * O que veio do perfil é um idioma que sabemos servir?
  *
  * Fecha para o padrão em vez de confiar: o campo aceita qualquer string desde
- * antes desta feature (o seletor já ofereceu `en-US`, que nunca teve tradução),
+ * antes desta feature (o seletor já ofereceu `en-US` antes de a tradução existir),
  * e um valor desconhecido chegando ao dicionário devolveria a CHAVE na tela.
  */
 export function normalizarIdioma(bruto: string | null | undefined): Idioma {
-  return (IDIOMAS as readonly string[]).includes(bruto ?? "")
-    ? (bruto as Idioma)
-    : IDIOMA_PADRAO;
+  return (IDIOMAS as readonly string[]).includes(bruto ?? "") ? (bruto as Idioma) : IDIOMA_PADRAO;
 }

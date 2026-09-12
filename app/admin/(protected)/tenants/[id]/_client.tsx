@@ -5,6 +5,7 @@ import { TenantOverview } from "@/components/admin/tenants/TenantOverview";
 import { TenantActions } from "@/components/admin/tenants/TenantActions";
 import { SuspendedBanner } from "@/components/admin/tenants/SuspendedBanner";
 import { useT } from "@/hooks/i18n/useT";
+import { SubscriptionCard } from "@/components/admin/tenants/SubscriptionCard";
 
 interface TenantOverviewClientProps {
   id: string;
@@ -56,6 +57,7 @@ export function TenantOverviewClient({ id }: TenantOverviewClientProps) {
           displayName={organization.display_name}
         />
       </div>
+      <SubscriptionCard organizationId={organization.id} />
     </div>
   );
 }

@@ -2534,6 +2534,9 @@ export const DICIONARIO: Traducoes = {
   "Admin Plataforma": { es: "Admin de la plataforma" },
   "MODO PLATAFORMA": { es: "MODO PLATAFORMA" },
   "— operação cross-tenant": { es: "— operación cross-tenant" },
+  "— SaaS gerenciado · operação cross-tenant": {
+    es: "— SaaS gestionado · operación cross-tenant",
+  },
   "Modo Plataforma": { es: "Modo Plataforma" },
   "Sair pra app pessoal": { es: "Salir a la app personal" },
   "Navegação plataforma": { es: "Navegación de la plataforma" },
@@ -3962,6 +3965,12 @@ export const DICIONARIO: Traducoes = {
   "Planos, faturas e cobrança.": { es: "Planes, facturas y cobros." },
   "Em breve — Fase 2": { es: "Próximamente — Fase 2" },
   "Billing entra na Fase 2 do roadmap.": { es: "Billing entra en la Fase 2 del roadmap." },
+  "O cadastro de novas empresas é feito pela equipe da plataforma nesta instalação.": {
+    es: "El registro de nuevas empresas lo realiza el equipo de la plataforma en esta instalación.",
+  },
+  "Se você recebeu um convite, abra o link enviado pela sua empresa.": {
+    es: "Si recibió una invitación, abra el enlace enviado por su empresa.",
+  },
   "Para questões de pagamento, contate": { es: "Para temas de pago, contacta a" },
   "Para questões de pagamento, fale com quem administra este sistema.": {
     es: "Para temas de pago, habla con quien administra este sistema.",

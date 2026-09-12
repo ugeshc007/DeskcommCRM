@@ -36,6 +36,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { metadataInicialDoCanal } from "@/lib/ai/elegibilidade/pre-go-live";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { assertSaasCapacity, SaasCapacityError } from "@/lib/saas/capacity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -165,6 +166,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     () => buscarExistente("id"),
   );
   const existente = existenteRaw as { id: string; archived_at?: string | null } | null;
+
+  if (!existente) try { await assertSaasCapacity(orgId, "channels"); }
+  catch (error) {
+    if (error instanceof SaasCapacityError) return fail(error.code, error.code === "plan_limit_reached" ? `Channel limit reached (${error.limit}). Ask your platform administrator to change the plan or limit.` : "Subscription configuration could not be verified. Try again or contact the platform administrator.", error.code === "plan_limit_reached" ? 409 : 503, { requestId, details: { resource: error.resource, limit: error.limit } });
+    throw error;
+  }
 
   const linha = {
     organization_id: orgId,

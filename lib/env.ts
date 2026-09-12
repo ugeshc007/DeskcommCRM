@@ -65,6 +65,15 @@ const schema = z.object({
   // Node
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
+  // Distribuição — self-host permanece o default e não exige billing.
+  // String aberta de propósito: a interpretação conservadora vive em
+  // `lib/saas/deployment-mode.ts`; valor desconhecido nunca fecha cadastro nem
+  // derruba o app inteiro por erro de digitação.
+  SAAS_DEPLOYMENT_MODE: z.string().optional().default("self_hosted"),
+  // Opcional: sem segredo nenhum endpoint de billing aceita evento. Um
+  // provedor concreto continua exigindo decisão e adapter explícitos.
+  SAAS_BILLING_WEBHOOK_SECRET: z.string().optional().default(""),
+
   // Supabase — obrigatórias sempre (até pra dev local)
   NEXT_PUBLIC_SUPABASE_URL: requiredAlways("NEXT_PUBLIC_SUPABASE_URL").url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: requiredAlways("NEXT_PUBLIC_SUPABASE_ANON_KEY"),

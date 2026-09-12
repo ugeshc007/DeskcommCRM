@@ -599,6 +599,7 @@ jobs:
         zona-de-perigo-apaga-dados-de-teste.spec.ts
         central-avisos-resolver-em-lote.spec.ts
         voz-desligada-por-padrao.spec.ts
+        managed-saas.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts

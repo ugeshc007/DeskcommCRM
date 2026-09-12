@@ -2,14 +2,20 @@
 import Link from "next/link";
 import { Buildings } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import type { SaasDeploymentMode } from "@/lib/saas/deployment-mode";
 
 /**
  * Sticky top banner that signals the user is operating in cross-tenant
  * Platform mode. Persistent visual cue to prevent accidental destructive
  * actions when the operator forgets which surface they're in.
  */
-export function PlatformModeBanner() {
+export function PlatformModeBanner({
+  deploymentMode = "self_hosted",
+}: {
+  deploymentMode?: SaasDeploymentMode;
+}) {
   const t = useT();
+  const managed = deploymentMode === "managed_saas";
   return (
     <div
       role="region"
@@ -19,7 +25,9 @@ export function PlatformModeBanner() {
       <div className="flex items-center gap-2 text-sm">
         <Buildings size={18} weight="fill" aria-hidden />
         <span className="font-semibold tracking-tight">{t("MODO PLATAFORMA")}</span>
-        <span className="hidden text-amber-800/80 sm:inline">{t("— operação cross-tenant")}</span>
+        <span className="hidden text-amber-800/80 sm:inline">
+          {managed ? t("— SaaS gerenciado · operação cross-tenant") : t("— operação cross-tenant")}
+        </span>
       </div>
       <Link
         href="/app"

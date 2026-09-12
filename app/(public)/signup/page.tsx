@@ -6,6 +6,8 @@ import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { env } from "@/lib/env";
+import { publicSignupAllowed } from "@/lib/saas/deployment-mode";
 
 export const metadata = { title: "Criar conta" };
 
@@ -27,6 +29,7 @@ export default async function SignupPage({
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
   const conviteExpirado = Boolean(invite) && !payload;
+  const cadastroPermitido = publicSignupAllowed(env.SAAS_DEPLOYMENT_MODE, Boolean(convite));
 
   const supabase = await createClient();
   const {
@@ -59,7 +62,21 @@ export default async function SignupPage({
         </p>
       )}
 
-      <SignupForm convite={convite} />
+      {cadastroPermitido ? (
+        <SignupForm convite={convite} />
+      ) : (
+        <div
+          role="status"
+          className="space-y-2 rounded-md border bg-muted/40 px-4 py-5 text-center"
+        >
+          <p className="text-sm font-medium">
+            {t("O cadastro de novas empresas é feito pela equipe da plataforma nesta instalação.")}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {t("Se você recebeu um convite, abra o link enviado pela sua empresa.")}
+          </p>
+        </div>
+      )}
 
       <p className="text-center text-sm text-muted-foreground">
         {t("Já tem conta?")}{" "}

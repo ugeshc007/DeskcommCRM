@@ -8,10 +8,12 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { List } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import type { SaasDeploymentMode } from "@/lib/saas/deployment-mode";
 
 interface AdminShellProps {
   userEmail: string;
   children: ReactNode;
+  deploymentMode?: SaasDeploymentMode;
 }
 
 /**
@@ -55,7 +57,11 @@ interface AdminShellProps {
  * funcionando, em vez de repetir o erro a cada tela adicionada — é o padrão
  * recomendado pelo Radix (Provider perto da raiz, compartilhando o delay).
  */
-export function AdminShell({ userEmail, children }: AdminShellProps) {
+export function AdminShell({
+  userEmail,
+  children,
+  deploymentMode = "self_hosted",
+}: AdminShellProps) {
   const t = useT();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // Mesmo padrão de `app/app/_components/AppShell.tsx`: ajuste de estado
@@ -70,7 +76,7 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
   return (
     <TooltipProvider>
       <div className="flex min-h-screen w-full flex-col bg-background">
-        <PlatformModeBanner />
+        <PlatformModeBanner deploymentMode={deploymentMode} />
         <div className="flex flex-1">
           <AdminSidebar userEmail={userEmail} />
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>

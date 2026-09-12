@@ -149,7 +149,7 @@ export default defineConfig({
     url: BASE_URL,
     // false: reusar um server que já ocupa a porta pode ser OUTRO processo
     // (ex.: bundle do Remotion na 3000) — o teste precisa do NOSSO next start.
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.E2E_REUSE_SERVER === "true",
     // Sobre a precedência de `env`, MEDIDO (Playwright 1.5x, 2026-08-07) com um
     // webServer que imprime o que recebeu:
     //

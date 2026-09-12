@@ -27,6 +27,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { alvoDe, classificarFalhaDeAlcance, type FalhaDeAlcance } from "@/lib/net/alcance";
 import { validarConfigRedisRest } from "@/lib/redis-config";
+import { resolveSaasDeploymentMode } from "@/lib/saas/deployment-mode";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -51,6 +53,7 @@ type Check = {
 };
 
 const TIMEOUT_MS = 3_000;
+const HOST_AGENT_OFFLINE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 async function withTimeout<T>(p: Promise<T>, ms = TIMEOUT_MS): Promise<T> {
   return Promise.race([
@@ -98,6 +101,41 @@ async function checkSupabase(): Promise<Check> {
       reason: classificarFalhaDeAlcance(e),
       target: alvoDe(url),
     };
+  }
+}
+
+async function checkManagedSaasSchema(): Promise<Check> {
+  const t0 = Date.now();
+  if (resolveSaasDeploymentMode(env.SAAS_DEPLOYMENT_MODE) === "self_hosted") return { status: "ok", latency_ms: 0 };
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  try {
+    const res = await withTimeout(fetch(`${url}/rest/v1/organization_subscriptions?select=id&limit=1`, { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" }));
+    return res.status === 200 ? { status: "ok", latency_ms: Date.now() - t0, target: alvoDe(url) } : { status: "down", latency_ms: Date.now() - t0, error: `http_${res.status}`, reason: "configuracao_invalida", target: alvoDe(url) };
+  } catch (error) {
+    return { status: "down", latency_ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error), reason: classificarFalhaDeAlcance(error), target: alvoDe(url) };
+  }
+}
+
+function checkManagedBillingWebhook(): Check {
+  if (resolveSaasDeploymentMode(env.SAAS_DEPLOYMENT_MODE) === "self_hosted") return { status: "ok", latency_ms: 0 };
+  return env.SAAS_BILLING_WEBHOOK_SECRET.length >= 32
+    ? { status: "ok", latency_ms: 0 }
+    : { status: "degraded", latency_ms: 0, error: "billing_webhook_secret_missing", reason: "nao_configurado" };
+}
+
+async function checkManagedHostAgent(): Promise<Check> {
+  const t0 = Date.now();
+  if (resolveSaasDeploymentMode(env.SAAS_DEPLOYMENT_MODE) === "self_hosted") return { status: "ok", latency_ms: 0 };
+  try {
+    const { data, error } = await createAdminClient().from("system_version").select("agent_last_seen_at").eq("id", 1).maybeSingle();
+    if (error) return { status: "down", latency_ms: Date.now() - t0, error: error.message, reason: "configuracao_invalida" };
+    const lastSeen = data?.agent_last_seen_at ? Date.parse(data.agent_last_seen_at) : Number.NaN;
+    return Number.isFinite(lastSeen) && Date.now() - lastSeen < HOST_AGENT_OFFLINE_AFTER_MS
+      ? { status: "ok", latency_ms: Date.now() - t0 }
+      : { status: "degraded", latency_ms: Date.now() - t0, error: "host_agent_stale", reason: "nao_configurado" };
+  } catch (error) {
+    return { status: "down", latency_ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error), reason: "resposta_inesperada" };
   }
 }
 
@@ -262,15 +300,17 @@ function semAlvo(check: Check): Check {
 }
 
 export async function GET(req: NextRequest) {
-  const [supabase, redis, waha] = await Promise.all([
+  const [supabase, redis, waha, managedSaas, managedHostAgent] = await Promise.all([
     checkSupabase(),
     checkRedis(),
     checkWaha(),
+    checkManagedSaasSchema(),
+    checkManagedHostAgent(),
   ]);
 
   const verboso = req.nextUrl.searchParams.get("verbose") === "1" && segredoInternoConfere(req);
   const filtrar = verboso ? (c: Check) => c : semAlvo;
-  const checks = { supabase: filtrar(supabase), redis: filtrar(redis), waha: filtrar(waha) };
+  const checks = { supabase: filtrar(supabase), redis: filtrar(redis), waha: filtrar(waha), managed_saas: filtrar(managedSaas), managed_billing_webhook: filtrar(checkManagedBillingWebhook()), managed_host_agent: filtrar(managedHostAgent) };
 
   const anyDown = Object.values(checks).some((c) => c.status === "down");
   const anyDegraded = Object.values(checks).some((c) => c.status === "degraded");

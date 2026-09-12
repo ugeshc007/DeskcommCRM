@@ -75,6 +75,16 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  {
+    tabela: "organization_subscriptions",
+    razao:
+      "tests/invariants/saas-subscription-ledger.test.ts — administradora da org A lê a assinatura de A e zero linhas de B; viewer não lê nem escreve.",
+  },
+  {
+    tabela: "organization_billing_events",
+    razao:
+      "tests/invariants/saas-subscription-ledger.test.ts — eventos seguem o mesmo isolamento A/B e a escrita authenticated é negada para manter o ledger append-only.",
+  },
   { tabela: "channel_routing_policies", razao: "tests/invariants/channel-routing.test.ts — dois tenants reais, leitura positiva local e negativa cruzada por JWT; FK composta rejeita canal de outra org" },
   { tabela: "channel_routing_responsibles", razao: "tests/invariants/channel-routing.test.ts — JWT do tenant B não lê responsáveis de A; revogação remove vínculo e claim revalida membro ativo" },
   { tabela: "channel_connection_requests", razao: "tests/invariants/channel-routing.test.ts — recibo privado sem SELECT authenticated; reserva admin com MFA e finalização service-only cercada por org e lease" },

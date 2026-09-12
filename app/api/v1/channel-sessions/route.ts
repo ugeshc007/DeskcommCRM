@@ -22,6 +22,7 @@ import { createChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { getWahaClient } from "@/lib/waha/client";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { assertSaasCapacity, SaasCapacityError } from "@/lib/saas/capacity";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,12 @@ export async function POST(req: NextRequest): Promise<Response> {
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org: activeOrg } = authz;
   if (await mfaEmDivida()) return fail("mfa_required", t("Confirme a verificação em duas etapas."), 403, { requestId });
+
+  try { await assertSaasCapacity(activeOrg.orgId, "channels"); }
+  catch (error) {
+    if (error instanceof SaasCapacityError) return fail(error.code, error.code === "plan_limit_reached" ? `Channel limit reached (${error.limit}). Ask your platform administrator to change the plan or limit.` : "Subscription configuration could not be verified. Try again or contact the platform administrator.", error.code === "plan_limit_reached" ? 409 : 503, { requestId, details: { resource: error.resource, limit: error.limit } });
+    throw error;
+  }
 
   const waha = getWahaClient();
   if (!waha) {

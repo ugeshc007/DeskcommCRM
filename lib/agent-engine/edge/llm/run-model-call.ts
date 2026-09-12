@@ -67,6 +67,52 @@ export class LlmBudgetExceededError extends Error {
   }
 }
 
+/** Limite comercial gerenciado atingido; também é terminal para esta fila. */
+export class SaasAiLimitExceededError extends LlmBudgetExceededError {
+  constructor(public readonly limit: number) {
+    super();
+    this.message = `managed monthly AI limit reached (${limit} cents) — the model call was refused before contacting the provider; ask the platform administrator to increase or remove the limit`;
+  }
+}
+
+async function aplicarLimiteSaas(d: { db: pg.Pool; organizationId: string; log?: Logger }): Promise<void> {
+  if (process.env.SAAS_DEPLOYMENT_MODE?.trim().toLowerCase() !== 'managed_saas') return;
+  let row: { limite: number | string | null; gasto: number | string | null } | undefined;
+  try {
+    const result = await d.db.query<{ limite: number | string | null; gasto: number | string | null }>(`
+      select (s.limits->>'monthly_ai_cents')::numeric limite,
+             public.fn_gasto_de_ia_do_mes(s.organization_id) gasto
+        from public.organization_subscriptions s
+       where s.organization_id=$1 and s.limits ? 'monthly_ai_cents'
+    `, [d.organizationId]);
+    row = result.rows[0];
+  } catch (error) {
+    d.log?.warn('saas: limite mensal de IA não pôde ser lido — chamada segue', {
+      organization_id: d.organizationId,
+      ...normalizarErro(error),
+    });
+    return;
+  }
+  if (!row) return;
+  const limite = Number(row.limite);
+  const gasto = Number(row.gasto ?? 0);
+  if (!Number.isSafeInteger(limite) || limite < 0 || !Number.isFinite(gasto) || gasto < limite) return;
+  try {
+    await d.db.query(`
+      insert into public.agent_inbox_items(organization_id,kind,severity,title,body,ref_kind,ref_id)
+      select $1,'budget_exceeded','warn','Managed AI limit reached',
+             'Future model calls are paused because the managed monthly AI limit was reached. Ask the platform administrator to increase or remove the limit.',
+             'ai_budget',$1
+       where not exists (
+         select 1 from public.agent_inbox_items where organization_id=$1 and kind='budget_exceeded' and ref_kind='ai_budget' and ref_id=$1 and status='open'
+       )
+    `, [d.organizationId]);
+  } catch (error) {
+    d.log?.warn('saas: falha ao abrir aviso de limite de IA', { organization_id: d.organizationId, ...normalizarErro(error) });
+  }
+  throw new SaasAiLimitExceededError(limite);
+}
+
 /** Provider da config sem entrada no registry — erro de config, nunca fallback. */
 export class LlmProviderUnknownError extends Error {
   override readonly name = 'llm_provider_unknown';
@@ -387,6 +433,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   // valor inventado numa tabela de auditoria é pior que a linha faltando.
   // Continua ANTES de qualquer byte ao provedor, que é a propriedade que
   // importa: bloqueio custa zero token.
+  await aplicarLimiteSaas({ db, organizationId: input.tenantId, ...(deps.log ? { log: deps.log } : {}) });
   await aplicarOrcamento({
     db,
     organizationId: input.tenantId,

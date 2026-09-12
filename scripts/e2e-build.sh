@@ -34,7 +34,13 @@ set -a
 set +a
 
 echo "==> Buildando contra ${NEXT_PUBLIC_SUPABASE_URL}"
-pnpm exec next build
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm exec next build
+else
+  # Git Bash no Windows enxerga o `corepack` sem extensão, mas não o shim
+  # `pnpm.cmd`. Mantém a versão fixada no packageManager do projeto.
+  corepack pnpm@9.15.9 exec next build
+fi
 
 # A PROVA, e não a suposição: se a URL de produção sobreviveu em qualquer
 # artefato do bundle, o `.env.local` venceu e o teste falaria com a nuvem pela

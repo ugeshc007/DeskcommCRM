@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Managed SaaS control plane", "subtitle": "Optional subscription state preserves the complete self-hosted edition", "output": "saas-control-plane.html", "quality_profile": "standard" },
+  "lanes": [
+    { "id": "input", "label": "Trusted inputs" },
+    { "id": "control", "label": "Control plane" },
+    { "id": "data", "label": "Tenant-isolated data" },
+    { "id": "output", "label": "Decisions and screens" }
+  ],
+  "nodes": [
+    { "id": "admin", "lane": "input", "col": 0, "type": "frontend", "label": "Platform admin", "sublabel": "full scope + MFA + support-write gate" },
+    { "id": "adapter", "lane": "input", "col": 0, "type": "service", "label": "Provider adapter", "sublabel": "manual now; normalized signed webhooks later" },
+    { "id": "api", "lane": "control", "col": 1, "type": "api", "label": "Subscription command", "sublabel": "path-owned organization + UUID idempotency key" },
+    { "id": "ledger", "lane": "data", "col": 2, "type": "database", "label": "Subscription + append-only events", "sublabel": "organization_id RLS; no payment secrets" },
+    { "id": "audit", "lane": "data", "col": 2, "type": "database", "label": "Audit log", "sublabel": "accountable platform mutation" },
+    { "id": "entitlements", "lane": "output", "col": 3, "type": "service", "label": "Entitlement evaluator", "sublabel": "missing row/key = unlimited self-host behavior" },
+    { "id": "screens", "lane": "output", "col": 3, "type": "frontend", "label": "Admin tenant + tenant Billing", "sublabel": "visible state, limits, usage, recovery" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "admin", "to": "api", "label": "manual update" },
+    { "id": "e2", "from": "adapter", "to": "api", "label": "normalized event contract" },
+    { "id": "e3", "from": "api", "to": "ledger", "label": "atomic upsert + event", "route": "highlight" },
+    { "id": "e4", "from": "api", "to": "audit", "label": "human accountability" },
+    { "id": "e5", "from": "ledger", "to": "entitlements", "label": "optional explicit limits" },
+    { "id": "e6", "from": "ledger", "to": "screens", "label": "tenant-scoped read" },
+    { "id": "e7", "from": "entitlements", "to": "screens", "label": "actionable limit recovery" }
+  ],
+  "cards": [{ "dot": "sky", "title": "Non-negotiable boundaries", "items": ["billing status never auto-suspends a tenant", "no subscription row means unmanaged/self-hosted", "payment credentials and raw provider payloads never enter the ledger"] }]
+}

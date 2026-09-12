@@ -1985,6 +1985,16 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 
 ## Comunidade 360 — aceite integrado de 2026-09-06
 
+### Managed SaaS control plane
+
+- [P0] Platform owner creates a tenant, records a manual subscription, and sees the revision.
+- [P0] Tenant admin sees only their plan, lifecycle state, and configured limits in Billing.
+- [P0] Member/channel creation at an explicit ceiling returns an actionable error; removing or
+  raising the limit makes the next attempt succeed. A self-hosted organization without a
+  subscription remains unlimited.
+- [P1] Repeating the same subscription command with the same idempotency key creates one event.
+- External payment checkout/webhook proof remains intentionally absent until a provider is chosen.
+
 Produto `7f1d0f3e`, integrado à main `ca895850`: as dez specs de organizações, suporte, interface por vínculo, encerramento, Central, presença/recuperação, Calendar, Meet, autonomia assistida e roteamento passaram juntas: **22 casos em 3,7 minutos**. A execução usa build de produção `F0cVqvOg8JuwVlWss4ijk`, banco QA local e receivers HTTP controlados; não comprova OAuth externo, WhatsApp pareado ou qualidade de modelo externo.
 
 Evidência local preservada em `.superpowers/evidence/comunidade-360/final-qa-targeted-r4/` e log `.superpowers/sdd/comunidade-360/final-qa-targeted-r4.log`. A rodada inclui atualização concorrente da interface sem perder formulário, sugestão obsoleta sem confirmação antiga de sucesso e encerramento de suporte com retorno ao contexto original.

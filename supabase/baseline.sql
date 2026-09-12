@@ -23992,6 +23992,113 @@ create trigger trg_org_voice_calls_set_updated_at
 
 notify pgrst, 'reload schema';
 
+-- ---- ledger SaaS provider-neutral (migration 0239) ----
+-- Ausência de linha preserva organização self-host/unmanaged. Billing não
+-- suspende organização automaticamente.
+create table if not exists public.organization_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  plan_code text not null,
+  status text not null,
+  billing_provider text not null default 'manual',
+  external_customer_ref text,
+  external_subscription_ref text,
+  trial_ends_at timestamptz,
+  current_period_start timestamptz,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  limits jsonb not null default '{}'::jsonb,
+  revision bigint not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint organization_subscriptions_org_unique unique (organization_id),
+  constraint organization_subscriptions_plan_check check (plan_code in ('standard','pro','enterprise')),
+  constraint organization_subscriptions_status_check check (status in ('trialing','active','past_due','canceled')),
+  constraint organization_subscriptions_provider_check check (billing_provider ~ '^[a-z][a-z0-9_]{0,39}$'),
+  constraint organization_subscriptions_period_check check (current_period_end is null or current_period_start is null or current_period_end >= current_period_start),
+  constraint organization_subscriptions_revision_check check (revision > 0),
+  constraint organization_subscriptions_limits_check check (
+    jsonb_typeof(limits) = 'object'
+    and (limits - array['members','channels','monthly_ai_cents']::text[]) = '{}'::jsonb
+    and (not (limits ? 'members') or (jsonb_typeof(limits->'members')='number' and (limits->>'members')::numeric >= 0 and (limits->>'members')::numeric = trunc((limits->>'members')::numeric)))
+    and (not (limits ? 'channels') or (jsonb_typeof(limits->'channels')='number' and (limits->>'channels')::numeric >= 0 and (limits->>'channels')::numeric = trunc((limits->>'channels')::numeric)))
+    and (not (limits ? 'monthly_ai_cents') or (jsonb_typeof(limits->'monthly_ai_cents')='number' and (limits->>'monthly_ai_cents')::numeric >= 0 and (limits->>'monthly_ai_cents')::numeric = trunc((limits->>'monthly_ai_cents')::numeric)))
+  )
+);
+create unique index if not exists organization_subscriptions_external_ref_idx on public.organization_subscriptions (billing_provider,external_subscription_ref) where external_subscription_ref is not null;
+create index if not exists organization_subscriptions_status_period_idx on public.organization_subscriptions (status,current_period_end) where status in ('trialing','past_due','canceled');
+
+create table if not exists public.organization_billing_events (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  subscription_id uuid not null references public.organization_subscriptions(id) on delete restrict,
+  event_type text not null,
+  billing_provider text not null,
+  external_event_ref text,
+  idempotency_key uuid,
+  actor_user_id uuid references auth.users(id) on delete set null,
+  previous_status text,
+  new_status text,
+  summary jsonb not null default '{}'::jsonb,
+  occurred_at timestamptz not null default now(),
+  recorded_at timestamptz not null default now(),
+  constraint organization_billing_events_type_check check (event_type in ('subscription_created','subscription_updated','provider_event')),
+  constraint organization_billing_events_provider_check check (billing_provider ~ '^[a-z][a-z0-9_]{0,39}$'),
+  constraint organization_billing_events_previous_status_check check (previous_status is null or previous_status in ('trialing','active','past_due','canceled')),
+  constraint organization_billing_events_new_status_check check (new_status is null or new_status in ('trialing','active','past_due','canceled')),
+  constraint organization_billing_events_summary_check check (jsonb_typeof(summary)='object')
+);
+create unique index if not exists organization_billing_events_external_idx on public.organization_billing_events (billing_provider,external_event_ref) where external_event_ref is not null;
+create unique index if not exists organization_billing_events_idempotency_idx on public.organization_billing_events (organization_id,idempotency_key) where idempotency_key is not null;
+create index if not exists organization_billing_events_org_time_idx on public.organization_billing_events (organization_id,occurred_at desc,id desc);
+
+alter table public.organization_subscriptions enable row level security;
+alter table public.organization_billing_events enable row level security;
+drop policy if exists organization_subscriptions_admin_select on public.organization_subscriptions;
+create policy organization_subscriptions_admin_select on public.organization_subscriptions for select using (
+  public.fn_is_platform_admin() or (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'admin'))
+);
+drop policy if exists organization_billing_events_admin_select on public.organization_billing_events;
+create policy organization_billing_events_admin_select on public.organization_billing_events for select using (
+  public.fn_is_platform_admin() or (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'admin'))
+);
+revoke all on public.organization_subscriptions from public,anon,authenticated;
+revoke all on public.organization_billing_events from public,anon,authenticated;
+grant select on public.organization_subscriptions to authenticated;
+grant select on public.organization_billing_events to authenticated;
+grant all on public.organization_subscriptions to service_role;
+grant all on public.organization_billing_events to service_role;
+drop trigger if exists trg_organization_subscriptions_updated_at on public.organization_subscriptions;
+create trigger trg_organization_subscriptions_updated_at before update on public.organization_subscriptions for each row execute function public.fn_set_updated_at();
+comment on table public.organization_subscriptions is 'Assinatura provider-neutral de uma organização gerenciada. Ausência de linha = self-host/unmanaged. Status de billing não suspende a organização automaticamente.';
+comment on column public.organization_subscriptions.limits is 'Limites comerciais opcionais: members, channels, monthly_ai_cents. Chave ausente = não aplicar aquele limite.';
+comment on table public.organization_billing_events is 'Histórico append-only de billing. Guarda resumo mínimo; nunca payload completo, cartão ou segredo do provedor.';
+notify pgrst, 'reload schema';
+
+-- ---- comando transacional do ledger SaaS (migration 0240) ----
+create or replace function public.fn_set_organization_subscription(p_actor uuid,p_organization_id uuid,p_idempotency_key uuid,p_request jsonb)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare v_existing public.organization_billing_events%rowtype; v_before public.organization_subscriptions%rowtype; v_after public.organization_subscriptions%rowtype; v_event_type text;
+begin
+  if p_actor is null or p_organization_id is null or p_idempotency_key is null or jsonb_typeof(p_request)<>'object' then raise exception 'saas_subscription_invalid_arguments' using errcode='22023'; end if;
+  if not exists(select 1 from public.platform_admins where user_id=p_actor and revoked_at is null and scope='full') then raise exception 'saas_subscription_forbidden' using errcode='42501'; end if;
+  if not exists(select 1 from public.organizations where id=p_organization_id) then raise exception 'saas_subscription_org_not_found' using errcode='P0002'; end if;
+  if (p_request-array['plan_code','status','billing_provider','external_customer_ref','external_subscription_ref','trial_ends_at','current_period_start','current_period_end','cancel_at_period_end','limits']::text[])<>'{}'::jsonb then raise exception 'saas_subscription_unknown_field' using errcode='22023'; end if;
+  select * into v_existing from public.organization_billing_events where organization_id=p_organization_id and idempotency_key=p_idempotency_key;
+  if found then select * into v_after from public.organization_subscriptions where id=v_existing.subscription_id; return to_jsonb(v_after)||jsonb_build_object('created',false,'replayed',true); end if;
+  select * into v_before from public.organization_subscriptions where organization_id=p_organization_id for update;
+  v_event_type:=case when found then 'subscription_updated' else 'subscription_created' end;
+  insert into public.organization_subscriptions(organization_id,plan_code,status,billing_provider,external_customer_ref,external_subscription_ref,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,limits)
+  values(p_organization_id,p_request->>'plan_code',p_request->>'status',coalesce(nullif(p_request->>'billing_provider',''),'manual'),nullif(p_request->>'external_customer_ref',''),nullif(p_request->>'external_subscription_ref',''),nullif(p_request->>'trial_ends_at','')::timestamptz,nullif(p_request->>'current_period_start','')::timestamptz,nullif(p_request->>'current_period_end','')::timestamptz,coalesce((p_request->>'cancel_at_period_end')::boolean,false),coalesce(p_request->'limits','{}'::jsonb))
+  on conflict(organization_id) do update set plan_code=excluded.plan_code,status=excluded.status,billing_provider=excluded.billing_provider,external_customer_ref=excluded.external_customer_ref,external_subscription_ref=excluded.external_subscription_ref,trial_ends_at=excluded.trial_ends_at,current_period_start=excluded.current_period_start,current_period_end=excluded.current_period_end,cancel_at_period_end=excluded.cancel_at_period_end,limits=excluded.limits,revision=public.organization_subscriptions.revision+1 returning * into v_after;
+  insert into public.organization_billing_events(organization_id,subscription_id,event_type,billing_provider,idempotency_key,actor_user_id,previous_status,new_status,summary)
+  values(p_organization_id,v_after.id,v_event_type,v_after.billing_provider,p_idempotency_key,p_actor,v_before.status,v_after.status,jsonb_build_object('plan_code',v_after.plan_code,'revision',v_after.revision));
+  return to_jsonb(v_after)||jsonb_build_object('created',v_event_type='subscription_created','replayed',false);
+end; $$;
+revoke execute on function public.fn_set_organization_subscription(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.fn_set_organization_subscription(uuid,uuid,uuid,jsonb) to service_role;
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -24066,3 +24173,97 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+-- BEGIN APPEND 0241: SaaS provider events
+-- Ingestão transacional e idempotente de eventos normalizados de billing.
+-- O tenant é resolvido pela referência externa já vinculada pelo platform
+-- admin; jamais vem do corpo do webhook.
+alter table public.organization_subscriptions
+  add column if not exists provider_state_at timestamptz;
+
+create table if not exists public.billing_webhook_receipts (
+  id uuid primary key default gen_random_uuid(),
+  billing_provider text not null check (billing_provider ~ '^[a-z][a-z0-9_]{0,39}$'),
+  external_event_ref text not null,
+  external_subscription_ref text not null,
+  organization_id uuid references public.organizations(id) on delete set null,
+  subscription_id uuid references public.organization_subscriptions(id) on delete set null,
+  outcome text not null check (outcome in ('processing','applied','duplicate','stale','unknown_subscription')),
+  occurred_at timestamptz not null,
+  recorded_at timestamptz not null default now(),
+  summary jsonb not null default '{}'::jsonb check (jsonb_typeof(summary) = 'object'),
+  unique (billing_provider, external_event_ref)
+);
+
+alter table public.billing_webhook_receipts enable row level security;
+drop policy if exists billing_webhook_receipts_platform_select on public.billing_webhook_receipts;
+create policy billing_webhook_receipts_platform_select on public.billing_webhook_receipts
+  for select using (public.fn_is_platform_admin());
+revoke all on public.billing_webhook_receipts from public, anon, authenticated;
+grant select on public.billing_webhook_receipts to authenticated;
+grant all on public.billing_webhook_receipts to service_role;
+
+create or replace function public.fn_apply_saas_provider_event(p_event jsonb)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare
+  v_sub public.organization_subscriptions%rowtype;
+  v_receipt public.billing_webhook_receipts%rowtype;
+  v_provider text := p_event->>'provider';
+  v_event_ref text := p_event->>'external_event_ref';
+  v_sub_ref text := p_event->>'external_subscription_ref';
+  v_occurred timestamptz;
+  v_limits jsonb;
+  v_previous_status text;
+begin
+  if jsonb_typeof(p_event) <> 'object'
+     or (p_event - array['provider','external_event_ref','external_customer_ref','external_subscription_ref','plan_code','status','limits','occurred_at']::text[]) <> '{}'::jsonb
+     or coalesce(v_provider,'') !~ '^[a-z][a-z0-9_]{0,39}$'
+     or coalesce(v_event_ref,'') = '' or coalesce(v_sub_ref,'') = ''
+     or p_event->>'plan_code' not in ('standard','pro','enterprise')
+     or p_event->>'status' not in ('trialing','active','past_due','canceled') then
+    raise exception 'saas_provider_event_invalid' using errcode='22023';
+  end if;
+  begin v_occurred := (p_event->>'occurred_at')::timestamptz;
+  exception when others then raise exception 'saas_provider_event_invalid_time' using errcode='22023'; end;
+  v_limits := p_event->'limits';
+
+  insert into public.billing_webhook_receipts(billing_provider,external_event_ref,external_subscription_ref,outcome,occurred_at)
+  values(v_provider,v_event_ref,v_sub_ref,'processing',v_occurred)
+  on conflict (billing_provider,external_event_ref) do nothing
+  returning * into v_receipt;
+  if not found then
+    return jsonb_build_object('outcome','duplicate');
+  end if;
+
+  select * into v_sub from public.organization_subscriptions
+   where billing_provider=v_provider and external_subscription_ref=v_sub_ref for update;
+  if not found then
+    update public.billing_webhook_receipts set outcome='unknown_subscription',summary=jsonb_build_object('status',p_event->>'status') where id=v_receipt.id;
+    return jsonb_build_object('outcome','unknown_subscription');
+  end if;
+
+  update public.billing_webhook_receipts set organization_id=v_sub.organization_id,subscription_id=v_sub.id where id=v_receipt.id;
+  if v_sub.provider_state_at is not null and v_occurred <= v_sub.provider_state_at then
+    update public.billing_webhook_receipts set outcome='stale',summary=jsonb_build_object('current_revision',v_sub.revision) where id=v_receipt.id;
+    insert into public.organization_billing_events(organization_id,subscription_id,event_type,billing_provider,external_event_ref,previous_status,new_status,occurred_at,summary)
+    values(v_sub.organization_id,v_sub.id,'provider_event',v_provider,v_event_ref,v_sub.status,v_sub.status,v_occurred,jsonb_build_object('outcome','stale','revision',v_sub.revision));
+    return jsonb_build_object('outcome','stale','organization_id',v_sub.organization_id,'revision',v_sub.revision);
+  end if;
+
+  v_previous_status := v_sub.status;
+  update public.organization_subscriptions set
+    plan_code=p_event->>'plan_code', status=p_event->>'status',
+    external_customer_ref=coalesce(nullif(p_event->>'external_customer_ref',''),external_customer_ref),
+    limits=case when v_limits is null or v_limits='null'::jsonb then limits else v_limits end,
+    provider_state_at=v_occurred, revision=revision+1
+  where id=v_sub.id returning * into v_sub;
+  update public.billing_webhook_receipts set outcome='applied',summary=jsonb_build_object('revision',v_sub.revision) where id=v_receipt.id;
+  insert into public.organization_billing_events(organization_id,subscription_id,event_type,billing_provider,external_event_ref,previous_status,new_status,occurred_at,summary)
+  values(v_sub.organization_id,v_sub.id,'provider_event',v_provider,v_event_ref,v_previous_status,v_sub.status,v_occurred,jsonb_build_object('outcome','applied','plan_code',v_sub.plan_code,'revision',v_sub.revision));
+  return jsonb_build_object('outcome','applied','organization_id',v_sub.organization_id,'revision',v_sub.revision);
+end; $$;
+
+revoke execute on function public.fn_apply_saas_provider_event(jsonb) from public,anon,authenticated;
+grant execute on function public.fn_apply_saas_provider_event(jsonb) to service_role;
+notify pgrst, 'reload schema';
+
+-- END APPEND 0241

@@ -93,4 +93,14 @@ describe("AdminShell", () => {
       /must be used within `TooltipProvider`/,
     );
   });
+
+  it("identifica o modo SaaS gerenciado sem esconder o alerta cross-tenant", () => {
+    render(
+      <AdminShell userEmail="dono@exemplo.com" deploymentMode="managed_saas">
+        <div>conteúdo</div>
+      </AdminShell>,
+    );
+
+    expect(screen.getByText(/SaaS gerenciado · operação cross-tenant/i)).toBeInTheDocument();
+  });
 });

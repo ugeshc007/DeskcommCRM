@@ -13,6 +13,7 @@ import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
+import { publicSignupAllowed } from "@/lib/saas/deployment-mode";
 
 export type SignUpResult =
   | {
@@ -41,7 +42,12 @@ export type SignUpResult =
        * resposta continua indistinguível de sucesso — ver o parágrafo de
        * anti-enumeração abaixo.
        */
-      error: "validation_error" | "rate_limited" | "signup_failed" | "conta_ja_existe";
+      error:
+        | "validation_error"
+        | "rate_limited"
+        | "signup_failed"
+        | "conta_ja_existe"
+        | "signup_disabled";
       details?: Record<string, unknown>;
     };
 
@@ -66,6 +72,13 @@ export async function signUp(
   inviteToken?: string,
 ): Promise<SignUpResult> {
   const temConvite = typeof inviteToken === "string" && inviteToken.trim() !== "";
+  // No SaaS gerenciado, organização nasce pela plataforma. Convite assinado
+  // continua criando a conta de um membro da organização já existente.
+  // A guarda vive também na action: esconder o formulário não protege uma
+  // Server Action, que segue alcançável por POST direto.
+  if (!publicSignupAllowed(env.SAAS_DEPLOYMENT_MODE, temConvite)) {
+    return { ok: false, error: "signup_disabled" };
+  }
   const parsed = temConvite
     ? signupComConviteSchema.safeParse(input)
     : signupSchema.safeParse(input);

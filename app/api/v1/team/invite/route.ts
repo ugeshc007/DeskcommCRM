@@ -25,6 +25,7 @@ import { ApiError } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteMemberSchema, validateRequest } from "@/lib/schemas";
+import { assertSaasCapacity, SaasCapacityError } from "@/lib/saas/capacity";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,14 @@ export async function POST(req: NextRequest): Promise<Response> {
       const memberEmail = u?.user?.email?.trim().toLowerCase();
       if (memberEmail) memberEmails.add(memberEmail);
     }
+  }
+
+  const novos = input.invitations.filter((inv) => !memberEmails.has(inv.email.trim().toLowerCase())).length;
+  try {
+    await assertSaasCapacity(activeOrg.orgId, "members", novos);
+  } catch (error) {
+    if (error instanceof SaasCapacityError) return fail(error.code, error.code === "plan_limit_reached" ? `Member limit reached (${error.limit}). Ask your platform administrator to change the plan or limit.` : "Subscription configuration could not be verified. Try again or contact the platform administrator.", error.code === "plan_limit_reached" ? 409 : 503, { requestId, details: { resource: error.resource, limit: error.limit } });
+    throw error;
   }
 
   for (const inv of input.invitations) {

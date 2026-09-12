@@ -5657,6 +5657,8 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "Insufficient permission. Requires role >= manager.",
   "phone_number_id, waba_id e token são obrigatórios":
     "phone_number_id, waba_id and token are required",
+  "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.":
+    "The Phone Number ID does not belong to the specified WhatsApp Business Account. Copy both IDs from Meta → WhatsApp → API Setup; do not use the App ID.",
   "Pipeline não encontrado.": "Pipeline not found.",
   "provar a chave requer papel de administrador": "prove key requires admin role",
   "Provider desconhecido.": "Unknown provider.",

@@ -6940,6 +6940,9 @@ const DICIONARIO_BASE: Traducoes = {
   "payload fora do contrato do canal": { es: "payload fuera del contrato del canal" },
   "Permissão insuficiente. Requer role >= manager.": { es: "Permiso insuficiente. Requiere role >= manager." },
   "phone_number_id, waba_id e token são obrigatórios": { es: "phone_number_id, waba_id y token son obligatorios" },
+  "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.": {
+    es: "El Phone Number ID no pertenece a la WhatsApp Business Account indicada. Copia ambos ID en Meta → WhatsApp → API Setup; no uses el App ID.",
+  },
   "Pipeline não encontrado.": { es: "Pipeline no encontrado." },
   "provar a chave requer papel de administrador": { es: "probar la clave requiere rol de administrador" },
   "Provider desconhecido.": { es: "Provider desconocido." },

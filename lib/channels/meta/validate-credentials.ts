@@ -16,20 +16,33 @@ export type ValidacaoCredencial =
 
 export async function validateMetaCredentials(input: {
   phoneNumberId: string;
+  wabaId: string;
   token: string;
   graphVersion?: string;
 }): Promise<ValidacaoCredencial> {
   const version = input.graphVersion ?? process.env.META_GRAPH_VERSION ?? "v22.0";
   try {
+    // O número é validado PELO WABA que o possui. Consultar `/{id}` diretamente
+    // pressupõe que o valor recebido já seja um WhatsAppBusinessPhoneNumber; se
+    // o operador colar o App ID ou o próprio WABA, a Graph responde o opaco
+    // "nonexisting field (display_phone_number)". A aresta abaixo resolve os
+    // dois problemas: prova a associação WABA↔número e devolve os campos do tipo
+    // correto, sem pôr o bearer na query string.
+    const query = new URLSearchParams({
+      fields: "id,display_phone_number,verified_name,quality_rating",
+      limit: "100",
+    });
     const res = await fetch(
-      `https://graph.facebook.com/${version}/${input.phoneNumberId}` +
-        `?fields=display_phone_number,verified_name,quality_rating`,
+      `https://graph.facebook.com/${version}/${encodeURIComponent(input.wabaId)}/phone_numbers?${query}`,
       { headers: { Authorization: `Bearer ${input.token}` } },
     );
     const body = (await res.json().catch(() => ({}))) as {
-      display_phone_number?: string;
-      verified_name?: string;
-      quality_rating?: string;
+      data?: Array<{
+        id?: string;
+        display_phone_number?: string;
+        verified_name?: string;
+        quality_rating?: string;
+      }>;
       error?: { message?: string; error_data?: { details?: string } };
     };
 
@@ -42,11 +55,20 @@ export async function validateMetaCredentials(input: {
       };
     }
 
+    const numero = body.data?.find((item) => item.id === input.phoneNumberId);
+    if (!numero) {
+      return {
+        ok: false,
+        motivo:
+          "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.",
+      };
+    }
+
     return {
       ok: true,
-      displayPhoneNumber: body.display_phone_number ?? null,
-      verifiedName: body.verified_name ?? null,
-      qualityRating: body.quality_rating ?? null,
+      displayPhoneNumber: numero.display_phone_number ?? null,
+      verifiedName: numero.verified_name ?? null,
+      qualityRating: numero.quality_rating ?? null,
     };
   } catch (err) {
     // Rede caída não é credencial ruim — o motivo precisa dizer isso, senão o

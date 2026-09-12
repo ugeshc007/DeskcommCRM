@@ -132,9 +132,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // VALIDA ANTES DE GRAVAR — a rota não sabe com quem fala; ela pergunta se a
   // credencial presta e o canal responde.
-  const validacao = await validateMetaCredentials({ phoneNumberId: phone_number_id, token });
+  const validacao = await validateMetaCredentials({
+    phoneNumberId: phone_number_id,
+    wabaId: waba_id,
+    token,
+  });
   if (!validacao.ok) {
-    return fail("invalid_request", validacao.motivo, 422, { requestId });
+    return fail("invalid_request", t(validacao.motivo), 422, { requestId });
   }
 
   const admin = createAdminClient();

@@ -107,13 +107,18 @@ async function checkSupabase(): Promise<Check> {
 async function checkManagedSaasSchema(): Promise<Check> {
   const t0 = Date.now();
   if (resolveSaasDeploymentMode(env.SAAS_DEPLOYMENT_MODE) === "self_hosted") return { status: "ok", latency_ms: 0 };
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   try {
-    const res = await withTimeout(fetch(`${url}/rest/v1/organization_subscriptions?select=id&limit=1`, { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" }));
-    return res.status === 200 ? { status: "ok", latency_ms: Date.now() - t0, target: alvoDe(url) } : { status: "down", latency_ms: Date.now() - t0, error: `http_${res.status}`, reason: "configuracao_invalida", target: alvoDe(url) };
+    // A tabela é deliberadamente fechada para anon. Usar a anon key aqui dava
+    // falso "schema ausente" justamente quando RLS/grants estavam corretos.
+    const { error } = await createAdminClient()
+      .from("organization_subscriptions" as never)
+      .select("id")
+      .limit(1);
+    return error
+      ? { status: "down", latency_ms: Date.now() - t0, error: error.message, reason: "configuracao_invalida" }
+      : { status: "ok", latency_ms: Date.now() - t0 };
   } catch (error) {
-    return { status: "down", latency_ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error), reason: classificarFalhaDeAlcance(error), target: alvoDe(url) };
+    return { status: "down", latency_ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error), reason: "resposta_inesperada" };
   }
 }
 
@@ -136,6 +141,23 @@ async function checkManagedHostAgent(): Promise<Check> {
       : { status: "degraded", latency_ms: Date.now() - t0, error: "host_agent_stale", reason: "nao_configurado" };
   } catch (error) {
     return { status: "down", latency_ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error), reason: "resposta_inesperada" };
+  }
+}
+
+async function checkManagedWorker(): Promise<Check> {
+  const t0 = Date.now();
+  if (resolveSaasDeploymentMode(env.SAAS_DEPLOYMENT_MODE) === "self_hosted") return { status: "ok", latency_ms: 0 };
+  const url = env.MANAGED_WORKER_HEALTH_URL.trim();
+  if (!url) return { status: "degraded", latency_ms: 0, error: "worker_health_url_missing", reason: "nao_configurado" };
+  try {
+    const res = await withTimeout(fetch(url, { cache: "no-store" }));
+    if (!res.ok) return { status: "down", latency_ms: Date.now() - t0, error: `http_${res.status}`, reason: motivoDoStatusHttp(res.status), target: alvoDe(url) };
+    const body = await res.json() as { status?: unknown; db?: unknown };
+    return body.status === "ok" && body.db === "ok"
+      ? { status: "ok", latency_ms: Date.now() - t0, target: alvoDe(url) }
+      : { status: "down", latency_ms: Date.now() - t0, error: "worker_not_ready", reason: "resposta_inesperada", target: alvoDe(url) };
+  } catch (error) {
+    return { status: "down", latency_ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error), reason: classificarFalhaDeAlcance(error), target: alvoDe(url) };
   }
 }
 
@@ -300,17 +322,18 @@ function semAlvo(check: Check): Check {
 }
 
 export async function GET(req: NextRequest) {
-  const [supabase, redis, waha, managedSaas, managedHostAgent] = await Promise.all([
+  const [supabase, redis, waha, managedSaas, managedHostAgent, managedWorker] = await Promise.all([
     checkSupabase(),
     checkRedis(),
     checkWaha(),
     checkManagedSaasSchema(),
     checkManagedHostAgent(),
+    checkManagedWorker(),
   ]);
 
   const verboso = req.nextUrl.searchParams.get("verbose") === "1" && segredoInternoConfere(req);
   const filtrar = verboso ? (c: Check) => c : semAlvo;
-  const checks = { supabase: filtrar(supabase), redis: filtrar(redis), waha: filtrar(waha), managed_saas: filtrar(managedSaas), managed_billing_webhook: filtrar(checkManagedBillingWebhook()), managed_host_agent: filtrar(managedHostAgent) };
+  const checks = { supabase: filtrar(supabase), redis: filtrar(redis), waha: filtrar(waha), managed_saas: filtrar(managedSaas), managed_billing_webhook: filtrar(checkManagedBillingWebhook()), managed_host_agent: filtrar(managedHostAgent), managed_worker: filtrar(managedWorker) };
 
   const anyDown = Object.values(checks).some((c) => c.status === "down");
   const anyDegraded = Object.values(checks).some((c) => c.status === "degraded");

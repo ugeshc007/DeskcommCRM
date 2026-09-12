@@ -184,3 +184,20 @@ evidence exists, and the Living System checklist below is answered with concrete
 - **Map:** add `docs/architecture/saas-control-plane.architecture.json` with subscription inputs and
   its tenant/operator/entitlement consumers.
 
+## Completion record — 2026-09-12
+
+Phases 0–8 are implemented on `feat/saas-control-plane`, including the merged English interface.
+The final local proof used a fresh PostgreSQL 15/Supabase stack with `baseline.sql`, the production
+Next build on port 3002, and the real queue worker on port 8787. The managed schema, billing-webhook,
+database, and worker readiness checks all reported `ok`.
+
+Measured gates: production build and TypeScript passed; focused SaaS/API/health/model-seam tests
+passed; the fresh install and update database gates plus SaaS invariants passed; all packaging shell
+tests passed except the pre-existing Unix `chmod 600` assertion on Windows/NTFS; and the managed-SaaS
+Playwright journey passed against the final integrated build with English visual evidence.
+
+The local installation deliberately has no real payment provider, public HTTPS domain, production
+Redis, live channel service, transactional-email credentials, or production backup/restore target.
+Those require operator infrastructure or a provider decision and are not represented as completed
+external deployment work. The manual billing pilot and provider-neutral signed webhook boundary are
+operational without claiming that an external payment was collected.

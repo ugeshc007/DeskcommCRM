@@ -12,7 +12,7 @@ async function fixture(): Promise<Fixture> {
   const tag = randomUUID();
   const email = `managed-owner-${tag}@invariant.test`;
   const password = `E2e!${randomUUID()}`;
-  const user = await db.auth.admin.createUser({ email, password, email_confirm: true });
+  const user = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { locale: "en" } });
   if (user.error || !user.data.user) throw user.error ?? new Error("fixture user missing");
   const org = await db.from("organizations").insert({ slug: `managed-${tag}`, display_name: "Managed SaaS E2E", legal_name: "Managed SaaS E2E", onboarded_at: new Date().toISOString() }).select("id").single();
   if (org.error || !org.data) throw org.error ?? new Error("fixture org missing");

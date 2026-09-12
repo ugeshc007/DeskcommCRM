@@ -71,6 +71,9 @@ const schema = z.object({
   // Opcional: sem segredo nenhum endpoint de billing aceita evento. Um
   // provedor concreto continua exigindo decisão e adapter explícitos.
   SAAS_BILLING_WEBHOOK_SECRET: z.string().optional().default(""),
+  // Endpoint interno do processo worker. Em managed_saas, vazio aparece como
+  // dependência ausente no health check; self_hosted não precisa configurá-lo.
+  MANAGED_WORKER_HEALTH_URL: z.string().optional().default(""),
 
   // Supabase — obrigatórias sempre (até pra dev local)
   NEXT_PUBLIC_SUPABASE_URL: requiredAlways("NEXT_PUBLIC_SUPABASE_URL").url(),

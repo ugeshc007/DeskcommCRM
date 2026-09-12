@@ -2,7 +2,9 @@
 
 Set `SAAS_DEPLOYMENT_MODE=managed_saas` only on the shared managed installation. The default
 `self_hosted` keeps public signup and all product capabilities unchanged. Run the normal migration
-triplet before enabling managed mode and confirm `/api/v1/health` reports `managed_saas: ok`.
+triplet before enabling managed mode. Configure `MANAGED_WORKER_HEALTH_URL` to the worker's internal
+`/healthz` endpoint (normally `http://worker:8787/healthz` in Compose), then confirm
+`/api/v1/health` reports both `managed_saas: ok` and `managed_worker: ok`.
 
 ## Provision and correct a tenant
 
@@ -21,6 +23,8 @@ triplet before enabling managed mode and confirm `/api/v1/health` reports `manag
   creation action; live conversations and already-scheduled contact are not interrupted.
 - If the subscription schema health check is down, run the standard update procedure with both
   compose files, verify migration 0239/0240, and do not onboard tenants until it is green.
+- If `managed_worker` is degraded, configure `MANAGED_WORKER_HEALTH_URL`. If it is down, inspect the
+  worker container and its database connection; do not infer worker health from the app process.
 - During provider outage, continue the manual ledger. Never infer a successful payment from a
   queued or unverified provider event.
 - Restore drills must restore database, storage, Redis-dependent work, and app secrets together;

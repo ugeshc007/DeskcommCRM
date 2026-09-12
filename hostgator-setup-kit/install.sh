@@ -216,11 +216,11 @@ v_hex() {
 # Aceita o código e o número da opção, porque quem lê "1) Português" digita "1".
 v_locale() {
   case "$1" in
-    ''|pt-BR|es) return 0;;
+    ''|pt-BR|es|en) return 0;;
     1) return 0;;
-    2) return 0;;
+    2|3) return 0;;
   esac
-  echo "Escolha 1 (Português) ou 2 (Español) — ou Enter para Português"
+  echo "Escolha 1 (Português), 2 (Español) ou 3 (English) — ou Enter para Português"
   return 1
 }
 
@@ -1252,7 +1252,7 @@ FIELDS=(
   # Idioma da instalação. Fica JUNTO do nome do produto de propósito: as duas
   # perguntas são "como o sistema se apresenta", e separá-las faria a segunda
   # parecer configuração técnica.
-  "APP_LOCALE|Idioma do sistema — 1) Português  2) Español (Enter = Português)|1|v_locale||"
+  "APP_LOCALE|Idioma do sistema — 1) Português  2) Español  3) English (Enter = Português)|1|v_locale||"
   # Sem default, e `opcional`: em `--yes` o `ask_one` devolve 0 sem associar a
   # variável (campo sem default e sem `opcional` morre em `die`), e o `envq` lá
   # embaixo usa `${APP_ACCENT_HEX:-}`. Enter = a cor do produto, que é o
@@ -1584,6 +1584,7 @@ esac
   # bootstrap, o SQL abaixo, um operador conferindo — precisa do código.
   case "${APP_LOCALE:-}" in
     2|es) APP_LOCALE="es";;
+    3|en) APP_LOCALE="en";;
     *)    APP_LOCALE="pt-BR";;
   esac
   envq APP_NAME "$APP_NAME"

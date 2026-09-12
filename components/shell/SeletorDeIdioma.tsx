@@ -29,7 +29,7 @@ import { Check } from "@/lib/ui/icons";
  *
  * ─── O rótulo é o código, e é de propósito ─────────────────────────────────
  *
- * "PT" / "ES" são legíveis nos dois idiomas e cabem no mesmo espaço de um
+ * "PT" / "ES" / "EN" são legíveis nos idiomas servidos e cabem no mesmo espaço de um
  * ícone. Um ícone de globo diria "idioma" sem dizer QUAL — e saber qual está
  * em vigor é metade da pergunta de quem procura este botão.
  */
@@ -38,6 +38,7 @@ const NOME_DO_IDIOMA: Record<Idioma, { curto: string; completo: string }> = {
   // lista que você não sabe ler.
   "pt-BR": { curto: "PT", completo: "Português (BR)" },
   es: { curto: "ES", completo: "Español" },
+  en: { curto: "EN", completo: "English" },
 };
 
 export function SeletorDeIdioma() {
@@ -93,9 +94,7 @@ export function SeletorDeIdioma() {
           aria-label={`${t("Idioma")}: ${NOME_DO_IDIOMA[idioma].completo}`}
           data-testid="seletor-de-idioma"
         >
-          <span className="text-xs font-semibold tabular-nums">
-            {NOME_DO_IDIOMA[idioma].curto}
-          </span>
+          <span className="text-xs font-semibold tabular-nums">{NOME_DO_IDIOMA[idioma].curto}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[180px]">

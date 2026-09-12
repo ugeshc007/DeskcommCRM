@@ -32,11 +32,12 @@
  * do que estava.
  */
 import type { Idioma } from "./idiomas";
+import { DICIONARIO_EN } from "./dicionario.en";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
-export const DICIONARIO: Traducoes = {
+const DICIONARIO_BASE: Traducoes = {
   "números de teste autorizados": { es: "números de prueba autorizados" },
   "1 número de teste autorizado": { es: "1 número de prueba autorizado" },
   "Nenhum número autorizado — a IA não responde ninguém neste canal.": {
@@ -342,6 +343,36 @@ export const DICIONARIO: Traducoes = {
   // português e nada ficava vermelho — `traduzir()` devolve a chave ausente
   // como está. Achado pelo cruzamento novo entre DICIONARIO e NAV_GROUPS.
   Atendimento: { es: "Atención" },
+  "Você é um atendente. Responda de forma educada e clara, em pt-BR.": {
+    es: "Eres un agente de atención al cliente. Responde de forma educada y clara en español.",
+  },
+  "falar com humano": { es: "hablar con una persona" },
+  atendente: { es: "agente humano" },
+  "pessoa real": { es: "persona real" },
+  "Atender e responder": { es: "Atender y responder" },
+  "O agente lê a conversa, entende o histórico e responde ao cliente sem pedir que ele repita o que já disse.": {
+    es: "El agente lee la conversación, comprende el historial y responde al cliente sin pedirle que repita lo que ya dijo.",
+  },
+  "Vender e mover o funil": { es: "Vender y mover el embudo" },
+  "O agente registra a oportunidade, atualiza o negócio e move o cliente de etapa conforme a conversa avança.": {
+    es: "El agente registra la oportunidad, actualiza el negocio y mueve al cliente de etapa a medida que avanza la conversación.",
+  },
+  "Não perder o cliente": { es: "No perder al cliente" },
+  "O agente agenda retornos e acompanha quem esfriou, para que nenhum interessado morra por falta de resposta.": {
+    es: "El agente programa seguimientos y acompaña a quienes se enfriaron para que ningún interesado se pierda por falta de respuesta.",
+  },
+  "Passar para um humano": { es: "Transferir a una persona" },
+  "O agente reconhece quando não é o caso dele resolver, chama uma pessoa e entrega o resumo do que já aconteceu.": {
+    es: "El agente reconoce cuándo no le corresponde resolverlo, llama a una persona y entrega un resumen de lo ocurrido.",
+  },
+  "Organizar a operação": { es: "Organizar la operación" },
+  "O agente mantém a casa em ordem: marcadores, etapas do funil, avisos automáticos e distribuição de trabalho.": {
+    es: "El agente mantiene la operación en orden: etiquetas, etapas del embudo, avisos automáticos y distribución del trabajo.",
+  },
+  "Aprender e evoluir": { es: "Aprender y mejorar" },
+  "O agente consulta o que a empresa já sabe, aprende com os atendimentos e sugere melhorias para você aprovar.": {
+    es: "El agente consulta lo que la empresa ya sabe, aprende de las conversaciones y sugiere mejoras para que las apruebes.",
+  },
   CRM: { es: "CRM" },
   "Agente de IA": { es: "Agente de IA" },
   Canais: { es: "Canales" },
@@ -6818,6 +6849,9 @@ export const DICIONARIO: Traducoes = {
   "Sem organização ativa": { es: "Sin organización activa" },
   "Sem organização ativa.": { es: "Sin organización activa." },
   "Sessão de canal não encontrada.": { es: "Sesión de canal no encontrada." },
+  "A disponibilidade deste responsável ainda não foi configurada. Configure em Equipe → Atendimento.": {
+    es: "La disponibilidad de esta persona responsable aún no está configurada. Configúrala en Equipo → Atención.",
+  },
   "Sessão expirada": { es: "Sesión expirada" },
   "Sessão sem token.": { es: "Sesión sin token." },
   "Skill não encontrada no catálogo de plataforma.": { es: "Skill no encontrada en el catálogo de la plataforma." },
@@ -8333,6 +8367,17 @@ export const DICIONARIO: Traducoes = {
   "Oi!": { es: "¡Hola!" },
   "Passando pra lembrar do seu compromisso:": { es: "Te recuerdo tu cita:" },
   "Endereço": { es: "Dirección" },
+  "Tema": { es: "Tema" },
+  "claro": { es: "claro" },
+  "escuro": { es: "oscuro" },
+  "sistema": { es: "sistema" },
+  "Cmd+Shift+L para alternar.": { es: "Cmd+Shift+L para cambiar." },
+  "atendimento e vendas por WhatsApp com agentes de IA": {
+    es: "atención y ventas por WhatsApp con agentes de IA",
+  },
+  "Centralize o atendimento por WhatsApp num funil só. Agentes de IA resolvem o que dá pra resolver e passam para o time humano o que importa — com tudo registrado. Multi-tenant, LGPD-nativo, feito para operações brasileiras.": {
+    es: "Centraliza la atención por WhatsApp en un solo embudo. Los agentes de IA resuelven lo que pueden y pasan al equipo humano lo que importa, con todo registrado. Multi-tenant, con privacidad nativa, hecho para operaciones brasileñas.",
+  },
 
   // ─── lib/ai/pontos/resolver.ts (avisos do painel de Provedores de IA) ───
   "Este ponto usa o modelo definido na versão publicada do agente; a escolha do painel não se aplica.": {
@@ -8363,6 +8408,13 @@ export const DICIONARIO: Traducoes = {
   "Convite reenviado.": { es: "Invitación reenviada." },
   "Convite revogado.": { es: "Invitación revocada." },
 };
+
+export const DICIONARIO: Traducoes = Object.fromEntries(
+  Object.entries(DICIONARIO_BASE).map(([texto, traducoes]) => [
+    texto,
+    { ...traducoes, en: DICIONARIO_EN[texto] },
+  ]),
+);
 
 /**
  * Traduz, ou devolve o próprio texto.

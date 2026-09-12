@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ApiError } from "@/lib/api/types";
 
 vi.mock("sonner", () => ({
@@ -11,7 +12,30 @@ vi.mock("sonner", () => ({
 }));
 
 import { toast } from "sonner";
-import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { showApiError, useApiErrorHandler } from "@/components/feedback/ApiErrorToast";
+import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
+
+function AgendaErrorButton() {
+  const showError = useApiErrorHandler();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        showError(
+          new ApiError(
+            422,
+            "agenda_disponibilidade_invalida",
+            undefined,
+            "req-agenda",
+            "A disponibilidade deste responsável ainda não foi configurada. Configure em Equipe → Atendimento.",
+          ),
+        )
+      }
+    >
+      trigger
+    </button>
+  );
+}
 
 describe("ApiErrorToast", () => {
   beforeEach(() => {
@@ -81,5 +105,18 @@ describe("ApiErrorToast", () => {
     showApiError(new Error("oops"));
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith("Erro inesperado. Tente novamente.");
+  });
+
+  it("traduz a mensagem dinâmica da disponibilidade para inglês", () => {
+    render(
+      <IdiomaProvider locale="en">
+        <AgendaErrorButton />
+      </IdiomaProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "trigger" }));
+    expect(toast.error).toHaveBeenCalledWith(
+      "This team member's availability has not been configured yet. Configure it under Team → Customer Service.",
+      expect.objectContaining({ description: "ID: req-agenda" }),
+    );
   });
 });

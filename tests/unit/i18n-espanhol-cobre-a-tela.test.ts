@@ -82,7 +82,8 @@ const EM_PORTUGUES_DE_PROPOSITO: { arquivo: string; texto: string; motivo: strin
   {
     arquivo: "app/app/settings/profile/_form.tsx",
     texto: "Português (BR)",
-    motivo: "nome de idioma se escreve no próprio idioma — quem lê espanhol precisa reconhecer a opção portuguesa",
+    motivo:
+      "nome de idioma se escreve no próprio idioma — quem lê espanhol precisa reconhecer a opção portuguesa",
   },
   {
     arquivo: "app/app/settings/tenant/_form.tsx",
@@ -91,8 +92,7 @@ const EM_PORTUGUES_DE_PROPOSITO: { arquivo: string; texto: string; motivo: strin
   },
   {
     arquivo: "app/global-error.tsx",
-    texto:
-      "Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.",
+    texto: "Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.",
     motivo:
       "é o error boundary da RAIZ: renderiza fora de qualquer provider, quando o app já falhou. Chamar um hook de contexto ali é justamente o que não pode falhar de novo",
   },
@@ -174,7 +174,10 @@ function ehPadraoDeData(texto: string): boolean {
 
 /** Um placeholder pode listar VÁRIOS endereços, um por linha. Todos têm de ser. */
 function soEnderecosDeRede(texto: string): boolean {
-  const linhas = texto.split(/[\n,;]/).map((l) => l.trim()).filter(Boolean);
+  const linhas = texto
+    .split(/[\n,;]/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   return linhas.length > 0 && linhas.every((l) => ENDERECO_DE_REDE.test(l));
 }
 
@@ -411,15 +414,18 @@ describe("a chave é o texto em português, e o português não muda", () => {
   });
 });
 
-describe("toda chave usada na tela tem espanhol", () => {
+describe("toda chave usada na tela existe em todo idioma servido", () => {
   it("nenhuma chamada t() cai no português por falta de tradução", () => {
-    const semEspanhol = [...chavesUsadas().entries()]
-      .filter(([chave]) => !DICIONARIO[chave]?.es)
-      .map(([chave, onde]) => `${onde[0]} → t(${JSON.stringify(chave)})`);
-    expect(
-      semEspanhol,
-      `${semEspanhol.length} chamada(s) t() sem tradução em espanhol: a tela cai no português`,
-    ).toEqual([]);
+    for (const idioma of IDIOMAS) {
+      if (idioma === "pt-BR") continue;
+      const semTraducao = [...chavesUsadas().entries()]
+        .filter(([chave]) => !DICIONARIO[chave]?.[idioma])
+        .map(([chave, onde]) => `${onde[0]} → t(${JSON.stringify(chave)})`);
+      expect(
+        semTraducao,
+        `${semTraducao.length} chamada(s) t() sem tradução em ${idioma}: a tela cai no português`,
+      ).toEqual([]);
+    }
   });
 });
 

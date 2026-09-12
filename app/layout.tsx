@@ -19,6 +19,8 @@ import {
   type MarcaResolvida,
 } from "@/lib/branding/resolve";
 import { env } from "@/lib/env";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { logger } from "@/lib/logger";
 import { ThemeProvider } from "@/lib/theme";
 import { Providers } from "./providers";
@@ -80,13 +82,16 @@ async function marcaResolvida(): Promise<{
 export async function generateMetadata(): Promise<Metadata> {
   const { marca } = await marcaResolvida();
   const { name } = marca;
+  const idioma = normalizarIdioma(env.APP_LOCALE);
+  const t = (texto: string) => traduzir(texto, idioma);
   return {
     title: {
-      default: `${name} — atendimento e vendas por WhatsApp com agentes de IA`,
+      default: `${name} — ${t("atendimento e vendas por WhatsApp com agentes de IA")}`,
       template: `%s · ${name}`,
     },
-    description:
+    description: t(
       "Centralize o atendimento por WhatsApp num funil só. Agentes de IA resolvem o que dá pra resolver e passam para o time humano o que importa — com tudo registrado. Multi-tenant, LGPD-nativo, feito para operações brasileiras.",
+    ),
     applicationName: name,
     authors: [{ name }],
     keywords: [

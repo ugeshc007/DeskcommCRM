@@ -183,8 +183,10 @@ const DEFAULT_TRIGGER: TriggerValue = {
 function buildState(args: {
   agent?: AgentRow;
   version: AgentVersionRow | null;
+  t: (texto: string) => string;
 }): FormState {
-  const { agent, version } = args;
+  const { agent, version, t } = args;
+  const promptPadrao = "Você é um atendente. Responda de forma educada e clara, em pt-BR.";
   return {
     name: agent?.name ?? "",
     description: agent?.description ?? "",
@@ -196,8 +198,9 @@ function buildState(args: {
     credential_id: version ? (version.credential_id ?? CHAVE_DA_INSTALACAO) : "",
     channel_session_id: version?.channel_session_id ?? "",
     system_prompt:
-      version?.system_prompt ??
-      "Você é um atendente. Responda de forma educada e clara, em pt-BR.",
+      version?.system_prompt === undefined || version.system_prompt === promptPadrao
+        ? t(promptPadrao)
+        : version.system_prompt,
     tool_ids: version?.tool_ids ?? [],
     trigger_config: (version?.trigger_config as unknown as TriggerValue) ?? DEFAULT_TRIGGER,
     max_steps: version?.max_steps ?? 10,
@@ -205,11 +208,11 @@ function buildState(args: {
     cost_budget_cents: version?.cost_budget_cents ?? 50,
     history_message_window: version?.history_message_window ?? 20,
     history_token_window: version?.history_token_window ?? 8_000,
-    handoff_keywords: version?.handoff_keywords ?? [
+    handoff_keywords: (version?.handoff_keywords ?? [
       "falar com humano",
       "atendente",
       "pessoa real",
-    ],
+    ]).map(t),
     handoff_tool_enabled: version?.handoff_tool_enabled ?? true,
     cases_enabled: version?.cases_enabled ?? false,
     split_messages: version?.split_messages ?? false,
@@ -292,10 +295,10 @@ export function AgentForm(props: Props) {
       // O fallback existe para chamadores que ainda não a passam; sem ele, um
       // agente pausado abriria no texto padrão e o prompt "sumiria".
       const ref = props.base ?? props.draft ?? props.published;
-      return buildState({ agent: props.agent, version: ref });
+      return buildState({ agent: props.agent, version: ref, t });
     }
-    return buildState({ version: null });
-  }, [isEdit, props]);
+    return buildState({ version: null, t });
+  }, [isEdit, props, t]);
 
   const [form, setForm] = React.useState<FormState>(baseline);
   const [saving, setSaving] = React.useState(false);

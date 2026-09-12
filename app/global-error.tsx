@@ -21,9 +21,37 @@ export default function GlobalError({
   }, [error]);
 
   const displayId = eventId ?? error.digest ?? "—";
+  // Este boundary não pode depender do provider que acabou de falhar. O `lang`
+  // do documento é definido pelo layout antes da árvore da aplicação; ler esse
+  // valor mantém a última saída de segurança no mesmo idioma sem criar outra
+  // dependência capaz de lançar.
+  const idioma = typeof document === "undefined" ? "pt-BR" : document.documentElement.lang;
+  const texto = idioma.startsWith("en")
+    ? {
+        titulo: "Something went wrong",
+        ajuda: "Try again in a moment. If the problem persists, contact support with the ID below.",
+        copiado: "Copied!",
+        copiar: "Copy ID",
+        tentar: "Try again",
+      }
+    : idioma.startsWith("es")
+      ? {
+          titulo: "Algo salió mal",
+          ajuda: "Inténtalo de nuevo en unos instantes. Si el problema continúa, contacta al soporte con el ID de abajo.",
+          copiado: "¡Copiado!",
+          copiar: "Copiar ID",
+          tentar: "Intentar de nuevo",
+        }
+      : {
+          titulo: "Algo deu errado",
+          ajuda: "Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.",
+          copiado: "Copiado!",
+          copiar: "Copiar ID",
+          tentar: "Tentar de novo",
+        };
 
   return (
-    <html lang="pt-BR">
+    <html lang={idioma} suppressHydrationWarning>
       <body
         style={{
           margin: 0,
@@ -50,10 +78,10 @@ export default function GlobalError({
           }}
         >
           <h1 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem", fontWeight: 600 }}>
-            Algo deu errado
+            {texto.titulo}
           </h1>
           <p style={{ color: "#57534e", margin: "0 0 1.5rem" }}>
-            Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.
+            {texto.ajuda}
           </p>
           <div
             style={{
@@ -87,7 +115,7 @@ export default function GlobalError({
                 cursor: "pointer",
               }}
             >
-              {copied ? "Copiado!" : "Copiar ID"}
+              {copied ? texto.copiado : texto.copiar}
             </button>
             <button
               type="button"
@@ -101,7 +129,7 @@ export default function GlobalError({
                 cursor: "pointer",
               }}
             >
-              Tentar de novo
+              {texto.tentar}
             </button>
           </div>
         </div>

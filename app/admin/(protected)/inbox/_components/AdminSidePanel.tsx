@@ -27,13 +27,13 @@ export function AdminSidePanel({ data }: Props) {
       {/* ── Contact info ── */}
       <section>
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Contato
+          {t("Contato")}
         </h3>
         {contact ? (
           <div className="flex flex-col gap-1.5 text-sm">
             <div className="font-medium">
               {contact.is_anonymized ? (
-                <span className="italic text-muted-foreground">Contato anonimizado</span>
+                <span className="italic text-muted-foreground">{t("Contato anonimizado")}</span>
               ) : (
                 contact.name ?? t("Sem nome")
               )}
@@ -49,7 +49,7 @@ export function AdminSidePanel({ data }: Props) {
             )}
             {contact.is_blocked && (
               <span className="inline-block rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
-                Bloqueado
+                {t("Bloqueado")}
               </span>
             )}
           </div>

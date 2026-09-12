@@ -10,6 +10,7 @@ import { aplicarQuadro, pularQuadro, type QuadroAtual } from "@/app/actions/onbo
 import { explicacaoDoPasso } from "@/lib/leads/agent-mapping";
 import { MAX_ETAPAS, MIN_ETAPAS, type PropostaDeFunil } from "@/lib/onboarding/proposta-de-funil";
 import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
+import { propostaNoIdioma } from "@/lib/onboarding/proposta-no-idioma";
 import type { Sugestao } from "@/lib/onboarding/sugerir-funil";
 
 /**
@@ -30,7 +31,7 @@ export function QuadroClient({
   const inicial: PropostaDeFunil =
     sugestao.origem === "ia" ? sugestao.proposta : sugestao.pacote.proposta;
 
-  const [quadro, setQuadro] = useState<PropostaDeFunil>(inicial);
+  const [quadro, setQuadro] = useState<PropostaDeFunil>(() => propostaNoIdioma(inicial, t));
   const [origem, setOrigem] = useState<"ia" | "pacote">(sugestao.origem);
   const [trocando, setTrocando] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -70,7 +71,7 @@ export function QuadroClient({
   function usarPacote(id: string) {
     const p = PACOTES.find((x) => x.id === id);
     if (!p) return;
-    setQuadro(p.proposta);
+    setQuadro(propostaNoIdioma(p.proposta, t));
     // A origem acompanha: o resumo do onboarding registra de onde o quadro veio,
     // e manter "ia" depois de a pessoa escolher outro seria registrar mentira.
     setOrigem("pacote");
@@ -212,7 +213,7 @@ export function QuadroClient({
               >
                 <span className="font-medium">{t(p.comoSeApresenta)}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
-                  {p.proposta.etapas.map((e) => e.nome).join(" → ")}
+                  {p.proposta.etapas.map((e) => t(e.nome)).join(" → ")}
                 </span>
               </button>
             ))}

@@ -102,7 +102,7 @@ export function NewContactDialog({ open, onOpenChange }: Props) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>
-            <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
+            <Input id="tagsRaw" placeholder={t("vip, recompra")} {...form.register("tagsRaw")} />
           </div>
           {serverError && (
             <p className="text-sm text-error-fg">{serverError}</p>

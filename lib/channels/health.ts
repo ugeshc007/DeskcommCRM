@@ -157,7 +157,7 @@ export function avisoDaConexao(saude: SaudeObservada, apelido: string): AvisoDeC
 /** O que a faixa do topo mostra: conexão caída, com nome. */
 export interface ConexaoCaida {
   id: string;
-  apelido: string;
+  apelido: string | null;
   status: string;
 }
 
@@ -192,7 +192,10 @@ export async function listarConexoesCaidas(
 
   return (data ?? []).map((s) => ({
     id: s.id as string,
-    apelido: (s.display_name as string | null) ?? (s.phone_number as string | null) ?? "sem nome",
+    // Ausência continua estruturada até a tela. Gravar aqui um fallback em
+    // português faria o texto escapar do dicionário justamente no banner
+    // global, que aparece em todas as páginas.
+    apelido: (s.display_name as string | null) ?? (s.phone_number as string | null),
     status: (s.status as string | null) ?? "",
   }));
 }

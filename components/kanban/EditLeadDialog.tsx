@@ -162,7 +162,7 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
 
           <div className="space-y-2">
             <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>
-            <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
+            <Input id="tagsRaw" placeholder={t("vip, recompra")} {...form.register("tagsRaw")} />
           </div>
 
           <DialogFooter>

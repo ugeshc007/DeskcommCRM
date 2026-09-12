@@ -395,7 +395,7 @@ function CamposDoFunil({
         disabled={edit.isPending}
         onClick={() => void salvar()}
       >
-        {edit.isPending ? "Salvando…" : "Salvar"}
+        {edit.isPending ? t("Salvando…") : t("Salvar")}
       </Button>
     </div>
   );

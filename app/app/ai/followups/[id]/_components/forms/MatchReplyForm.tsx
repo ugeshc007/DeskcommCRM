@@ -79,7 +79,7 @@ export function MatchReplyForm({
         {branches.map((branch, index) => (
           <div key={branch.id} className="space-y-2 rounded-md border border-border p-2">
             <Input
-              aria-label={`Rótulo da regra ${index + 1}`}
+              aria-label={`${t("Rótulo da regra")} ${index + 1}`}
               value={branch.label}
               onChange={(e) => atualizar(index, { label: e.target.value })}
               placeholder={t("Rótulo")}
@@ -89,7 +89,7 @@ export function MatchReplyForm({
                 value={branch.op}
                 onValueChange={(v) => atualizar(index, { op: v as MatchReplyBranch["op"] })}
               >
-                <SelectTrigger aria-label={`Comparação da regra ${index + 1}`}>
+                <SelectTrigger aria-label={`${t("Comparação da regra")} ${index + 1}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -98,16 +98,16 @@ export function MatchReplyForm({
                 </SelectContent>
               </Select>
               <Input
-                aria-label={`Texto da regra ${index + 1}`}
+                aria-label={`${t("Texto da regra")} ${index + 1}`}
                 value={branch.pattern}
                 onChange={(e) => atualizar(index, { pattern: e.target.value })}
-                placeholder="texto a casar"
+                placeholder={t("texto a casar")}
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label={`Remover regra ${index + 1}`}
+                aria-label={`${t("Remover regra")} ${index + 1}`}
                 disabled={branches.length <= 1}
                 onClick={() => {
                   const next = branches.filter((_, i) => i !== index);
@@ -135,12 +135,12 @@ export function MatchReplyForm({
               commit({ branches: next, graceMin, saveTo, ifExists });
             }}
           >
-            <Plus size={14} aria-hidden className="mr-1" /> Adicionar regra
+            <Plus size={14} aria-hidden className="mr-1" /> {t("Adicionar regra")}
           </Button>
         )}
       </div>
       <div className="space-y-2">
-        <Label htmlFor="match-reply-grace">{ESPERA_PELA_RESPOSTA.rotulo}</Label>
+        <Label htmlFor="match-reply-grace">{t(ESPERA_PELA_RESPOSTA.rotulo)}</Label>
         <Input
           id="match-reply-grace"
           type="number"
@@ -152,7 +152,7 @@ export function MatchReplyForm({
             commit({ branches, graceMin: v, saveTo, ifExists });
           }}
         />
-        <p className="text-xs text-text-muted">{ESPERA_PELA_RESPOSTA.ajuda}</p>
+        <p className="text-xs text-text-muted">{t(ESPERA_PELA_RESPOSTA.ajuda)}</p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="match-reply-save">{t("Gravar a resposta em")}</Label>

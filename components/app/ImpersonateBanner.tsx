@@ -24,14 +24,14 @@ export function ImpersonateBanner({ impersonating, ended = false }: {
   useEffect(() => {
     if (!impersonating || ended) return;
     const timer = setTimeout(() => {
-      transition.begin("Acompanhamento encerrado. Confirmando acesso…");
+      transition.begin(t("Acompanhamento encerrado. Confirmando acesso…"));
       window.location.assign("/support-ended");
     }, Math.max(0, new Date(impersonating.expiresAt).getTime()-Date.now()));
     return () => clearTimeout(timer);
-  }, [impersonating, ended, transition]);
+  }, [impersonating, ended, transition, t]);
   if (!impersonating) return null;
   async function handleEnd() {
-    flushSync(() => { setBusy(true); transition.begin("Encerrando acompanhamento…"); });
+    flushSync(() => { setBusy(true); transition.begin(t("Encerrando acompanhamento…")); });
     try {
       const res = await fetch("/api/v1/admin/impersonate/end", { method: "POST" });
       if (!res.ok) throw new Error("Não foi possível encerrar o acompanhamento. Tente novamente.");
@@ -39,7 +39,7 @@ export function ImpersonateBanner({ impersonating, ended = false }: {
       window.location.assign("/app/inbox");
     } catch (error) {
       transition.cancel(); setBusy(false);
-      toast.error(error instanceof Error ? error.message : "Falha de conexão.");
+      toast.error(t(error instanceof Error ? error.message : "Falha de conexão."));
     }
   }
   return <div role="alert" className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-amber-300 bg-amber-100 px-4 py-2 text-sm text-amber-950">

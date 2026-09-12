@@ -102,7 +102,7 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           ) : (
             metrics.funnel.map((s) => (
               <div key={s.stage_id} className="flex items-center gap-3">
-                <span className="w-40 shrink-0 truncate text-sm">{s.stage_name}</span>
+                <span className="w-40 shrink-0 truncate text-sm">{t(s.stage_name)}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary transition-[width]"

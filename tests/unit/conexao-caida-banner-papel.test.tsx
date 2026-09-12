@@ -21,7 +21,7 @@ const support: NonNullable<AuthUser["support"]> = {
   previous_organization_id: null, expires_at: "2030-01-01T00:00:00Z", name: "Organização",
   locale: "pt-BR", access_mode: "support_readonly", status: "active",
 };
-function view(role: Role, locale: "pt-BR" | "es", who = baseUser, caidas: ConexaoCaida[] = [{ id: "channel", apelido: "Vendas", status: "SCAN_QR_CODE" }]) {
+function view(role: Role, locale: "pt-BR" | "es" | "en", who = baseUser, caidas: ConexaoCaida[] = [{ id: "channel", apelido: "Vendas", status: "SCAN_QR_CODE" }]) {
   return <AuthProvider user={who} activeOrg={{ orgId: "org", name: "Organização", role }}>
     <IdiomaProvider locale={locale}><ConexaoCaidaBanner caidas={caidas} /></IdiomaProvider>
   </AuthProvider>;
@@ -29,9 +29,10 @@ function view(role: Role, locale: "pt-BR" | "es", who = baseUser, caidas: Conexa
 const copy = {
   "pt-BR": { qr: "Escanear o QR", connections: "Ver conexões", help: "Peça a quem administra para revisar a conexão do WhatsApp.", outage: "nenhuma mensagem entra nem sai." },
   es: { qr: "Escanear el QR", connections: "Ver conexiones", help: "Pide a quien administra que revise la conexión de WhatsApp.", outage: "ningún mensaje entra ni sale." },
+  en: { qr: "Scan the QR", connections: "View connections", help: "Ask whoever administers it to review the WhatsApp connection.", outage: "no messages come in or go out." },
 };
 
-describe.each(["pt-BR", "es"] as const)("alerta de conexão em %s", locale => {
+describe.each(["pt-BR", "es", "en"] as const)("alerta de conexão em %s", locale => {
   it.each([
     ["admin do tenant", "admin", baseUser],
     ["plataforma fora do suporte", "agent", { ...baseUser, is_platform_admin: true }],
@@ -65,5 +66,12 @@ describe.each(["pt-BR", "es"] as const)("alerta de conexão em %s", locale => {
     expect(screen.getByRole("alert")).toBeVisible();
     mounted.rerender(view("agent", locale, baseUser, []));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("traduz o fallback quando a conexão não tem nome nem telefone", () => {
+    render(view("agent", locale, baseUser, [{ id: "channel", apelido: null, status: "FAILED" }]));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      locale === "en" ? "Unnamed number" : locale === "es" ? "Número sin nombre" : "Número sem nome",
+    );
   });
 });

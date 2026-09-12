@@ -402,7 +402,7 @@ export function TiposDeAgendamentoClient({
                         )
                       }
                     >
-                      Desativar
+                      {t("Desativar")}
                     </Button>
                   ) : (
                     <Button
@@ -417,7 +417,7 @@ export function TiposDeAgendamentoClient({
                         )
                       }
                     >
-                      Reativar
+                      {t("Reativar")}
                     </Button>
                   )}
                 </span>
@@ -473,7 +473,7 @@ export function TiposDeAgendamentoClient({
                 }}
               >
                 <label className="flex flex-col gap-1 text-xs text-text-muted">
-                  Nome
+                  {t("Nome")}
                   <input
                     name="name"
                     defaultValue={tipo.name}

@@ -129,7 +129,7 @@ export function FormularioDoGoogle({
 
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground">
-            {atualizadoEm ? `Última alteração em ${atualizadoEm}.` : t("Nunca configurado por aqui.")}
+            {atualizadoEm ? `${t("Última alteração em")} ${atualizadoEm}.` : t("Nunca configurado por aqui.")}
           </span>
           <Button
             data-testid="google-salvar"
@@ -153,7 +153,7 @@ export function FormularioDoGoogle({
               })
             }
           >
-            {salvando ? "Salvando…" : "Salvar"}
+            {salvando ? t("Salvando…") : t("Salvar")}
           </Button>
         </div>
       </Card>

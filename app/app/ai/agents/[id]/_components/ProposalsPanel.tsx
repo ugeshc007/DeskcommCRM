@@ -47,7 +47,7 @@ export function ProposalsPanel({
           : t("Proposta aplicada como versão nova do agente."),
       );
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("Não foi possível aplicar a proposta."));
+      toast.error(err instanceof ApiError ? t(err.message) : t("Não foi possível aplicar a proposta."));
     }
   };
 

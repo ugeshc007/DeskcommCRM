@@ -321,7 +321,7 @@ export function ConnectWhatsappClient({
         await markWhatsappConfigured(confirmedSession, "WORKING");
       } catch (err) {
         if (isRedirectError(err)) throw err;
-        toast.error("Falha ao avançar: " + String(err));
+        toast.error(`${t("Falha ao avançar:")} ${String(err)}`);
       }
     });
   }, [status, info.session, t]);
@@ -509,7 +509,7 @@ export function ConnectWhatsappClient({
               </p>
               {info.error && (
                 <p className="text-xs text-muted-foreground">
-                  {t("Detalhe técnico:")} <code className="break-all">{info.error}</code>
+                  {t("Detalhe técnico:")} <code className="break-all">{t(info.error)}</code>
                 </p>
               )}
               <Button type="button" size="sm" variant="outline" disabled={busy} onClick={restartSession}>

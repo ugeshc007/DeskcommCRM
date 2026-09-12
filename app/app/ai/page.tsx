@@ -1,5 +1,6 @@
 import { NavHub } from "@/components/shell/NavHub";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function AiHubPage() {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
+  const idioma = user.idioma;
 
   return (
     <NavHub
@@ -21,8 +23,12 @@ export default async function AiHubPage() {
       isPlatformAdmin={user.is_platform_admin && !user.support}
       role={activeOrg?.role ?? null}
       interfaceSettings={activeOrg?.interface_settings}
-      title="Agente de IA"
-      subtitle="Tudo que define quem atende por você — e como acompanhar o que ele faz."
+      title={traduzir("Agente de IA", idioma)}
+      subtitle={traduzir(
+        "Tudo que define quem atende por você — e como acompanhar o que ele faz.",
+        idioma,
+      )}
+      locale={idioma}
     />
   );
 }

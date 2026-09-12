@@ -22,3 +22,9 @@ traduzidos na apresentação: etapas padrão do funil, pacotes de capacidades,
 prompt e palavras de transferência do agente novo. Mensagens dinâmicas da
 Agenda seguem a mesma regra, inclusive quando indicam onde configurar a
 disponibilidade da equipe.
+
+O onboarding agora cria a cópia editável dos quadros prontos no idioma da
+interface, incluindo nome e todas as etapas. A mesma tradução alcança nomes de
+etapa já salvos quando aparecem em Desempenho, além dos rótulos, exemplos,
+avisos e estados de Follow-ups, Equipe, Agenda, Inbox, Webhooks e formulários de
+leads. Falhas de conexão com o WhatsApp também deixam de voltar em português.

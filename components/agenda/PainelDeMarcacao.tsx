@@ -364,7 +364,7 @@ export function PainelDeMarcacao({
         <dl className="mt-3 space-y-2 text-xs text-text-muted">
           <div className="flex items-center gap-1.5">
             <Clock size={14} aria-hidden />
-            <dd className="tabular-nums">{duracaoMin} minutos</dd>
+            <dd className="tabular-nums">{duracaoMin} {t("minutos")}</dd>
           </div>
           {local ? (
             <div className="flex items-center gap-1.5">

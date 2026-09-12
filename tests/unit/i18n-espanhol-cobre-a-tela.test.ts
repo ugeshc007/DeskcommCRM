@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { DICIONARIO } from "@/lib/i18n/dicionario";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMAS } from "@/lib/i18n/idiomas";
+import { NAV_CATALOG, NAV_GROUPS } from "@/lib/navigation/catalogo";
 
 /**
  * O ESPANHOL COBRE A TELA, E O PORTUGUÊS NÃO MUDA UM BYTE.
@@ -101,6 +102,11 @@ const EM_PORTUGUES_DE_PROPOSITO: { arquivo: string; texto: string; motivo: strin
     texto: "nenhum",
     motivo: "valor de wire do papel da etapa; o rótulo visível já sai por t(ROTULO_DO_PAPEL[p])",
   },
+  {
+    arquivo: "app/app/templates/_components/TemplateFormDialog.tsx",
+    texto: "{{nome}}",
+    motivo: "variável do modelo de mensagem; traduzir o identificador quebraria a interpolação",
+  },
 ];
 
 function ehExcecaoDeclarada(arquivo: string, texto: string): boolean {
@@ -108,19 +114,19 @@ function ehExcecaoDeclarada(arquivo: string, texto: string): boolean {
 }
 
 /**
- * Marcadores ORTOGRÁFICOS do português que o espanhol não tem.
+ * Marcadores do português que não podem permanecer numa interface em inglês.
  *
- * Escolhidos por serem impossíveis em espanhol — `ç`, `ã`, `õ`, os circunflexos
- * e os dígrafos `lh`/`nh` —, mais um punhado de palavras funcionais que só
- * existem em português. É derivado da língua, não de uma lista de rótulos do
- * produto: rótulo novo não precisa entrar em lugar nenhum para ser vigiado.
+ * A camada original vigiava só diferenças para espanhol; isso deixava passar
+ * rótulos curtos como "Fila", "Nome" e "Salvar", exatamente os que sobraram
+ * quando English entrou. A lista abaixo acrescenta verbos e substantivos
+ * recorrentes de UI que são inequivocamente não ingleses.
  *
  * Falso NEGATIVO é aceito de propósito: "Total" é igual nos dois idiomas e não
  * dispara. Falso POSITIVO é o que não pode acontecer, porque tornaria o guarda
  * um imposto — daí só caractere e palavra sem ambiguidade.
  */
 const MARCA_DE_PORTUGUES =
-  /[çãõêôàáéíóúâ]|(lh|nh)[aeiouáéíóúãõ]|\b(não|você|está|estão|são|também|através|então|aqui|desta|deste|nesta|neste|dele|dela|quem|quando|onde|para|pelo|pela|com|sem|mais|menos|todos|todas|cada|ainda|já|só|muito|entre|sobre|antes|depois|agora|nunca|sempre|seu|sua|isso|este|essa|esse)\b/iu;
+  /[çãõêôàáéíóúâ]|(lh|nh)[aeiouáéíóúãõ]|\b(não|você|está|estão|são|também|através|então|aqui|desta|deste|nesta|neste|dele|dela|quem|quando|onde|para|pelo|pela|com|sem|mais|menos|todos|todas|cada|ainda|já|só|muito|entre|sobre|antes|depois|agora|nunca|sempre|seu|sua|isso|este|essa|esse|fila|nome|salvar|adicionar|remover|desativar|reativar|carregando|buscar|enviar|tentar|atendentes|janela|regra|contato|telefone|minutos)\b/iu;
 
 /** Atributos cujo valor chega ao olho — ou ao leitor de tela — de quem usa. */
 const ATRIBUTOS_VISIVEIS = new Set([
@@ -424,6 +430,29 @@ describe("toda chave usada na tela existe em todo idioma servido", () => {
       expect(
         semTraducao,
         `${semTraducao.length} chamada(s) t() sem tradução em ${idioma}: a tela cai no português`,
+      ).toEqual([]);
+    }
+  });
+
+  it("todo texto do catálogo de navegação existe em todo idioma servido", () => {
+    // O catálogo é dado estruturado, não JSX: a varredura de chamadas t() não
+    // consegue enxergar cada valor. Sem este gate, uma página nova aparece no
+    // menu em inglês com a descrição ainda em português.
+    const textos = [
+      ...NAV_GROUPS.flatMap((grupo) => [grupo.label, grupo.hub?.label]),
+      ...NAV_CATALOG.flatMap((item) => [
+        item.label,
+        item.description,
+        "section" in item ? item.section : undefined,
+      ]),
+    ].filter((texto): texto is string => Boolean(texto));
+
+    for (const idioma of IDIOMAS) {
+      if (idioma === "pt-BR") continue;
+      const semTraducao = [...new Set(textos)].filter((texto) => !DICIONARIO[texto]?.[idioma]);
+      expect(
+        semTraducao,
+        `texto(s) do catálogo de navegação sem tradução em ${idioma}`,
       ).toEqual([]);
     }
   });

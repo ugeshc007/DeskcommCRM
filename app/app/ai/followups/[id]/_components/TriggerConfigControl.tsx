@@ -343,7 +343,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="trigger-segments">Segmentos (tags, opcional)</Label>
+                <Label htmlFor="trigger-segments">{t("Segmentos (tags, opcional)")}</Label>
                 <Input
                   id="trigger-segments"
                   placeholder={t("ex: vip, carrinho-abandonado")}

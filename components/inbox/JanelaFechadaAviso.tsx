@@ -118,7 +118,7 @@ export function JanelaFechadaAviso({
           toast.success(t("Modelo enviado — a janela reabre quando o cliente responder."));
         },
         onError: (e: unknown) =>
-          toast.error(e instanceof Error ? e.message : t("Não consegui enviar o modelo.")),
+          toast.error(e instanceof Error ? t(e.message) : t("Não consegui enviar o modelo.")),
       },
     );
   }

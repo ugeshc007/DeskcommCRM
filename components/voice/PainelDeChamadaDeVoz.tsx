@@ -102,7 +102,7 @@ export function PainelDeChamadaDeVoz() {
         | { error?: { message?: string }; data?: { aparelhoDesconectado?: boolean } }
         | null;
       if (!res.ok) {
-        toast.error(json?.error?.message ?? t("Não foi possível salvar."));
+        toast.error(json?.error?.message ? t(json.error.message) : t("Não foi possível salvar."));
         return;
       }
       // A frase diz o que ACONTECEU, não o que foi gravado — e por isso vem do

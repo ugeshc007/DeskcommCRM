@@ -5659,6 +5659,9 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "phone_number_id, waba_id and token are required",
   "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.":
     "The Phone Number ID does not belong to the specified WhatsApp Business Account. Copy both IDs from Meta → WhatsApp → API Setup; do not use the App ID.",
+  "A Meta não devolveu nenhum número para este WhatsApp Business Account. Dê ao usuário do sistema acesso de controle total a essa conta e gere um novo token.":
+    "Meta returned no phone numbers for this WhatsApp Business Account. Give the system user full-control access to this account and generate a new token.",
+  "Phone Number IDs devolvidos pela Meta:": "Phone Number IDs returned by Meta:",
   "Pipeline não encontrado.": "Pipeline not found.",
   "provar a chave requer papel de administrador": "prove key requires admin role",
   "Provider desconhecido.": "Unknown provider.",

@@ -6943,6 +6943,10 @@ const DICIONARIO_BASE: Traducoes = {
   "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.": {
     es: "El Phone Number ID no pertenece a la WhatsApp Business Account indicada. Copia ambos ID en Meta → WhatsApp → API Setup; no uses el App ID.",
   },
+  "A Meta não devolveu nenhum número para este WhatsApp Business Account. Dê ao usuário do sistema acesso de controle total a essa conta e gere um novo token.": {
+    es: "Meta no devolvió ningún número para esta WhatsApp Business Account. Concede al usuario del sistema acceso de control total a esta cuenta y genera un token nuevo.",
+  },
+  "Phone Number IDs devolvidos pela Meta:": { es: "Phone Number IDs devueltos por Meta:" },
   "Pipeline não encontrado.": { es: "Pipeline no encontrado." },
   "provar a chave requer papel de administrador": { es: "probar la clave requiere rol de administrador" },
   "Provider desconhecido.": { es: "Provider desconocido." },

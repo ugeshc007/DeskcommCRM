@@ -54,6 +54,24 @@ describe("validateMetaCredentials", () => {
       ok: false,
       motivo:
         "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.",
+      availablePhoneNumberIds: ["outro-phone"],
+    });
+  });
+
+  it("distingue WABA sem número visível — normalmente permissão do usuário do sistema", async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+    })) as typeof fetch;
+
+    await expect(validateMetaCredentials({
+      phoneNumberId: "phone-1",
+      wabaId: "waba-1",
+      token: "secret-token",
+    })).resolves.toEqual({
+      ok: false,
+      motivo:
+        "A Meta não devolveu nenhum número para este WhatsApp Business Account. Dê ao usuário do sistema acesso de controle total a essa conta e gere um novo token.",
+      availablePhoneNumberIds: [],
     });
   });
 

@@ -138,7 +138,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     token,
   });
   if (!validacao.ok) {
-    return fail("invalid_request", t(validacao.motivo), 422, { requestId });
+    const ids = validacao.availablePhoneNumberIds ?? [];
+    const mensagem = ids.length > 0
+      ? `${t(validacao.motivo)} ${t("Phone Number IDs devolvidos pela Meta:")} ${ids.join(", ")}.`
+      : t(validacao.motivo);
+    return fail("invalid_request", mensagem, 422, { requestId });
   }
 
   const admin = createAdminClient();

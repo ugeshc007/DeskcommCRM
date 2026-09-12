@@ -12,7 +12,7 @@
  */
 export type ValidacaoCredencial =
   | { ok: true; displayPhoneNumber: string | null; verifiedName: string | null; qualityRating: string | null }
-  | { ok: false; motivo: string };
+  | { ok: false; motivo: string; availablePhoneNumberIds?: string[] };
 
 export async function validateMetaCredentials(input: {
   phoneNumberId: string;
@@ -57,10 +57,15 @@ export async function validateMetaCredentials(input: {
 
     const numero = body.data?.find((item) => item.id === input.phoneNumberId);
     if (!numero) {
+      const idsDisponiveis = (body.data ?? [])
+        .map((item) => item.id)
+        .filter((id): id is string => Boolean(id));
       return {
         ok: false,
-        motivo:
-          "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.",
+        motivo: idsDisponiveis.length === 0
+          ? "A Meta não devolveu nenhum número para este WhatsApp Business Account. Dê ao usuário do sistema acesso de controle total a essa conta e gere um novo token."
+          : "O Phone Number ID não pertence ao WhatsApp Business Account informado. Copie os dois IDs em Meta → WhatsApp → API Setup; não use o App ID.",
+        availablePhoneNumberIds: idsDisponiveis,
       };
     }
 

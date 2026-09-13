@@ -5,6 +5,11 @@
  * completeness guard fails when a screen adds a key without an English value.
  */
 export const DICIONARIO_EN: Readonly<Record<string, string>> = {
+  "Atendimento, vendas e IA em um só lugar": "Customer service, sales, and AI in one place",
+  "Entre para continuar ou crie uma organização para começar.":
+    "Sign in to continue, or create an organization to get started.",
+  "Depois do cadastro, você configura sua organização passo a passo.":
+    "After signing up, you will set up your organization step by step.",
   "O cadastro de novas empresas é feito pela equipe da plataforma nesta instalação.":
     "New companies are registered by the platform team in this installation.",
   "Se você recebeu um convite, abra o link enviado pela sua empresa.":

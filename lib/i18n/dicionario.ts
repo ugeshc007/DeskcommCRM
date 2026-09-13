@@ -38,6 +38,15 @@ import { DICIONARIO_EN } from "./dicionario.en";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 const DICIONARIO_BASE: Traducoes = {
+  "Atendimento, vendas e IA em um só lugar": {
+    es: "Atención al cliente, ventas e IA en un solo lugar",
+  },
+  "Entre para continuar ou crie uma organização para começar.": {
+    es: "Inicia sesión para continuar o crea una organización para comenzar.",
+  },
+  "Depois do cadastro, você configura sua organização passo a passo.": {
+    es: "Después de registrarte, configurarás tu organización paso a paso.",
+  },
   "números de teste autorizados": { es: "números de prueba autorizados" },
   "1 número de teste autorizado": { es: "1 número de prueba autorizado" },
   "Nenhum número autorizado — a IA não responde ninguém neste canal.": {

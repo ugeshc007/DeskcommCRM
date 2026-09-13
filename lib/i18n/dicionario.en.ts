@@ -3795,7 +3795,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Inteligência contratada:": "Hired Intelligence:",
   "Chave cadastrada — conferindo com a empresa de IA":
     "Registered key — checking with the AI company",
-  "Falta a chave da inteligência artificial": "The key to artificial intelligence is missing",
+  "Falta a chave da inteligência artificial": "AI provider key is missing",
   "WhatsApp pronto para conectar seu número": "WhatsApp ready to connect your number",
   "O WhatsApp desta instalação ainda não subiu":
     "WhatsApp from this installation has not yet uploaded",
@@ -3994,7 +3994,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Não consegui testar o crédito agora. Dá para seguir — mas confira o saldo na conta da empresa de IA antes de confiar nele.":
     "I haven't been able to test the credit now. You can follow it — but check the balance in the AI ​​company's account before trusting it.",
   "Pronta para uso.": "Ready to use.",
-  "Onde ele organiza seus clientes": "Where does he organize his clients",
+  "Onde ele organiza seus clientes": "Customer pipeline",
   "Cada cliente vira um cartão que anda por essas colunas. Ele mesmo move o cartão conforme a conversa avança — por isso cada coluna diz também quando ele deve usá-la.":
     "Each customer turns into a card that moves through these columns. He moves the card himself as the conversation progresses — that's why each column also says when he should use it.",
   "Seu funcionário montou este quadro olhando o que você me contou sobre o negócio. Ajuste o que quiser.":
@@ -4059,7 +4059,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Prefiro começar de um modelo pronto": "I prefer to start from a ready-made model",
   "Dê um nome à coluna em branco.": "Give the blank column a name.",
   "Usar este quadro": "Use this board",
-  "Veja ele atender": "See him answer",
+  "Veja ele atender": "Test your AI agent",
   "Escreva como se fosse um cliente. Nada é enviado pelo WhatsApp — é só um ensaio, entre você e ele.":
     "Write as if you were a customer. Nothing is sent via WhatsApp — it's just a rehearsal, between you and him.",
   "seu funcionário": "your employee",
@@ -4087,7 +4087,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "e seguir daqui mesmo — o que você montou está salvo.":
     "and move on from here — what you set up is saved.",
   "Não consegui salvar este passo.": "I was unable to save this step.",
-  "Quem trabalha com ele": "Who works with him",
+  "Quem trabalha com ele": "Your team",
   "Seu funcionário não trabalha sozinho: quando ele passar uma conversa adiante, é uma dessas pessoas que atende.":
     "Your employee does not work alone: when he passes on a conversation, it is one of those people who responds.",
   "Esta instalação ainda não envia e-mail.": "This installation does not yet send email.",
@@ -4239,11 +4239,11 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Los Angeles": "Los Angeles",
   "Outro (horário universal)": "Other (universal time)",
   "Seu negócio": "Your business",
-  "O telefone dele": "His phone",
+  "O telefone dele": "WhatsApp number",
   "Sua loja": "Your store",
   Treinar: "Train",
-  "Onde ele organiza": "Where does he organize",
-  "Ver ele atender": "See him answer",
+  "Onde ele organiza": "Customer pipeline",
+  "Ver ele atender": "Test the AI agent",
   "Sem conversas por aqui": "No conversations here",
   "Quando chegarem mensagens, elas aparecem aqui em tempo real.":
     "When messages arrive, they appear here in real time.",

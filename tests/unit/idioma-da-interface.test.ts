@@ -36,6 +36,16 @@ describe("traduzir", () => {
     expect(traduzir("Contatos", "en")).toBe("Contacts");
   });
 
+  it("nomeia os passos do onboarding como ações naturais em inglês", () => {
+    expect(traduzir("O telefone dele", "en")).toBe("WhatsApp number");
+    expect(traduzir("Onde ele organiza", "en")).toBe("Customer pipeline");
+    expect(traduzir("Ver ele atender", "en")).toBe("Test the AI agent");
+    expect(traduzir("Quem trabalha com ele", "en")).toBe("Your team");
+    expect(traduzir("Falta a chave da inteligência artificial", "en")).toBe(
+      "AI provider key is missing",
+    );
+  });
+
   it("em português devolve a própria chave — ela É o texto", () => {
     expect(traduzir("Assumir", "pt-BR")).toBe("Assumir");
   });

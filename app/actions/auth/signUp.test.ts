@@ -28,7 +28,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
-const configuracao = vi.hoisted(() => ({ mode: "self_hosted", publicSignup: false }));
+const configuracao = vi.hoisted(() => ({
+  mode: "self_hosted",
+  publicSignup: false,
+  locale: "en",
+}));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -40,6 +44,9 @@ vi.mock("@/lib/env", () => ({
     },
     get SAAS_PUBLIC_SIGNUP_ENABLED() {
       return configuracao.publicSignup;
+    },
+    get APP_LOCALE() {
+      return configuracao.locale;
     },
   },
 }));
@@ -64,6 +71,7 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
     vi.resetModules();
     configuracao.mode = "self_hosted";
     configuracao.publicSignup = false;
+    configuracao.locale = "en";
     signUpDoProvedor.mockReset();
     vi.mocked(headers).mockResolvedValue({
       // IP diferente a cada caso, pelo mesmo motivo do e-mail.
@@ -85,6 +93,13 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
     const res = await signUp(entrada());
 
     expect(res).toEqual({ ok: true, sessao_ativa: true });
+    expect(signUpDoProvedor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          data: expect.objectContaining({ locale: "en" }),
+        }),
+      }),
+    );
   });
 
   it("CONTROLE — confirmação LIGADA: sem sessão, a tela do e-mail continua certa", async () => {

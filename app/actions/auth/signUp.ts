@@ -143,8 +143,15 @@ export async function signUp(
         ? {
             invite_token: convite,
             full_name: (parsed.data as SignupComConviteInput).full_name,
+            // Até entrar numa organização, não existe locale de tenant para
+            // resolver. A pessoa precisa continuar no idioma da instalação
+            // já na tela seguinte ao cadastro.
+            locale: env.APP_LOCALE,
           }
-        : { org_name: (parsed.data as SignupInput).org_name },
+        : {
+            org_name: (parsed.data as SignupInput).org_name,
+            locale: env.APP_LOCALE,
+          },
     },
   });
 

@@ -4001,7 +4001,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "Your employee put together this chart looking at what you told me about the business. Adjust whatever you want.",
   "Não consegui pedir uma sugestão para o seu funcionário agora":
     "I couldn't ask your employee for a suggestion right now",
-  "Comecei por um quadro pronto de": "I started with a ready-made painting",
+  "Comecei por um quadro pronto de": "I started with a ready-made board for",
   "Isso não trava nada: escolha outro modelo abaixo ou ajuste as colunas na mão. Dá para mudar tudo depois, quando quiser.":
     "This doesn't stop anything: choose another model below or adjust the speakers by hand. You can change everything later, whenever you want.",
   "Nome do quadro": "Board name",
@@ -6851,4 +6851,8 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   Endereço: "Address",
   "Este ponto usa o modelo definido na versão publicada do agente; a escolha do painel não se aplica.":
     "This point uses the model defined in the published version of the agent; panel choice does not apply.",
+  'Playbook pra contornar objeção de preço no WhatsApp — diagnostica o motivo real por trás do "caro" antes de reagir, sem ceder desconto não autorizado.':
+    "WhatsApp price-objection playbook — identifies the real reason behind ‘too expensive’ before responding, without offering unauthorized discounts.",
+  "Playbook pra marcar/remarcar horário (consulta, visita, sessão) — consulta a agenda real pelas ferramentas quando elas existem, nunca inventa disponibilidade, e confirma por escrito antes de fechar.":
+    "Scheduling and rescheduling playbook — checks the real calendar when tools are available, never invents availability, and confirms the details in writing.",
 };

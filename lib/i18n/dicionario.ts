@@ -8522,6 +8522,12 @@ const DICIONARIO_BASE: Traducoes = {
   },
   "Convite reenviado.": { es: "Invitación reenviada." },
   "Convite revogado.": { es: "Invitación revocada." },
+  'Playbook pra contornar objeção de preço no WhatsApp — diagnostica o motivo real por trás do "caro" antes de reagir, sem ceder desconto não autorizado.': {
+    es: "Guía para manejar objeciones de precio en WhatsApp — identifica el motivo real antes de responder, sin ofrecer descuentos no autorizados.",
+  },
+  "Playbook pra marcar/remarcar horário (consulta, visita, sessão) — consulta a agenda real pelas ferramentas quando elas existem, nunca inventa disponibilidade, e confirma por escrito antes de fechar.": {
+    es: "Guía para agendar o reprogramar — consulta el calendario real cuando las herramientas están disponibles, nunca inventa disponibilidad y confirma los detalles por escrito.",
+  },
 };
 
 export const DICIONARIO: Traducoes = Object.fromEntries(

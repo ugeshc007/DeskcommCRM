@@ -190,10 +190,10 @@ export function QuadroClient({
       {atual && atual.colunas.length > 0 ? (
         <details className="rounded-md border p-3 text-sm">
           <summary className="cursor-pointer text-muted-foreground">
-            {t("O que veio na instalação")} ({atual.nome})
+            {t("O que veio na instalação")} ({t(atual.nome)})
           </summary>
           <p className="mt-2 text-xs text-muted-foreground">
-            {atual.colunas.join(" → ")}
+            {atual.colunas.map((coluna) => t(coluna)).join(" → ")}
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             {t("Este é o quadro padrão, feito para loja online. Ao continuar, ele é substituído pelo de cima.")}

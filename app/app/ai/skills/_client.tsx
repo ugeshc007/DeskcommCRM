@@ -143,7 +143,7 @@ export function SkillsClient({ initialState }: Props) {
                       {t("atualizada em")} {formatDate(skill.updated_at, tagDoIdioma)}
                     </span>
                   </div>
-                  {skill.description && <p className="text-text-muted">{skill.description}</p>}
+                  {skill.description && <p className="text-text-muted">{t(skill.description)}</p>}
                   {canManage && (
                     <div className="flex sm:justify-end">
                       <Button
@@ -196,7 +196,7 @@ export function SkillsClient({ initialState }: Props) {
                     <PuzzlePiece aria-hidden />
                     <span className="font-medium">{skill.name}</span>
                   </div>
-                  {skill.description && <p className="text-text-muted">{skill.description}</p>}
+                  {skill.description && <p className="text-text-muted">{t(skill.description)}</p>}
                   {canManage && (
                     <div className="flex sm:justify-end">
                       <Button

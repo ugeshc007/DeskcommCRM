@@ -507,7 +507,7 @@ export function AgendaClient({
                         : "border-border text-text-muted hover:border-border-strong hover:text-text",
                     )}
                   >
-                    {opcao.nome}
+                    {t(opcao.nome)}
                     <span className="ml-1 opacity-70 tabular-nums">{opcao.duracaoMin}min</span>
                   </button>
                 ))}
@@ -568,7 +568,7 @@ export function AgendaClient({
                   pessoas.find((p) => p.id === tipo.donoId) ??
                   pessoas[0] ?? { id: "", nome: "Você", trilha: 1 }
                 }
-                tipo={tipo.nome}
+                tipo={t(tipo.nome)}
                 duracaoMin={tipo.duracaoMin}
                 // O LOCAL e o FUSO de verdade, que a tela tinha e não passava.
                 //
@@ -817,7 +817,11 @@ export function AgendaClient({
         pessoas={pessoas}
         agendamentos={agendamentosDaGrade}
         recorte={recorteDaGrade}
-        tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
+        tipos={tiposIniciais.map((tipo) => ({
+          id: tipo.id,
+          nome: t(tipo.nome),
+          duracaoMin: tipo.duracaoMin,
+        }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin } : null}
         onEscolherTipo={setTipoId}
         onMarcarEm={(instante) => {

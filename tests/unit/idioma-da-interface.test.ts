@@ -34,6 +34,21 @@ describe("traduzir", () => {
   it("devolve o inglês quando existe", () => {
     expect(traduzir("Assumir", "en")).toBe("Take over");
     expect(traduzir("Contatos", "en")).toBe("Contacts");
+    expect(traduzir("Comecei por um quadro pronto de", "en")).toBe(
+      "I started with a ready-made board for",
+    );
+    expect(
+      traduzir(
+        'Playbook pra contornar objeção de preço no WhatsApp — diagnostica o motivo real por trás do "caro" antes de reagir, sem ceder desconto não autorizado.',
+        "en",
+      ),
+    ).toMatch(/^WhatsApp price-objection playbook/);
+  });
+
+  it("traduz dados padrão conhecidos sem alterar dados personalizados", () => {
+    expect(traduzir("Atendimento", "en")).toBe("Customer Service");
+    expect(traduzir("Reunião", "en")).toBe("Meeting");
+    expect(traduzir("Nome personalizado", "en")).toBe("Nome personalizado");
   });
 
   it("nomeia os passos do onboarding como ações naturais em inglês", () => {

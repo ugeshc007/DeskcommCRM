@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
@@ -23,11 +24,36 @@ const signIn = vi.fn(async () => ({
   data: { user: null, session: null },
   error: { message: "Invalid login credentials", status: 400 },
 }));
+const platformAdmin = vi.fn(
+  async (): Promise<{ data: { user_id: string } | null; error: null }> => ({
+    data: null,
+    error: null,
+  }),
+);
+
+function clientMock() {
+  return {
+    auth: {
+      signInWithPassword: signIn,
+      mfa: { listFactors: vi.fn(async () => ({ data: { totp: [{ id: "f1" }] } })) },
+    },
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          is: vi.fn(() => ({ maybeSingle: platformAdmin })),
+        })),
+      })),
+    })),
+  };
+}
 
 describe("signInWithPassword — teto de tentativas", () => {
   beforeEach(() => {
     vi.resetModules();
     signIn.mockClear();
+    vi.mocked(redirect).mockClear();
+    platformAdmin.mockReset();
+    platformAdmin.mockResolvedValue({ data: null, error: null });
     vi.mocked(headers).mockResolvedValue({
       get: (k: string) => (k === "x-forwarded-for" ? "203.0.113.77" : null),
     } as never);
@@ -35,12 +61,7 @@ describe("signInWithPassword — teto de tentativas", () => {
       data: { user: null, session: null },
       error: { message: "Invalid login credentials", status: 400 },
     } as never);
-    vi.mocked(createClient).mockResolvedValue({
-      auth: {
-        signInWithPassword: signIn,
-        mfa: { listFactors: vi.fn(async () => ({ data: { totp: [{ id: "f1" }] } })) },
-      },
-    } as never);
+    vi.mocked(createClient).mockResolvedValue(clientMock() as never);
   });
 
   it("recusa a 6ª tentativa contra a mesma conta sem chamar o provedor", async () => {
@@ -80,5 +101,50 @@ describe("signInWithPassword — teto de tentativas", () => {
     // Nenhuma das dez foi barrada: se o sucesso contasse, a 6ª seria.
     expect(resultados.filter((r) => r?.error === "rate_limited")).toHaveLength(0);
     expect(signIn).toHaveBeenCalledTimes(10);
+  });
+
+  it("platform admin recebe /admin como destino padrão", async () => {
+    const { signInWithPassword } = await import("./signInWithPassword");
+    signIn.mockResolvedValue({
+      data: { user: { id: "platform-1" }, session: {} },
+      error: null,
+    } as never);
+    platformAdmin.mockResolvedValue({ data: { user_id: "platform-1" }, error: null });
+    vi.mocked(createClient).mockResolvedValue({
+      ...clientMock(),
+      auth: {
+        signInWithPassword: signIn,
+        mfa: { listFactors: vi.fn(async () => ({ data: { totp: [] } })) },
+      },
+    } as never);
+
+    await signInWithPassword({
+      email: "platform@example.com",
+      password: "SenhaForte!2026",
+    });
+
+    expect(redirect).toHaveBeenCalledWith("/admin");
+  });
+
+  it("tenant comum continua entrando em /app", async () => {
+    const { signInWithPassword } = await import("./signInWithPassword");
+    signIn.mockResolvedValue({
+      data: { user: { id: "tenant-1" }, session: {} },
+      error: null,
+    } as never);
+    vi.mocked(createClient).mockResolvedValue({
+      ...clientMock(),
+      auth: {
+        signInWithPassword: signIn,
+        mfa: { listFactors: vi.fn(async () => ({ data: { totp: [] } })) },
+      },
+    } as never);
+
+    await signInWithPassword({
+      email: "tenant@example.com",
+      password: "SenhaForte!2026",
+    });
+
+    expect(redirect).toHaveBeenCalledWith("/app");
   });
 });

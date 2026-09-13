@@ -128,6 +128,18 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
     expect(res).toEqual({ ok: false, error: "signup_failed" });
   });
 
+  it("e-mail já cadastrado recebe uma saída para entrar, não 'tente novamente'", async () => {
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: "User already registered", status: 422 },
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+
+    expect(res).toEqual({ ok: false, error: "conta_ja_existe" });
+  });
+
   it("SaaS gerenciado recusa cadastro direto antes de chamar o provedor", async () => {
     configuracao.mode = "managed_saas";
 

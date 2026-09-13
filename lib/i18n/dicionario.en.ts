@@ -4983,6 +4983,9 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Confirmar nova senha": "Confirm new password",
   "Código de verificação (2 etapas)": "Verification code (2 steps)",
   "Não foi possível criar a conta. Tente novamente.": "Unable to create account. Please try again.",
+  "Entre com ela para continuar a configuração da organização.":
+    "Sign in with it to continue setting up the organization.",
+  "Entrar e continuar": "Sign in and continue",
   "Confirme seu e-mail": "Confirm your email",
   "Enviamos um link de confirmação para": "We send a confirmation link to",
   "Abra o e-mail e clique no link para ativar sua conta.":

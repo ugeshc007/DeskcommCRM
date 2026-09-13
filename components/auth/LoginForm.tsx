@@ -40,7 +40,9 @@ export function LoginForm({ next }: { next?: string }) {
       }
       if (res.error === "mfa_required") {
         const params = new URLSearchParams();
-        if (next) params.set("next", next);
+        // A action resolve também o destino padrão por papel: platform admin
+        // precisa voltar do MFA para /admin, não para o onboarding do tenant.
+        if (res.next) params.set("next", res.next);
         if (res.challengeId) params.set("factor", res.challengeId);
         router.replace(`/login/mfa${params.toString() ? `?${params}` : ""}`);
         return;

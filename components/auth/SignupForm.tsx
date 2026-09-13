@@ -111,7 +111,7 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
         );
       } else if (res.error === "validation_error") {
         setServerError(t("Dados inválidos. Confira os campos."));
-      } else if (res.error === "conta_ja_existe" && convite) {
+      } else if (res.error === "conta_ja_existe") {
         // Ramo próprio porque o `else` mandava "Tente novamente" — e tentar de
         // novo nunca funciona quando a conta já existe. Em vez da mensagem,
         // a SAÍDA: entrar levando o convite pendurado, para cair no aceite e
@@ -124,16 +124,22 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
     });
   };
 
-  if (contaExistente && convite) {
-    const destino = `/login?next=${encodeURIComponent(`/team/accept-invite/${convite.token}`)}`;
+  if (contaExistente) {
+    const destino = convite
+      ? `/login?next=${encodeURIComponent(`/team/accept-invite/${convite.token}`)}`
+      : "/login?next=%2Fget-started";
     return (
       <div className="space-y-4 rounded-md border bg-muted/40 px-4 py-6 text-center" role="status">
         <p className="text-sm font-medium">{t("Você já tem uma conta com este e-mail")}</p>
         <p className="text-sm text-muted-foreground">
-          {t("Entre com ela para aceitar o convite — não é preciso criar outra.")}
+          {convite
+            ? t("Entre com ela para aceitar o convite — não é preciso criar outra.")
+            : t("Entre com ela para continuar a configuração da organização.")}
         </p>
         <Button asChild className="w-full">
-          <Link href={destino}>{t("Entrar e aceitar o convite")}</Link>
+          <Link href={destino}>
+            {convite ? t("Entrar e aceitar o convite") : t("Entrar e continuar")}
+          </Link>
         </Button>
       </div>
     );

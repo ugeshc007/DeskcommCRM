@@ -82,4 +82,14 @@ describe("cadastro quando o provedor já abriu a sessão", () => {
     );
     expect(replace).not.toHaveBeenCalled();
   });
+
+  it("e-mail existente oferece login para continuar a organização", async () => {
+    signUp.mockResolvedValue({ ok: false, error: "conta_ja_existe" });
+    render(<SignupForm />);
+    await preencherEEnviar();
+
+    const link = await screen.findByRole("link", { name: /entrar e continuar/i });
+    expect(link.getAttribute("href")).toBe("/login?next=%2Fget-started");
+    expect(screen.queryByText(/Tente novamente/i)).toBeNull();
+  });
 });

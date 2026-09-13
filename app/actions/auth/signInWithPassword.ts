@@ -20,6 +20,7 @@ export type SignInResult = {
   error: "invalid_credentials" | "rate_limited" | "validation_error" | "mfa_required";
   details?: Record<string, unknown>;
   challengeId?: string;
+  next?: string;
 };
 
 /**
@@ -86,12 +87,32 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
     return { ok: false, error: "invalid_credentials" };
   }
 
+  // A conta de plataforma não é um tenant mestre: sua superfície é o painel
+  // transversal em /admin. Sem esta decisão aqui, o fallback /app escolhe a
+  // membership do bootstrap e manda o dono para o onboarding de "Minha
+  // empresa", escondendo justamente a lista de organizações que ele opera.
+  // A leitura usa o client da sessão; a RLS só deixa o próprio platform admin
+  // enxergar a linha. Falha na leitura preserva o fallback tenant em vez de
+  // bloquear um login válido.
+  const { data: platformAdmin } = await supabase
+    .from("platform_admins")
+    .select("user_id")
+    .eq("user_id", data.user.id)
+    .is("revoked_at", null)
+    .maybeSingle();
+  const destination = safeNext(next, platformAdmin ? "/admin" : "/app");
+
   // MFA gating — if the user has any verified TOTP factor enrolled, they must
   // complete the challenge in /login/mfa before reaching the app.
   const { data: factorsData } = await supabase.auth.mfa.listFactors();
   const verifiedTotp = factorsData?.totp?.find((f) => f.status === "verified");
   if (verifiedTotp) {
-    return { ok: false, error: "mfa_required", challengeId: verifiedTotp.id };
+    return {
+      ok: false,
+      error: "mfa_required",
+      challengeId: verifiedTotp.id,
+      next: destination,
+    };
   }
 
   await audit({
@@ -104,5 +125,5 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
   });
 
   // Server-side redirect ensures fresh session cookie is sent to browser.
-  redirect(safeNext(next, "/app"));
+  redirect(destination);
 }

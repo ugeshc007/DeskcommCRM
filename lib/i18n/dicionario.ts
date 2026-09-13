@@ -6258,6 +6258,10 @@ const DICIONARIO_BASE: Traducoes = {
   "Não foi possível criar a conta. Tente novamente.": {
     es: "No se pudo crear la cuenta. Intenta de nuevo.",
   },
+  "Entre com ela para continuar a configuração da organização.": {
+    es: "Inicia sesión con ella para continuar configurando la organización.",
+  },
+  "Entrar e continuar": { es: "Iniciar sesión y continuar" },
   "Confirme seu e-mail": { es: "Confirma tu correo" },
   "Enviamos um link de confirmação para": { es: "Enviamos un enlace de confirmación a" },
   "Abra o e-mail e clique no link para ativar sua conta.": {

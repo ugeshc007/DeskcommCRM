@@ -37,11 +37,6 @@ export type SignUpResult =
     }
   | {
       ok: false;
-      /**
-       * `conta_ja_existe`: só acontece COM convite na mão. Sem convite a
-       * resposta continua indistinguível de sucesso — ver o parágrafo de
-       * anti-enumeração abaixo.
-       */
       error:
         | "validation_error"
         | "rate_limited"
@@ -56,9 +51,9 @@ export type SignUpResult =
  * confirmação. O tenant só é provisionado quando o link é confirmado em
  * /auth/confirm (evita orgs órfãs de cadastros nunca confirmados).
  *
- * Anti-enumeração: e-mail já cadastrado recebe a MESMA resposta de sucesso —
- * o GoTrue devolve um usuário ofuscado (identities vazio) sem erro, e nós não
- * diferenciamos. Rate limit de envio de e-mail é do próprio GoTrue.
+ * Nesta instalação o GoTrue usa confirmação automática e devolve explicitamente
+ * `user_already_exists`. A tela precisa transformar isso numa saída real para
+ * login; "tente novamente" só repete uma operação que nunca poderá funcionar.
  */
 export async function signUp(
   input: SignupInput | SignupComConviteInput,
@@ -170,20 +165,13 @@ export async function signUp(
     // O caminho certo existe e é curto (entrar e aceitar o convite), mas a
     // tela não levava até ele.
     //
-    // ⚠️ POR QUE ISTO NÃO FURA A ANTI-ENUMERAÇÃO. O cabeçalho desta função
-    // explica que e-mail já cadastrado recebe a MESMA resposta de sucesso,
-    // para ninguém descobrir quem tem conta aqui testando endereços. A regra
-    // continua inteira: este ramo só existe quando há um CONVITE ASSINADO
-    // para este e-mail. Quem tem o convite já sabe que este endereço foi
-    // convidado — a assinatura é a prova. Sem convite, `convite` é `null` e a
-    // resposta segue sendo `signup_failed`, indistinguível como antes.
     const jaExiste = /already\s*registered|already\s*exists/i.test(error.message);
-    if (jaExiste && convite !== null) {
+    if (jaExiste) {
       await audit({
         action: "auth.signup_failed",
         metadata: {
           email_hash: hashEmail(parsed.data.email),
-          reason: "conta_ja_existe_com_convite",
+          reason: convite === null ? "conta_ja_existe" : "conta_ja_existe_com_convite",
         },
         requestId,
         ip,

@@ -76,7 +76,13 @@ export async function signUp(
   // continua criando a conta de um membro da organização já existente.
   // A guarda vive também na action: esconder o formulário não protege uma
   // Server Action, que segue alcançável por POST direto.
-  if (!publicSignupAllowed(env.SAAS_DEPLOYMENT_MODE, temConvite)) {
+  if (
+    !publicSignupAllowed(
+      env.SAAS_DEPLOYMENT_MODE,
+      temConvite,
+      env.SAAS_PUBLIC_SIGNUP_ENABLED,
+    )
+  ) {
     return { ok: false, error: "signup_disabled" };
   }
   const parsed = temConvite

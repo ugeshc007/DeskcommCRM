@@ -68,6 +68,13 @@ const schema = z.object({
   // `lib/saas/deployment-mode.ts`; valor desconhecido nunca fecha cadastro nem
   // derruba o app inteiro por erro de digitação.
   SAAS_DEPLOYMENT_MODE: z.string().optional().default("self_hosted"),
+  // Opt-in explícito: mantém o SaaS gerenciado fechado por padrão, mas permite
+  // que cada cadastro público provisione sua própria organização isolada.
+  SAAS_PUBLIC_SIGNUP_ENABLED: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((v) => v === "true"),
   // Opcional: sem segredo nenhum endpoint de billing aceita evento. Um
   // provedor concreto continua exigindo decisão e adapter explícitos.
   SAAS_BILLING_WEBHOOK_SECRET: z.string().optional().default(""),

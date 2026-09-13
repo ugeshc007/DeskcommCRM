@@ -30,7 +30,11 @@ export default async function SignupPage({
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
   const conviteExpirado = Boolean(invite) && !payload;
-  const cadastroPermitido = publicSignupAllowed(env.SAAS_DEPLOYMENT_MODE, Boolean(convite));
+  const cadastroPermitido = publicSignupAllowed(
+    env.SAAS_DEPLOYMENT_MODE,
+    Boolean(convite),
+    env.SAAS_PUBLIC_SIGNUP_ENABLED,
+  );
 
   const supabase = await createClient();
   const {

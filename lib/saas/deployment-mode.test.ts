@@ -21,4 +21,8 @@ describe("modo de distribuição SaaS", () => {
     expect(publicSignupAllowed("managed_saas", false)).toBe(false);
     expect(publicSignupAllowed("managed_saas", true)).toBe(true);
   });
+
+  it("managed_saas abre cadastro de empresa quando o operador opta pelo self-service", () => {
+    expect(publicSignupAllowed("managed_saas", false, true)).toBe(true);
+  });
 });

@@ -28,7 +28,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
-const configuracao = vi.hoisted(() => ({ mode: "self_hosted" }));
+const configuracao = vi.hoisted(() => ({ mode: "self_hosted", publicSignup: false }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -37,6 +37,9 @@ vi.mock("@/lib/env", () => ({
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     get SAAS_DEPLOYMENT_MODE() {
       return configuracao.mode;
+    },
+    get SAAS_PUBLIC_SIGNUP_ENABLED() {
+      return configuracao.publicSignup;
     },
   },
 }));
@@ -60,6 +63,7 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
   beforeEach(() => {
     vi.resetModules();
     configuracao.mode = "self_hosted";
+    configuracao.publicSignup = false;
     signUpDoProvedor.mockReset();
     vi.mocked(headers).mockResolvedValue({
       // IP diferente a cada caso, pelo mesmo motivo do e-mail.
@@ -117,5 +121,20 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
 
     expect(res).toEqual({ ok: false, error: "signup_disabled" });
     expect(signUpDoProvedor).not.toHaveBeenCalled();
+  });
+
+  it("SaaS gerenciado permite cadastro direto quando o operador abre o self-service", async () => {
+    configuracao.mode = "managed_saas";
+    configuracao.publicSignup = true;
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: { id: "u-self-service" }, session: null },
+      error: null,
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+
+    expect(res).toEqual({ ok: true, sessao_ativa: false });
+    expect(signUpDoProvedor).toHaveBeenCalledOnce();
   });
 });

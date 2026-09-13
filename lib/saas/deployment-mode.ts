@@ -16,10 +16,11 @@ export function isManagedSaas(raw: string | null | undefined): boolean {
   return resolveSaasDeploymentMode(raw) === "managed_saas";
 }
 
-/** Convites continuam sendo uma porta válida no modo gerenciado. */
+/** Convites continuam válidos; o operador pode abrir o cadastro no SaaS gerenciado. */
 export function publicSignupAllowed(
   raw: string | null | undefined,
   hasValidInvite: boolean,
+  managedPublicSignup = false,
 ): boolean {
-  return !isManagedSaas(raw) || hasValidInvite;
+  return !isManagedSaas(raw) || hasValidInvite || managedPublicSignup;
 }

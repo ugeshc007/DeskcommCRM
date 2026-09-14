@@ -24267,3 +24267,7 @@ grant execute on function public.fn_apply_saas_provider_event(jsonb) to service_
 notify pgrst, 'reload schema';
 
 -- END APPEND 0241
+-- 0242 — defaults internacionais para organizações novas (idempotente).
+alter table public.organizations alter column locale set default 'en';
+alter table public.organizations alter column timezone set default 'UTC';
+alter table public.organizations alter column currency set default 'USD';

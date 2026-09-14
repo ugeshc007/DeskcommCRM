@@ -11,6 +11,7 @@ import { ReactivationSlot } from "./ReactivationSlot";
 import { ConversaSlot } from "./ConversaSlot";
 import { ScoreSlot } from "./ScoreSlot";
 import { OwnerBadge } from "./OwnerBadge";
+import { formatCents } from "@/lib/money";
 
 /** Os dois gestos de seleção que o card sabe relatar. */
 export type GestoDeSelecao = "alterna" | "intervalo";
@@ -45,18 +46,9 @@ interface KanbanCardProps {
   onOpen?: (leadId: string) => void;
 }
 
-function formatBRL(cents: number | null, currency: string | null): string | null {
+function formatValue(cents: number | null, currency: string | null): string | null {
   if (cents == null) return null;
-  const code = currency ?? "BRL";
-  try {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: code,
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
-  } catch {
-    return `${(cents / 100).toFixed(2)} ${code}`;
-  }
+  return formatCents(cents, currency ?? "USD");
 }
 
 /**
@@ -82,7 +74,7 @@ export function KanbanCard({
   onOpen,
 }: KanbanCardProps) {
   const t = useT();
-  const value = formatBRL(card.valueCents, card.currency);
+  const value = formatValue(card.valueCents, card.currency);
   const state = resolveCardState(card, t);
   const age = stageAgeLabel(card.hoursInStage, t);
 

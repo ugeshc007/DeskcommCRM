@@ -26,7 +26,7 @@ import {
 import { useCreateLead } from "@/hooks/kanban/useCreateLead";
 import type { Stage } from "@/lib/kanban/types";
 import { createLeadSchema, type CreateLeadInput } from "@/lib/schemas/leads";
-import { parseReaisToCents } from "@/lib/money";
+import { MOEDAS_SERVIDAS, parseReaisToCents, type MoedaServida } from "@/lib/money";
 import { EcoDoValor } from "./EcoDoValor";
 
 interface FormShape {
@@ -34,6 +34,7 @@ interface FormShape {
   description: string;
   stage_id: string;
   valueReais: string;
+  currency: MoedaServida;
   tagsRaw: string;
   expected_close_date: string;
 }
@@ -47,6 +48,7 @@ interface Props {
   contactId?: string | null;
   /** Depois do INSERT — o inbox relê o resumo para o lead novo aparecer no formulário. */
   onCreated?: () => void;
+  defaultCurrency?: MoedaServida;
 }
 
 function defaultStageId(stages: Stage[]): string {
@@ -61,6 +63,7 @@ export function NewLeadDialog({
   stages,
   contactId,
   onCreated,
+  defaultCurrency = "USD",
 }: Props) {
   const t = useT();
   const create = useCreateLead(pipelineId);
@@ -72,6 +75,7 @@ export function NewLeadDialog({
       description: "",
       stage_id: initialStage,
       valueReais: "",
+      currency: defaultCurrency,
       tagsRaw: "",
       expected_close_date: "",
     },
@@ -104,7 +108,7 @@ export function NewLeadDialog({
       pipeline_id: pipelineId,
       stage_id: values.stage_id,
       title: values.title.trim(),
-      currency: "BRL",
+      currency: values.currency,
       source: "manual",
       tags,
     };
@@ -129,6 +133,7 @@ export function NewLeadDialog({
         description: "",
         stage_id: initialStage,
         valueReais: "",
+        currency: defaultCurrency,
         tagsRaw: "",
         expected_close_date: "",
       });
@@ -139,6 +144,7 @@ export function NewLeadDialog({
   }
 
   const stageId = form.watch("stage_id");
+  const currency = form.watch("currency");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -190,21 +196,31 @@ export function NewLeadDialog({
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="valueReais">{t("Valor (R$)")}</Label>
+              <Label htmlFor="valueReais">{t("Valor do negócio")}</Label>
               <Input
                 id="valueReais"
                 inputMode="decimal"
                 placeholder="0,00"
                 {...form.register("valueReais")}
               />
-              <EcoDoValor control={form.control} />
+              <EcoDoValor control={form.control} currency={currency} />
               {form.formState.errors.valueReais && (
                 <p className="text-xs text-error-fg">
                   {form.formState.errors.valueReais.message}
                 </p>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="currency">{t("Moeda")}</Label>
+              <select
+                id="currency"
+                {...form.register("currency")}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {MOEDAS_SERVIDAS.map((code) => <option key={code} value={code}>{code}</option>)}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="expected_close_date">{t("Fechamento previsto")}</Label>
@@ -235,7 +251,7 @@ export function NewLeadDialog({
               {t("Cancelar")}
             </Button>
             <Button type="submit" disabled={create.isPending || !stageId}>
-              {create.isPending ? "Criando…" : "Criar lead"}
+              {create.isPending ? t("Criando…") : t("Criar lead")}
             </Button>
           </DialogFooter>
         </form>

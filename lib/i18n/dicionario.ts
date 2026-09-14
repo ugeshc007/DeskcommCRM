@@ -8541,6 +8541,19 @@ const DICIONARIO_BASE: Traducoes = {
   "Playbook pra marcar/remarcar horário (consulta, visita, sessão) — consulta a agenda real pelas ferramentas quando elas existem, nunca inventa disponibilidade, e confirma por escrito antes de fechar.": {
     es: "Guía para agendar o reprogramar — consulta el calendario real cuando las herramientas están disponibles, nunca inventa disponibilidad y confirma los detalles por escrito.",
   },
+  "País ou região": { es: "País o región" },
+  "Serve para sugerir fuso horário e moeda. Não limita os países dos seus clientes.": {
+    es: "Sirve para sugerir una zona horaria y una moneda. No limita los países de tus clientes.",
+  },
+  "Fuso horário da empresa": { es: "Zona horaria de la empresa" },
+  "Controla o horário comercial, a agenda e os relatórios.": {
+    es: "Controla el horario comercial, la agenda y los informes.",
+  },
+  "Moeda padrão e de relatórios": { es: "Moneda predeterminada y de informes" },
+  "É o padrão da empresa. Cada negócio pode usar uma moeda diferente.": {
+    es: "Es el valor predeterminado de la empresa. Cada negocio puede usar una moneda diferente.",
+  },
+  "Valor do negócio": { es: "Valor del negocio" },
 };
 
 export const DICIONARIO: Traducoes = Object.fromEntries(

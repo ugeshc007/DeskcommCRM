@@ -297,3 +297,4 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20260912140000` | `0239_saas_subscription_ledger` | Ledger SaaS provider-neutral: assinatura opcional por organização + eventos append-only, limites configuráveis e RLS admin-only. Ausência de linha preserva self-host; billing nunca suspende automaticamente. |
 | `20260912150000` | `0240_saas_subscription_command` | RPC service-only e idempotente atualiza assinatura + evento na mesma transação, revalidando platform admin full no banco. |
 | `20260912160000` | `0241_saas_provider_events` | Recibo global mínimo + RPC service-only aplicam eventos normalizados por referência externa confiável; duplicados, desconhecidos e fora de ordem não regridem a assinatura. |
+| `20260914113000` | `0242_english_e_usd_defaults` | Novas organizações começam em inglês, UTC e USD; onboarding escolhe país, fuso e moeda sem alterar tenants existentes. |

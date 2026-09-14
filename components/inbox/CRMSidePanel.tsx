@@ -606,6 +606,7 @@ export function CRMSidePanel({ conversation }: Props) {
           onOpenChange={setLeadDialogOpen}
           pipelineId={defaultPipeline.data.pipeline.id}
           stages={defaultPipeline.data.stages}
+          defaultCurrency={defaultPipeline.data.currency}
           contactId={contactId}
           onCreated={() => {
             setLeadAtivoId(null);

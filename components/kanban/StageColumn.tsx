@@ -8,6 +8,7 @@ import type { Stage } from "@/lib/kanban/types";
 import { buildCardInput } from "@/lib/kanban/card-state";
 import { intervaloDaColuna } from "@/lib/kanban/selecao";
 import { KanbanCard, type GestoDeSelecao } from "./KanbanCard";
+import { formatCents } from "@/lib/money";
 
 interface StageColumnProps {
   stage: Stage;
@@ -35,18 +36,6 @@ interface StageColumnProps {
   onOpen?: (leadId: string) => void;
 }
 
-function formatBRL(cents: number): string {
-  try {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
-  } catch {
-    return `R$ ${(cents / 100).toFixed(0)}`;
-  }
-}
-
 export function StageColumn({
   stage,
   leads,
@@ -65,7 +54,12 @@ export function StageColumn({
   // atravessam o catálogo; nomes criados pelo cliente ficam intactos porque
   // `t()` devolve o próprio texto quando não conhece a chave.
   const stageLabel = t(stage.name);
-  const totalCents = leads.reduce((sum, l) => sum + (l.value_cents ?? 0), 0);
+  const totalsByCurrency = leads.reduce((totals, lead) => {
+    if (!lead.value_cents) return totals;
+    const currency = lead.currency ?? "USD";
+    totals.set(currency, (totals.get(currency) ?? 0) + lead.value_cents);
+    return totals;
+  }, new Map<string, number>());
 
   const idsVisiveis = leads.map((l) => l.id);
   const selecionadosAqui = idsVisiveis.filter((id) => selectedLeadIds?.has(id)).length;
@@ -140,9 +134,11 @@ export function StageColumn({
         </span>
       </div>
 
-      {totalCents > 0 && (
-        <div className="border-b border-border px-3 py-1.5 text-[11px] tabular-nums text-text-muted">
-          {formatBRL(totalCents)}
+      {totalsByCurrency.size > 0 && (
+        <div className="flex flex-wrap gap-x-2 border-b border-border px-3 py-1.5 text-[11px] tabular-nums text-text-muted">
+          {[...totalsByCurrency.entries()].map(([currency, cents]) => (
+            <span key={currency}>{formatCents(cents, currency)}</span>
+          ))}
         </div>
       )}
 

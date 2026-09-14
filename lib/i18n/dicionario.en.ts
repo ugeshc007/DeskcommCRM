@@ -6863,4 +6863,14 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "WhatsApp price-objection playbook — identifies the real reason behind ‘too expensive’ before responding, without offering unauthorized discounts.",
   "Playbook pra marcar/remarcar horário (consulta, visita, sessão) — consulta a agenda real pelas ferramentas quando elas existem, nunca inventa disponibilidade, e confirma por escrito antes de fechar.":
     "Scheduling and rescheduling playbook — checks the real calendar when tools are available, never invents availability, and confirms the details in writing.",
+  "País ou região": "Country or region",
+  "Serve para sugerir fuso horário e moeda. Não limita os países dos seus clientes.":
+    "Used to suggest a time zone and currency. It does not limit your customers' countries.",
+  "Fuso horário da empresa": "Business time zone",
+  "Controla o horário comercial, a agenda e os relatórios.":
+    "Controls business hours, scheduling, and reports.",
+  "Moeda padrão e de relatórios": "Default and reporting currency",
+  "É o padrão da empresa. Cada negócio pode usar uma moeda diferente.":
+    "This is the company default. Each deal can use a different currency.",
+  "Valor do negócio": "Deal value",
 };

@@ -39,7 +39,7 @@ export default async function ProfilePage() {
         initialFullName={meta.full_name}
         initialAvatarUrl={meta.avatar_url}
         initialLocale={user.locale ? normalizarIdioma(user.locale) : SEM_PREFERENCIA_DE_IDIOMA}
-        initialTimezone={meta.timezone ?? "America/Sao_Paulo"}
+        initialTimezone={meta.timezone ?? "UTC"}
       />
     </div>
   );

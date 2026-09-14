@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -9,40 +9,62 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  COUNTRY_OPTIONS,
+  TIMEZONE_OPTIONS,
+  canonicalTimezone,
+  countryForTimezone,
+  suggestedCurrency,
+} from "@/lib/geography";
+import { MOEDAS_SERVIDAS, simboloDaMoeda, type MoedaServida } from "@/lib/money";
 
-/**
- * Cidade, não identificador de fuso. A lista mostrava "America/Bahia" e
- * "America/Fortaleza" e esperava que a pessoa soubesse em qual delas mora — o
- * identificador é do sistema, o que ela reconhece é a cidade.
- */
-const FUSOS: { id: string; cidade: string }[] = [
-  { id: "America/Sao_Paulo", cidade: "São Paulo, Rio, Brasília, Sul e Sudeste" },
-  { id: "America/Recife", cidade: "Recife, Salvador, Fortaleza e Nordeste" },
-  { id: "America/Belem", cidade: "Belém e Pará" },
-  { id: "America/Manaus", cidade: "Manaus e Amazonas" },
-  { id: "America/Cuiaba", cidade: "Cuiabá e Mato Grosso" },
-  { id: "America/Rio_Branco", cidade: "Rio Branco e Acre" },
-  { id: "America/Argentina/Buenos_Aires", cidade: "Buenos Aires" },
-  { id: "Europe/Lisbon", cidade: "Lisboa" },
-  { id: "Europe/Madrid", cidade: "Madri" },
-  { id: "America/New_York", cidade: "Nova York" },
-  { id: "America/Los_Angeles", cidade: "Los Angeles" },
-  { id: "UTC", cidade: "Outro (horário universal)" },
-];
+interface WelcomeFormProps {
+  defaultOrgName: string;
+  defaultCountry?: string | null;
+  defaultTimezone: string;
+  defaultCurrency: MoedaServida;
+}
 
-export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
+export function WelcomeForm({
+  defaultOrgName,
+  defaultCountry,
+  defaultTimezone,
+  defaultCurrency,
+}: WelcomeFormProps) {
   const t = useT();
   const [displayName, setDisplayName] = useState(defaultOrgName);
   const [oQueFaz, setOQueFaz] = useState("");
-  const [timezone, setTimezone] = useState("America/Sao_Paulo");
+  const [country, setCountry] = useState(
+    defaultCountry ?? countryForTimezone(defaultTimezone) ?? "US",
+  );
+  const [timezone, setTimezone] = useState(canonicalTimezone(defaultTimezone));
+  const [currency, setCurrency] = useState<MoedaServida>(defaultCurrency);
   const [accepted, setAccepted] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const timezones = useMemo(() => {
+    const filtered = TIMEZONE_OPTIONS.filter((zone) => zone.countryCode === country);
+    return filtered.length > 0 ? filtered : TIMEZONE_OPTIONS.filter((zone) => zone.id === "UTC");
+  }, [country]);
+
+  useEffect(() => {
+    if (defaultCountry) return;
+    const timer = window.setTimeout(() => {
+      const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const detectedCountry = countryForTimezone(browserTimezone);
+      if (!detectedCountry) return;
+      setCountry(detectedCountry);
+      setTimezone(canonicalTimezone(browserTimezone));
+      setCurrency(suggestedCurrency(detectedCountry));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [defaultCountry]);
+
+  function changeCountry(nextCountry: string) {
+    setCountry(nextCountry);
+    const firstZone = TIMEZONE_OPTIONS.find((zone) => zone.countryCode === nextCountry);
+    if (firstZone) setTimezone(firstZone.id);
+    setCurrency(suggestedCurrency(nextCountry));
+  }
 
   return (
     <form
@@ -55,7 +77,7 @@ export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
         startTransition(async () => {
           const res = await acceptWelcome(formData);
           if (res && !res.ok) {
-            toast.error(`Falha: ${res.error}`);
+            toast.error(`${t("Erro")}: ${res.error}`);
           }
         });
       }}
@@ -100,24 +122,66 @@ export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="timezone">{t("Onde você atende")}</Label>
-        <Select value={timezone} onValueChange={setTimezone}>
-          <SelectTrigger id="timezone">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {FUSOS.map((f) => (
-              <SelectItem key={f.id} value={f.id}>
-                {t(f.cidade)}
-              </SelectItem>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="country_code">{t("País ou região")}</Label>
+          <select
+            id="country_code"
+            name="country_code"
+            value={country}
+            onChange={(event) => changeCountry(event.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {COUNTRY_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.name}
+              </option>
             ))}
-          </SelectContent>
-        </Select>
-        <input type="hidden" name="timezone" value={timezone} />
-        <p className="text-xs text-muted-foreground">
-          {t("Decide o horário em que seu funcionário pode falar com clientes.")}
-        </p>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {t("Serve para sugerir fuso horário e moeda. Não limita os países dos seus clientes.")}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="timezone">{t("Fuso horário da empresa")}</Label>
+          <select
+            id="timezone"
+            name="timezone"
+            value={timezone}
+            onChange={(event) => setTimezone(event.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {timezones.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {t("Controla o horário comercial, a agenda e os relatórios.")}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="currency">{t("Moeda padrão e de relatórios")}</Label>
+          <select
+            id="currency"
+            name="currency"
+            value={currency}
+            onChange={(event) => setCurrency(event.target.value as MoedaServida)}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {MOEDAS_SERVIDAS.map((code) => (
+              <option key={code} value={code}>
+                {code} · {simboloDaMoeda(code)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {t("É o padrão da empresa. Cada negócio pode usar uma moeda diferente.")}
+          </p>
+        </div>
       </div>
 
       <label className="flex items-start gap-2 text-sm">

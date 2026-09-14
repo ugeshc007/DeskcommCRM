@@ -1,9 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { ProfileForm } from "./_form";
+
+const push = vi.fn();
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, refresh }),
+}));
 
 /**
  * A tela de perfil em espanhol — o que ela MOSTRA e o que ela NÃO pode perder.
@@ -63,5 +69,12 @@ describe("ProfileForm em inglês", () => {
     expect(screen.getByText("Full name")).toBeTruthy();
     expect(screen.getByText("Time zone")).toBeTruthy();
     expect(screen.queryByText("Nome completo")).toBeNull();
+  });
+
+  it("depois de salvar entra no CRM em vez de deixar o formulário sem resposta", async () => {
+    renderForm("en", "en");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/app/inbox"));
+    expect(refresh).toHaveBeenCalled();
   });
 });

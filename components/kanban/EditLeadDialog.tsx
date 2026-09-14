@@ -18,13 +18,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import type { Lead } from "@/lib/types/leads";
 import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
-import { parseReaisToCents } from "@/lib/money";
+import { MOEDAS_SERVIDAS, parseReaisToCents, type MoedaServida } from "@/lib/money";
 import { EcoDoValor } from "./EcoDoValor";
 
 interface FormShape {
   title: string;
   description: string;
   valueReais: string;
+  currency: MoedaServida;
   tagsRaw: string;
   expected_close_date: string;
 }
@@ -50,6 +51,7 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
       title: lead.title,
       description: lead.description ?? "",
       valueReais: centsToReais(lead.value_cents),
+      currency: lead.currency as MoedaServida,
       tagsRaw: (lead.tags ?? []).join(", "),
       expected_close_date: lead.expected_close_date ?? "",
     },
@@ -61,6 +63,7 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
         title: lead.title,
         description: lead.description ?? "",
         valueReais: centsToReais(lead.value_cents),
+        currency: lead.currency as MoedaServida,
         tagsRaw: (lead.tags ?? []).join(", "),
         expected_close_date: lead.expected_close_date ?? "",
       });
@@ -88,6 +91,7 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
       title: values.title.trim(),
       description: values.description.trim() ? values.description.trim() : null,
       value_cents: valueCents,
+      currency: values.currency,
       tags,
       expected_close_date: values.expected_close_date || null,
     };
@@ -134,21 +138,27 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
             <Textarea id="description" rows={3} {...form.register("description")} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="valueReais">{t("Valor (R$)")}</Label>
+              <Label htmlFor="valueReais">{t("Valor do negócio")}</Label>
               <Input
                 id="valueReais"
                 inputMode="decimal"
                 placeholder="0,00"
                 {...form.register("valueReais")}
               />
-              <EcoDoValor control={form.control} />
+              <EcoDoValor control={form.control} currency={form.watch("currency")} />
               {form.formState.errors.valueReais && (
                 <p className="text-xs text-error-fg">
                   {form.formState.errors.valueReais.message}
                 </p>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="currency">{t("Moeda")}</Label>
+              <select id="currency" {...form.register("currency")} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
+                {MOEDAS_SERVIDAS.map((code) => <option key={code} value={code}>{code}</option>)}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="expected_close_date">{t("Fechamento previsto")}</Label>

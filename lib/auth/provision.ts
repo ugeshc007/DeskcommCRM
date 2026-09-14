@@ -76,6 +76,9 @@ export async function ensureTenantForUser(
         legal_name: orgName,
         status: "active",
         created_by: user.id,
+        locale: "en",
+        timezone: "UTC",
+        currency: "USD",
       })
       .select("id, slug")
       .single();

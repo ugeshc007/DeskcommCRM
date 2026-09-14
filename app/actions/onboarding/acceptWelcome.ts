@@ -29,6 +29,8 @@ export async function acceptWelcome(formData: FormData): Promise<AcceptWelcomeRe
     display_name: String(formData.get("display_name") ?? "").trim(),
     o_que_faz: String(formData.get("o_que_faz") ?? "").trim() || undefined,
     timezone: String(formData.get("timezone") ?? "America/Sao_Paulo"),
+    country_code: String(formData.get("country_code") ?? "").toUpperCase(),
+    currency: String(formData.get("currency") ?? "USD").toUpperCase(),
     accepted_terms_at: new Date().toISOString(),
   };
 
@@ -49,11 +51,13 @@ export async function acceptWelcome(formData: FormData): Promise<AcceptWelcomeRe
         welcome: {
           accepted_at: input.accepted_terms_at ?? new Date().toISOString(),
           timezone: input.timezone,
+          country_code: input.country_code,
+          currency: input.currency,
           display_name: input.display_name,
           ...(input.o_que_faz ? { o_que_faz: input.o_que_faz } : {}),
         },
       },
-      { display_name: input.display_name, timezone: input.timezone },
+      { display_name: input.display_name, timezone: input.timezone, currency: input.currency, locale: "en" },
     );
   } catch (err) {
     if (err instanceof OnboardingError) return { ok: false, error: "db_error", details: err.message };
@@ -81,7 +85,12 @@ export async function acceptWelcome(formData: FormData): Promise<AcceptWelcomeRe
     // O ramo NÃO entra no audit: é texto livre que o dono escreveu, e o audit
     // é append-only com retenção de 5 anos — nada que a anonimização da LGPD
     // não alcance depois deve cair lá por conveniência de diagnóstico.
-    metadata: { display_name: input.display_name, timezone: input.timezone },
+    metadata: {
+      display_name: input.display_name,
+      country_code: input.country_code,
+      timezone: input.timezone,
+      currency: input.currency,
+    },
   });
 
   redirect("/onboarding");

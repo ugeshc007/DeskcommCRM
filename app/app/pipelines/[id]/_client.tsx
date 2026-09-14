@@ -28,13 +28,16 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "@/lib/ui/icons";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
+import type { MoedaServida } from "@/lib/money";
 
 export function PipelinePageClient({
   pipelineId,
   initialName,
+  defaultCurrency,
 }: {
   pipelineId: string;
   initialName: string;
+  defaultCurrency: MoedaServida;
 }) {
   const t = useT();
   const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId);
@@ -94,6 +97,7 @@ export function PipelinePageClient({
           onOpenChange={setNewOpen}
           pipelineId={pipelineId}
           stages={data.stages}
+          defaultCurrency={defaultCurrency}
         />
       )}
       <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />

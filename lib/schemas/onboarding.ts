@@ -3,6 +3,7 @@
  * the persistent `organizations.onboarding_state jsonb` blob.
  */
 import { z } from "zod";
+import { MOEDAS_SERVIDAS } from "@/lib/money";
 
 export const welcomeSchema = z.object({
   display_name: z.string().min(2).max(120),
@@ -21,6 +22,8 @@ export const welcomeSchema = z.object({
    */
   o_que_faz: z.string().max(280).optional(),
   timezone: z.string().min(1).default("America/Sao_Paulo"),
+  country_code: z.string().regex(/^[A-Z]{2}$/),
+  currency: z.enum(MOEDAS_SERVIDAS),
   accepted_terms_at: z.string().datetime().optional(),
 });
 export type WelcomeInput = z.infer<typeof welcomeSchema>;
@@ -64,6 +67,8 @@ export const onboardingStateSchema = z.object({
       accepted_at: z.string(),
       timezone: z.string(),
       display_name: z.string(),
+      country_code: z.string().regex(/^[A-Z]{2}$/).optional(),
+      currency: z.enum(MOEDAS_SERVIDAS).optional(),
       /** O ramo, na palavra do dono. Alimenta o prompt e o quadro de clientes. */
       o_que_faz: z.string().optional(),
     })

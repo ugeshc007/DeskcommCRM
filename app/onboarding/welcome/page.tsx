@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { lerRetratoDaInstalacao } from "@/lib/instalacao/retrato";
 import { JaEstaPronto } from "../_components/JaEstaPronto";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { moedaServidaOu } from "@/lib/money";
+import type { OnboardingState } from "@/lib/schemas/onboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,12 @@ export default async function WelcomePage() {
 
   const supabase = await createClient();
   const retrato = await lerRetratoDaInstalacao({ supabase, orgId: activeOrg.orgId });
+  const { data: organization } = await supabase
+    .from("organizations")
+    .select("timezone, currency, onboarding_state")
+    .eq("id", activeOrg.orgId)
+    .maybeSingle();
+  const state = (organization?.onboarding_state as OnboardingState | null) ?? {};
 
   return (
     <div className="space-y-6">
@@ -37,7 +45,12 @@ export default async function WelcomePage() {
         pessoa ter de apagá-lo antes de escrever o nome dela — e quem não
         percebia seguia com o placeholder no cabeçalho do sistema para sempre.
       */}
-      <WelcomeForm defaultOrgName={retrato.empresa.aindaSemNomeProprio ? "" : activeOrg.name} />
+      <WelcomeForm
+        defaultOrgName={retrato.empresa.aindaSemNomeProprio ? "" : activeOrg.name}
+        defaultCountry={state.welcome?.country_code}
+        defaultTimezone={organization?.timezone ?? "UTC"}
+        defaultCurrency={moedaServidaOu(organization?.currency)}
+      />
     </div>
   );
 }

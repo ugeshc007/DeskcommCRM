@@ -49,7 +49,7 @@
 export const IDIOMAS = ["pt-BR", "es", "en"] as const;
 export type Idioma = (typeof IDIOMAS)[number];
 
-export const IDIOMA_PADRAO: Idioma = "pt-BR";
+export const IDIOMA_PADRAO: Idioma = "en";
 
 /**
  * O que veio do perfil é um idioma que sabemos servir?

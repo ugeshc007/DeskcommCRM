@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,15 +17,7 @@ import {
 import { updateProfile } from "@/app/actions/settings/updateProfile";
 import { useT } from "@/hooks/i18n/useT";
 import { profileSchema, SEM_PREFERENCIA_DE_IDIOMA, type Locale } from "@/lib/schemas/settings";
-
-const TIMEZONES = [
-  "America/Sao_Paulo",
-  "America/Manaus",
-  "America/Belem",
-  "America/Recife",
-  "America/Fortaleza",
-  "UTC",
-];
+import { TIMEZONE_OPTIONS, canonicalTimezone } from "@/lib/geography";
 
 interface Props {
   email: string;
@@ -42,9 +35,10 @@ export function ProfileForm({
   initialTimezone,
 }: Props) {
   const t = useT();
+  const router = useRouter();
   const [fullName, setFullName] = useState(initialFullName ?? "");
   const [locale, setLocale] = useState<Locale | typeof SEM_PREFERENCIA_DE_IDIOMA>(initialLocale);
-  const [timezone, setTimezone] = useState(initialTimezone);
+  const [timezone, setTimezone] = useState(canonicalTimezone(initialTimezone));
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl ?? "");
   const [isPending, startTransition] = useTransition();
 
@@ -62,8 +56,13 @@ export function ProfileForm({
     }
     startTransition(async () => {
       const r = await updateProfile(parsed.data);
-      if (r.ok) toast.success(t("Perfil atualizado."));
-      else toast.error(`${t("Erro")}: ${r.error}`);
+      if (r.ok) {
+        toast.success(t("Perfil atualizado."));
+        router.push("/app/inbox");
+        router.refresh();
+      } else {
+        toast.error(`${t("Erro")}: ${r.error}`);
+      }
     });
   }
 
@@ -107,18 +106,16 @@ export function ProfileForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="timezone">{t("Fuso horário")}</Label>
-            <Select value={timezone} onValueChange={setTimezone}>
-              <SelectTrigger id="timezone">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              id="timezone"
+              value={timezone}
+              onChange={(event) => setTimezone(event.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {TIMEZONE_OPTIONS.map((zone) => (
+                <option key={zone.id} value={zone.id}>{zone.label}</option>
+              ))}
+            </select>
           </div>
         </div>
         <div className="space-y-2">

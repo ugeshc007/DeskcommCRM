@@ -15,6 +15,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { ApiError } from "@/lib/api/types";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
 import type { PublishValidationError } from "@/lib/followup/validate-publish";
+import { mensagemDeErroDePublicacao } from "@/lib/followup/mensagem-de-validacao";
 import { useT } from "@/hooks/i18n/useT";
 import {
   useDisableFollowupFlow,
@@ -89,8 +90,9 @@ export function PublishBar({
           const byNode: Record<string, string[]> = {};
           const flowLevel: string[] = [];
           for (const e of errors) {
-            if (e.node_id) (byNode[e.node_id] ??= []).push(e.message);
-            else flowLevel.push(e.message);
+            const mensagem = mensagemDeErroDePublicacao(e, t);
+            if (e.node_id) (byNode[e.node_id] ??= []).push(mensagem);
+            else flowLevel.push(mensagem);
           }
           onPublishErrors(byNode);
           toast.error(t("Fluxo reprovado na validação — corrija os nós destacados."), {

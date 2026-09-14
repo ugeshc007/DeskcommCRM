@@ -1,6 +1,7 @@
 ---
-type: minor
-area: followup
+impacto: capacidade_nova
+secao: adicionado
+titulo: Exemplos editáveis ajudam a começar os follow-ups
 ---
 
 Adiciona exemplos editáveis de follow-up para proposta comercial, lead em silêncio, checkout abandonado e atendimento não realizado. Cada exemplo nasce como rascunho e precisa ser revisado antes da publicação.

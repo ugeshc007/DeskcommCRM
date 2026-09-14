@@ -1078,7 +1078,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   Propostas: "Proposals",
   "Fluxos automáticos de reengajamento — silêncio, mudança de etapa ou fim de conversa disparam mensagens sem intervenção manual.":
     "Automatic re-engagement flows — silence, change of step or end of conversation trigger messages without manual intervention.",
-  Fluxos: "Streams",
+  Fluxos: "Flows",
   "Novo fluxo": "New flow",
   "Nenhum fluxo de follow-up ainda": "No follow-up streams yet",
   "Follow-ups reengajam contatos automaticamente após silêncio, mudança de etapa ou fim de conversa — sem depender de alguém lembrar de mandar mensagem.":
@@ -1214,7 +1214,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   classes: "classes",
   "Template fixo": "Fixed template",
   Convertido: "Converted",
-  Esgotado: "Sold out",
+  Esgotado: "Exhausted",
   Personalizado: "Custom",
   Gatilho: "Trigger",
   Aguardar: "Wait",
@@ -1307,6 +1307,30 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Nota (opcional)": "Note (optional)",
   "Fluxo reprovado na validação — corrija os nós destacados.":
     "Flow failed validation — fix highlighted nodes.",
+  "Adicione um gatilho de início ao fluxo.": "Add a start trigger to the flow.",
+  "Mantenha apenas um gatilho de início no fluxo.": "Keep only one start trigger in the flow.",
+  "Conecte este nó ao caminho que começa no gatilho.":
+    "Connect this node to the path that starts at the trigger.",
+  "Conecte este nó a um caminho que termine em um nó de fim.":
+    "Connect this node to a path that reaches an end node.",
+  "Conecte todas as classificações deste nó a uma próxima etapa.":
+    "Connect every classification from this node to a next step.",
+  "Conecte todas as saídas deste nó a uma próxima etapa.":
+    "Connect every output from this node to a next step.",
+  "Adicione e conecte a saída para quando não houver resposta.":
+    "Add and connect the output used when there is no reply.",
+  "Adicione uma saída de escape para que nenhum contato fique parado.":
+    "Add a fallback output so no contact gets stuck here.",
+  "Defina um tempo de espera de pelo menos 15 minutos.":
+    "Set a waiting period of at least 15 minutes.",
+  "Esta mensagem está agendada para depois de 24 horas. Selecione um modelo aprovado do WhatsApp neste nó antes de publicar.":
+    "This message is scheduled after 24 hours. Select an approved WhatsApp template in this node before publishing.",
+  "Adicione uma espera de pelo menos 5 minutos dentro deste ciclo.":
+    "Add a wait of at least 5 minutes inside this cycle.",
+  "Reduza o fluxo para no máximo 30 etapas a partir do gatilho.":
+    "Reduce the flow to no more than 30 steps from the trigger.",
+  missing_meta_token:
+    "The saved Meta access token is unavailable. Reconnect the official channel or ask the server administrator to check credential encryption.",
   "Alterações não salvas": "Unsaved changes",
   "Pausar durante handoff": "Pause during handoff",
   "Cancelar durante handoff": "Cancel during handoff",

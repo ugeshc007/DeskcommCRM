@@ -1,5 +1,7 @@
 ---
-type: feature
+impacto: capacidade_nova
+secao: adicionado
+titulo: Administração central organiza as contas do SaaS gerenciado
 ---
 
 Adds an opt-in managed SaaS mode, tenant-isolated subscription ledger, manual platform controls,

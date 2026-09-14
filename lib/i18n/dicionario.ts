@@ -1460,6 +1460,41 @@ const DICIONARIO_BASE: Traducoes = {
   "Fluxo reprovado na validação — corrija os nós destacados.": {
     es: "El flujo no pasó la validación — corrige los nodos resaltados.",
   },
+  "Adicione um gatilho de início ao fluxo.": { es: "Añade un disparador de inicio al flujo." },
+  "Mantenha apenas um gatilho de início no fluxo.": { es: "Mantén solo un disparador de inicio en el flujo." },
+  "Conecte este nó ao caminho que começa no gatilho.": {
+    es: "Conecta este nodo a la ruta que comienza en el disparador.",
+  },
+  "Conecte este nó a um caminho que termine em um nó de fim.": {
+    es: "Conecta este nodo a una ruta que llegue a un nodo final.",
+  },
+  "Conecte todas as classificações deste nó a uma próxima etapa.": {
+    es: "Conecta cada clasificación de este nodo a un siguiente paso.",
+  },
+  "Conecte todas as saídas deste nó a uma próxima etapa.": {
+    es: "Conecta cada salida de este nodo a un siguiente paso.",
+  },
+  "Adicione e conecte a saída para quando não houver resposta.": {
+    es: "Añade y conecta la salida para cuando no haya respuesta.",
+  },
+  "Adicione uma saída de escape para que nenhum contato fique parado.": {
+    es: "Añade una salida alternativa para que ningún contacto quede detenido.",
+  },
+  "Defina um tempo de espera de pelo menos 15 minutos.": {
+    es: "Define un tiempo de espera de al menos 15 minutos.",
+  },
+  "Esta mensagem está agendada para depois de 24 horas. Selecione um modelo aprovado do WhatsApp neste nó antes de publicar.": {
+    es: "Este mensaje está programado para después de 24 horas. Selecciona una plantilla aprobada de WhatsApp en este nodo antes de publicar.",
+  },
+  "Adicione uma espera de pelo menos 5 minutos dentro deste ciclo.": {
+    es: "Añade una espera de al menos 5 minutos dentro de este ciclo.",
+  },
+  "Reduza o fluxo para no máximo 30 etapas a partir do gatilho.": {
+    es: "Reduce el flujo a un máximo de 30 pasos desde el disparador.",
+  },
+  missing_meta_token: {
+    es: "El token de acceso de Meta guardado no está disponible. Vuelve a conectar el canal oficial o pide al administrador del servidor que revise el cifrado de credenciales.",
+  },
   "Alterações não salvas": { es: "Cambios sin guardar" },
   "Pausar durante handoff": { es: "Pausar durante la transferencia" },
   "Cancelar durante handoff": { es: "Cancelar durante la transferencia" },

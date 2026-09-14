@@ -22,6 +22,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { fail } from "@/lib/api/wrappers";
 import { lerEnvelopeMeta } from "@/lib/channels/meta/envelope";
 import { parseMetaWebhook, verificationChallenge, verifyMetaSignature } from "@/lib/channels/meta/webhook";
+import { resolveMetaAppSecret } from "@/lib/channels/meta/platform-secret";
 import { ingestMetaInbound } from "@/lib/channels/meta/ingest";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import { logger } from "@/lib/logger";
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   if (!session) return fail("not_found", "unknown webhook token", 404, { requestId });
 
   const rawBody = await req.text();
-  const appSecret = process.env.META_APP_SECRET ?? "";
+  const appSecret = (await resolveMetaAppSecret())?.value ?? "";
   if (!verifyMetaSignature(rawBody, req.headers.get("x-hub-signature-256"), appSecret)) {
     return fail("unauthorized", "invalid_signature", 401, { requestId });
   }

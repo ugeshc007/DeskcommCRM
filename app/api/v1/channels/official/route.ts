@@ -30,6 +30,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
+import { metaAppSecretState } from "@/lib/channels/meta/platform-secret";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -89,6 +90,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   );
 
   const base = publicBase(req);
+  const platformWebhook = authz.user.is_platform_admin && !authz.user.support
+    ? await metaAppSecretState()
+    : null;
   return ok({
     connected: Boolean(data),
     channel_session_id: data?.id ?? null,
@@ -108,6 +112,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           fields: ["messages", "message_template_status_update"],
         }
       : null,
+    platformWebhook,
   });
 }
 

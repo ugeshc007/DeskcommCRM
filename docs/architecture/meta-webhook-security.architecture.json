@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Segurança do webhook oficial",
+    "subtitle": "Configuração de plataforma cifrada com fallback de instalação",
+    "output": "meta-webhook-security.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "plataforma", "label": "Administração da plataforma" },
+    { "id": "servidor", "label": "Servidor" },
+    { "id": "banco", "label": "Persistência" },
+    { "id": "canal", "label": "Canal externo" }
+  ],
+  "mainPath": ["tela", "acao", "tabela", "resolvedor", "webhook", "inbox"],
+  "nodes": [
+    { "id": "tela", "lane": "plataforma", "col": 1, "type": "frontend", "label": "Conexões / Webhook security" },
+    { "id": "acao", "lane": "servidor", "col": 2, "type": "route", "label": "updateMetaWebhookSecret / platform admin" },
+    { "id": "tabela", "lane": "banco", "col": 3, "type": "database", "label": "platform_meta_webhook / cifra" },
+    { "id": "ambiente", "lane": "servidor", "col": 3, "type": "config", "label": "META_APP_SECRET / rollback" },
+    { "id": "resolvedor", "lane": "servidor", "col": 4, "type": "lib", "label": "resolveMetaAppSecret" },
+    { "id": "webhook", "lane": "servidor", "col": 5, "type": "route", "label": "Webhook / assinatura HMAC" },
+    { "id": "origem", "lane": "canal", "col": 4, "type": "external", "label": "Entrega assinada" },
+    { "id": "inbox", "lane": "plataforma", "col": 6, "type": "frontend", "label": "Inbox / mensagem recebida" },
+    { "id": "audit", "lane": "banco", "col": 4, "type": "database", "label": "api_audit_log" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "tela", "to": "acao", "label": "salva sem devolver segredo" },
+    { "id": "e2", "from": "acao", "to": "tabela", "label": "cifra e upsert singleton" },
+    { "id": "e3", "from": "acao", "to": "audit", "label": "registra troca sem valor" },
+    { "id": "e4", "from": "tabela", "to": "resolvedor", "label": "fonte preferida" },
+    { "id": "e5", "from": "ambiente", "to": "resolvedor", "label": "fallback de rollback" },
+    { "id": "e6", "from": "origem", "to": "webhook", "label": "payload + assinatura" },
+    { "id": "e7", "from": "resolvedor", "to": "webhook", "label": "segredo server-side" },
+    { "id": "e8", "from": "webhook", "to": "inbox", "label": "somente assinatura válida" },
+    { "id": "e9", "from": "resolvedor", "to": "tela", "label": "apenas estado e origem" }
+  ]
+}

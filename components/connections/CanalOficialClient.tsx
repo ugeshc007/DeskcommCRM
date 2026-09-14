@@ -1,7 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { updateMetaWebhookSecret } from "@/app/actions/settings/updateMetaWebhookSecret";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -54,9 +56,12 @@ function ParaColar({ rotulo, valor }: { rotulo: string; valor: string | null }) 
 
 export function CanalOficialClient() {
   const t = useT();
+  const queryClient = useQueryClient();
   const { data, isPending } = useOfficialChannel();
   const conectar = useConnectOfficialChannel();
   const [form, setForm] = useState({ phone_number_id: "", waba_id: "", token: "" });
+  const [appSecret, setAppSecret] = useState("");
+  const [savingAppSecret, startSavingAppSecret] = useTransition();
 
   const estado = data?.data;
 
@@ -120,6 +125,62 @@ export function CanalOficialClient() {
                 </Badge>
               ))}
             </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {estado?.platformWebhook ? (
+        <Card className="flex flex-col gap-3 p-4" data-testid="meta-app-secret-card">
+          <div>
+            <h2 className="font-medium">{t("Segurança do webhook")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("O App Secret da Meta confirma que as mensagens recebidas foram realmente enviadas pela Meta. Ele vale para toda esta instalação e só pode ser alterado pelo administrador da plataforma.")}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="meta-app-secret">{t("Meta App Secret")}</Label>
+            <Input
+              id="meta-app-secret"
+              data-testid="meta-app-secret"
+              type="password"
+              autoComplete="off"
+              value={appSecret}
+              onChange={(event) => setAppSecret(event.target.value)}
+              placeholder={
+                estado.platformWebhook.configured
+                  ? t("•••••••• (já configurado — digite um novo valor para substituir)")
+                  : t("Cole o App Secret da Meta → Configurações do app → Básico")
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {estado.platformWebhook.configured
+                ? `${t("Configurado e cifrado.")} ${
+                    estado.platformWebhook.source === "environment"
+                      ? t("Carregado atualmente da configuração do servidor.")
+                      : t("Carregado atualmente por esta página.")
+                  }`
+                : t("Não configurado. As mensagens recebidas serão rejeitadas até que ele seja salvo.")}
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              disabled={savingAppSecret || appSecret.trim().length < 16}
+              onClick={() =>
+                startSavingAppSecret(async () => {
+                  const result = await updateMetaWebhookSecret({ app_secret: appSecret });
+                  if (!result.ok) {
+                    toast.error(t(result.error));
+                    return;
+                  }
+                  setAppSecret("");
+                  await queryClient.invalidateQueries({ queryKey: ["official-channel"] });
+                  toast.success(t("App Secret da Meta salvo."));
+                })
+              }
+            >
+              {savingAppSecret ? t("Saving…") : t("Salvar App Secret")}
+            </Button>
           </div>
         </Card>
       ) : null}

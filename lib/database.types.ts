@@ -6446,6 +6446,27 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_meta_webhook: {
+        Row: {
+          app_secret_encrypted: string
+          id: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          app_secret_encrypted: string
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          app_secret_encrypted?: string
+          id?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       playbook_pointers: {
         Row: {
           layer: string
@@ -8800,4 +8821,3 @@ export const Constants = {
     },
   },
 } as const
-

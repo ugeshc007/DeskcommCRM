@@ -3510,6 +3510,32 @@ const DICIONARIO_BASE: Traducoes = {
   },
   "URL de callback": { es: "URL de callback" },
   "Token de verificação": { es: "Token de verificación" },
+  "Segurança do webhook": { es: "Seguridad del webhook" },
+  "O App Secret da Meta confirma que as mensagens recebidas foram realmente enviadas pela Meta. Ele vale para toda esta instalação e só pode ser alterado pelo administrador da plataforma.": {
+    es: "El App Secret de Meta verifica que los mensajes entrantes fueron enviados realmente por Meta. Se aplica a toda esta instalación y solo puede cambiarlo quien administra la plataforma.",
+  },
+  "Meta App Secret": { es: "App Secret de Meta" },
+  "•••••••• (já configurado — digite um novo valor para substituir)": {
+    es: "•••••••• (ya configurado — escribe un valor nuevo para sustituirlo)",
+  },
+  "Cole o App Secret da Meta → Configurações do app → Básico": {
+    es: "Pega el App Secret desde Meta → Configuración de la app → Básica",
+  },
+  "Configurado e cifrado.": { es: "Configurado y cifrado." },
+  "Carregado atualmente da configuração do servidor.": {
+    es: "Actualmente se carga desde la configuración del servidor.",
+  },
+  "Carregado atualmente por esta página.": { es: "Actualmente se carga desde esta página." },
+  "Não configurado. As mensagens recebidas serão rejeitadas até que ele seja salvo.": {
+    es: "No configurado. Los mensajes entrantes serán rechazados hasta que se guarde.",
+  },
+  "App Secret da Meta salvo.": { es: "App Secret de Meta guardado." },
+  "Salvar App Secret": { es: "Guardar App Secret" },
+  "Digite um App Secret da Meta válido.": { es: "Introduce un App Secret de Meta válido." },
+  "A cifragem não está disponível. O App Secret não foi salvo.": {
+    es: "El cifrado no está disponible. El App Secret no se guardó.",
+  },
+  "Não foi possível salvar o App Secret da Meta.": { es: "No se pudo guardar el App Secret de Meta." },
   "Campos a assinar": { es: "Campos a suscribir" },
   "Trocar credencial": { es: "Cambiar credencial" },
   "Conectar canal oficial": { es: "Conectar canal oficial" },

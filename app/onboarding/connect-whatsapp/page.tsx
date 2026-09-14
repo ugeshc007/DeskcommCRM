@@ -1,6 +1,7 @@
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
 import { metaPodeReceber } from "@/lib/channels/meta/webhook";
+import { resolveMetaAppSecret } from "@/lib/channels/meta/platform-secret";
 import { getWahaClient } from "@/lib/waha/client";
 import { ConnectWhatsappClient } from "./_client";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -17,7 +18,11 @@ export default async function ConnectWhatsappPage() {
 
   // Receber pelo canal oficial exige DOIS segredos, não um — a regra e o porquê
   // moram em `lib/channels/meta/webhook.ts`, ao lado de quem os consome.
-  const oficialPodeReceber = metaPodeReceber();
+  const appSecret = await resolveMetaAppSecret();
+  const oficialPodeReceber = metaPodeReceber({
+    META_WEBHOOK_VERIFY_TOKEN: process.env.META_WEBHOOK_VERIFY_TOKEN,
+    META_APP_SECRET: appSecret?.value,
+  });
   // We don't try to start the session at SSR — client kicks off the call
   // (and shows graceful banner if WAHA is not reachable).
 

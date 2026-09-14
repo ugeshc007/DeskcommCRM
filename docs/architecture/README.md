@@ -17,6 +17,7 @@ ser fonte sem ninguém decidir isso.
 | arquivo | escopo |
 |---|---|
 | `pre-go-live-whatsapp.architecture.json` | modo de teste por canal (issue #573): configuração administrativa, gate compartilhado, releitura no envio e validação pelo Inbox |
+| `meta-webhook-security.architecture.json` | App Secret do webhook oficial: configuração platform-only cifrada, banco sobre ambiente, validação HMAC e estado visível sem devolver o segredo |
 | `agenda-google-sync.architecture.json` | fontes/destino por dono, tupla estável, três vias, claim/CAS e cobertura de calendário; presença e LGPD integradas |
 | `encerramento-atendimento.architecture.json` | conversa/demanda independentes, mutex no inbound, origem imutável dos jobs, memória vigente e guardas antes dos efeitos |
 | `agent-turn.workflow.json` | Conversador e Operador, entregas determinísticas de Meet e respostas aprovadas; revisão humana ligada ao mesmo core e à cadeia de envio. O JSON é a fonte atual; o HTML é um render anterior |

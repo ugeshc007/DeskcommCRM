@@ -168,6 +168,12 @@ const schema = z.object({
   // assine — aí a verificação passa a ser obrigatória.
   WAHA_WEBHOOK_REQUIRE_SIGNATURE: z.string().optional().default("false"),
 
+  // Canal oficial: opcionais para instalações que usam apenas o pareamento
+  // por código. O App Secret pode ser salvo cifrado pela tela; o ambiente
+  // continua como piso de rollback para imagens anteriores.
+  META_APP_SECRET: z.string().optional().default(""),
+  META_WEBHOOK_VERIFY_TOKEN: z.string().optional().default(""),
+
   // ─── Chamada de voz WhatsApp (WaCalls, spec 18) ───
   //
   // NUNCA `required()`: o serviço `wacalls` vive num profile do compose que

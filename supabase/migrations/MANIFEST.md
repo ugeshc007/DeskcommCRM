@@ -298,3 +298,4 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20260912150000` | `0240_saas_subscription_command` | RPC service-only e idempotente atualiza assinatura + evento na mesma transação, revalidando platform admin full no banco. |
 | `20260912160000` | `0241_saas_provider_events` | Recibo global mínimo + RPC service-only aplicam eventos normalizados por referência externa confiável; duplicados, desconhecidos e fora de ordem não regridem a assinatura. |
 | `20260914113000` | `0242_english_e_usd_defaults` | Novas organizações começam em inglês, UTC e USD; onboarding escolhe país, fuso e moeda sem alterar tenants existentes. |
+| `20260914170000` | `0243_meta_app_secret_pela_tela` | App Secret do webhook oficial em singleton server-only, cifrado e configurável na aba Conexões apenas pelo administrador da plataforma; banco primeiro e ambiente como rollback. |

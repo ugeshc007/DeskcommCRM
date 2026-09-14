@@ -19,6 +19,11 @@ export interface OfficialChannelState {
     verifyToken: string | null;
     fields: string[];
   } | null;
+  /** Só existe para o administrador da plataforma; nunca contém o segredo. */
+  platformWebhook: {
+    configured: boolean;
+    source: "database" | "environment" | null;
+  } | null;
 }
 
 export interface ConnectInput {

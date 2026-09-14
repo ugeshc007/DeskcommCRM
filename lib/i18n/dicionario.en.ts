@@ -2865,6 +2865,26 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "— customer responses don't arrive and the 24-hour window never opens.",
   "URL de callback": "callback url",
   "Token de verificação": "Verification Token",
+  "Segurança do webhook": "Webhook security",
+  "O App Secret da Meta confirma que as mensagens recebidas foram realmente enviadas pela Meta. Ele vale para toda esta instalação e só pode ser alterado pelo administrador da plataforma.":
+    "The Meta App Secret verifies that incoming messages were really sent by Meta. It applies to this entire installation and can only be changed by the platform administrator.",
+  "Meta App Secret": "Meta App Secret",
+  "•••••••• (já configurado — digite um novo valor para substituir)":
+    "•••••••• (already configured — enter a new value to replace)",
+  "Cole o App Secret da Meta → Configurações do app → Básico":
+    "Paste the App Secret from Meta → App settings → Basic",
+  "Configurado e cifrado.": "Configured and encrypted.",
+  "Carregado atualmente da configuração do servidor.":
+    "Currently loaded from the server configuration.",
+  "Carregado atualmente por esta página.": "Currently loaded from this page.",
+  "Não configurado. As mensagens recebidas serão rejeitadas até que ele seja salvo.":
+    "Not configured. Incoming messages will be rejected until it is saved.",
+  "App Secret da Meta salvo.": "Meta App Secret saved.",
+  "Salvar App Secret": "Save App Secret",
+  "Digite um App Secret da Meta válido.": "Enter a valid Meta App Secret.",
+  "A cifragem não está disponível. O App Secret não foi salvo.":
+    "Encryption is unavailable. The App Secret was not saved.",
+  "Não foi possível salvar o App Secret da Meta.": "Unable to save the Meta App Secret.",
   "Campos a assinar": "Fields to sign",
   "Trocar credencial": "Exchange credential",
   "Conectar canal oficial": "Connect official channel",

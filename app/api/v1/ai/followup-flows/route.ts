@@ -12,6 +12,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { createFollowupFlowSchema } from "@/lib/followup/api-schemas";
+import { montarModeloFollowup } from "@/lib/followup/modelos-exemplo";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -60,9 +61,18 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const supabase = await createClient();
+  const modelo = parsed.data.template_id
+    ? montarModeloFollowup(parsed.data.template_id, t)
+    : null;
   const { data: created, error: insErr } = await supabase
     .from("followup_flow_pointers")
-    .insert({ organization_id: activeOrg.orgId, name: parsed.data.name })
+    .insert({
+      organization_id: activeOrg.orgId,
+      name: parsed.data.name,
+      ...(modelo
+        ? { draft_graph: modelo.graph, trigger_config: modelo.triggerConfig }
+        : {}),
+    })
     .select("*")
     .single();
 
@@ -82,7 +92,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     resourceType: "followup_flow_pointer",
     resourceId: created.id,
     requestId,
-    metadata: { name: parsed.data.name },
+    metadata: { name: parsed.data.name, template_id: parsed.data.template_id ?? null },
   });
 
   return ok(created, { requestId, status: 201 });

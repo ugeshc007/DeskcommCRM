@@ -13,6 +13,7 @@ import { useFollowupFlows, type FollowupFlowPointerRow } from "@/hooks/followup/
 import { DeleteFollowupFlowButton } from "./DeleteFollowupFlowButton";
 import { FlowStatusBadge } from "./FlowStatusBadge";
 import { NewFlowDialog } from "./NewFlowDialog";
+import { ExampleFlowTemplates } from "./ExampleFlowTemplates";
 
 interface Props {
   initialData: FollowupFlowPointerRow[];
@@ -43,7 +44,7 @@ export function FlowsList({ initialData, canWrite }: Props) {
 
   if (flows.length === 0) {
     return (
-      <>
+      <div className="flex flex-col gap-8">
         <Card className="flex flex-col items-center gap-3 p-10 text-center">
           <FlowArrow size={36} aria-hidden className="text-text-muted" />
           <h2 className="font-medium">{t("Nenhum fluxo de follow-up ainda")}</h2>
@@ -54,8 +55,9 @@ export function FlowsList({ initialData, canWrite }: Props) {
           </p>
           {canWrite && <div className="mt-1">{newFlowButton}</div>}
         </Card>
+        {canWrite && <ExampleFlowTemplates />}
         {canWrite && <NewFlowDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
-      </>
+      </div>
     );
   }
 
@@ -99,6 +101,8 @@ export function FlowsList({ initialData, canWrite }: Props) {
           </li>
         ))}
       </ul>
+
+      {canWrite && <ExampleFlowTemplates />}
 
       {canWrite && <NewFlowDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
     </div>

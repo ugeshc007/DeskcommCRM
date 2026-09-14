@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 import { flowGraphSchema } from "./graph-schema";
+import { IDS_MODELO_FOLLOWUP } from "./modelos-exemplo";
 
 /** Vocabulário da coluna `surface` (0167). A UI não recorta mais por ela. */
 export const FOLLOWUP_FLOW_SURFACES = ["followup", "crm_automation"] as const;
@@ -13,6 +14,7 @@ export type FollowupFlowSurface = (typeof FOLLOWUP_FLOW_SURFACES)[number];
 
 export const createFollowupFlowSchema = z.strictObject({
   name: z.string().trim().min(1).max(80),
+  template_id: z.enum(IDS_MODELO_FOLLOWUP).optional(),
 });
 
 // `cancel_on_reply` (Task 5.2 — reatividade): se true, um enrollment `waiting_reply`

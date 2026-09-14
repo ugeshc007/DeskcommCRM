@@ -26,6 +26,11 @@ interface SingleResponse {
 
 export const followupFlowsListQueryKey = ["followup", "flows", "list"] as const;
 
+export interface CreateFollowupFlowInput {
+  name: string;
+  template_id?: "proposta-vendas" | "lead-em-silencio" | "carrinho-abandonado" | "consulta-perdida";
+}
+
 export function useFollowupFlows(opts?: { initialData?: FollowupFlowPointerRow[] }) {
   return useQuery({
     queryKey: followupFlowsListQueryKey,
@@ -47,8 +52,8 @@ export function useCreateFollowupFlow() {
   const qc = useQueryClient();
   return useMutation({
     mutationKey: ["followup", "flows", "create"],
-    mutationFn: async (name: string) => {
-      const res = await apiClient.post<SingleResponse>("/api/v1/ai/followup-flows", { name });
+    mutationFn: async (input: CreateFollowupFlowInput) => {
+      const res = await apiClient.post<SingleResponse>("/api/v1/ai/followup-flows", input);
       return res.data;
     },
     onSuccess: (created) => {

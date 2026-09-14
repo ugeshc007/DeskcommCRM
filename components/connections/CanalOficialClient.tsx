@@ -179,7 +179,7 @@ export function CanalOficialClient() {
                 })
               }
             >
-              {savingAppSecret ? t("Saving…") : t("Salvar App Secret")}
+              {savingAppSecret ? t("Salvando…") : t("Salvar App Secret")}
             </Button>
           </div>
         </Card>

@@ -291,6 +291,28 @@ describe("POST /api/v1/ai/followup-flows — create draft", () => {
     );
   });
 
+  it("manager usa exemplo → 201 com grafo editável, sem publicar", async () => {
+    const db = makeDb([], []);
+    session("manager", db);
+    const { POST } = await import("@/app/api/v1/ai/followup-flows/route");
+    const res = await POST(req("POST", {
+      name: "Sales proposal follow-up",
+      template_id: "proposta-vendas",
+    }));
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: Row };
+    expect(body.data.status).toBe("draft");
+    expect(body.data.active_version_id).toBeNull();
+    expect((body.data.draft_graph as FlowGraph).nodes).toHaveLength(6);
+    expect(body.data.trigger_config).toEqual({ kind: "manual", cancel_on_reply: true });
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "followup_flow.created",
+        metadata: expect.objectContaining({ template_id: "proposta-vendas" }),
+      }),
+    );
+  });
+
   it("nome duplicado na mesma org → 409 conflict", async () => {
     const db = makeDb(
       [{ id: randomUUID(), organization_id: ORG_ID, name: "Recuperação carrinho" }],

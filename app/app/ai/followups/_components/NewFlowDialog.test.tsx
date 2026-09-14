@@ -47,9 +47,9 @@ function montar() {
 async function preencheEEnvia(nome: string): Promise<HTMLElement> {
   const user = userEvent.setup({ delay: null });
   montar();
-  const campo = screen.getByLabelText("Nome");
+  const campo = screen.getByLabelText("Name");
   await user.type(campo, nome);
-  await user.click(screen.getByRole("button", { name: "Criar fluxo" }));
+  await user.click(screen.getByRole("button", { name: "Create flow" }));
   return campo;
 }
 
@@ -71,7 +71,7 @@ describe("NewFlowDialog — o POST que falha não pode sumir", () => {
 
     await preencheEEnvia("Qualquer coisa");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Não consegui criar o fluxo. Tente de novo.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn't create the flow. Try again.");
   });
 
   it("sucesso não deixa alerta na tela", async () => {

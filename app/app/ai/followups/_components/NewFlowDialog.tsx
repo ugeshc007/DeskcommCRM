@@ -31,7 +31,7 @@ export function NewFlowDialog({ open, onOpenChange }: Props) {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErro(null);
-    create.mutate(name.trim(), {
+    create.mutate({ name: name.trim() }, {
       onSuccess: () => {
         setName("");
         setErro(null);

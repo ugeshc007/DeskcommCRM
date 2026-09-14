@@ -48,7 +48,10 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: vi.fn() }));
-vi.mock("@/lib/channels/meta/validate-credentials", () => ({ validateMetaCredentials: vi.fn() }));
+vi.mock("@/lib/channels/meta/validate-credentials", () => ({
+  validateMetaCredentials: vi.fn(),
+  ensureMetaWebhookSubscription: vi.fn().mockResolvedValue({ ok: true }),
+}));
 vi.mock("@/lib/waha/client", () => ({
   getWahaClient: vi.fn(),
   wahaFriendlyError: (m: string) => m,

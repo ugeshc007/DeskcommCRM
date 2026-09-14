@@ -38,6 +38,9 @@ import { DICIONARIO_EN } from "./dicionario.en";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 const DICIONARIO_BASE: Traducoes = {
+  "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.": {
+    es: "Meta validó el número, pero no pudo activar la entrega de mensajes para esta cuenta.",
+  },
   "Atendimento, vendas e IA em um só lugar": {
     es: "Atención al cliente, ventas e IA en un solo lugar",
   },

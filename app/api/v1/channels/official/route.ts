@@ -29,7 +29,10 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
-import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
+import {
+  ensureMetaWebhookSubscription,
+  validateMetaCredentials,
+} from "@/lib/channels/meta/validate-credentials";
 import { metaAppSecretState } from "@/lib/channels/meta/platform-secret";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { env } from "@/lib/env";
@@ -90,7 +93,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   );
 
   const base = publicBase(req);
-  const platformWebhook = authz.user.is_platform_admin && !authz.user.support
+  // Continua sendo exclusivo do platform admin, mas não some durante o suporte
+  // acompanhado: é justamente no canal do tenant que o callback e o App Secret
+  // precisam ser confrontados. A Server Action revalida o papel e audita a troca.
+  const platformWebhook = authz.user.is_platform_admin
     ? await metaAppSecretState()
     : null;
   return ok({
@@ -148,6 +154,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? `${t(validacao.motivo)} ${t("Phone Number IDs devolvidos pela Meta:")} ${ids.join(", ")}.`
       : t(validacao.motivo);
     return fail("invalid_request", mensagem, 422, { requestId });
+  }
+
+  // Validar o número não inscreve o APP na WABA. Sem esta chamada a Meta chega a
+  // verificar o callback e deixa `messages` marcado no dashboard, mas entrega zero
+  // POSTs — exatamente o falso "conectado" que esta rota existe para evitar.
+  const assinatura = await ensureMetaWebhookSubscription({
+    wabaId: waba_id,
+    token,
+  });
+  if (!assinatura.ok) {
+    return fail(
+      "upstream_unavailable",
+      `${t("A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.")} ${assinatura.motivo}`,
+      502,
+      { requestId },
+    );
   }
 
   const admin = createAdminClient();

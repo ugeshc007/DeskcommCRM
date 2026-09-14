@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { validateMetaCredentials } from "./validate-credentials";
+import {
+  ensureMetaWebhookSubscription,
+  validateMetaCredentials,
+} from "./validate-credentials";
 
 const fetchOriginal = globalThis.fetch;
 
@@ -85,5 +88,39 @@ describe("validateMetaCredentials", () => {
       wabaId: "waba-1",
       token: "secret-token",
     })).resolves.toEqual({ ok: false, motivo: "Token expired" });
+  });
+});
+
+describe("ensureMetaWebhookSubscription", () => {
+  it("inscreve o app na WABA sem pôr o token na URL", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ success: true }), { status: 200 }),
+    );
+    globalThis.fetch = fetchMock;
+
+    await expect(ensureMetaWebhookSubscription({
+      wabaId: "waba-1",
+      token: "secret-token",
+      graphVersion: "v22.0",
+    })).resolves.toEqual({ ok: true });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe("https://graph.facebook.com/v22.0/waba-1/subscribed_apps");
+    expect(String(url)).not.toContain("secret-token");
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: { Authorization: "Bearer secret-token" },
+    });
+  });
+
+  it("preserva o motivo acionável quando a Meta recusa a inscrição", async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      error: { message: "Permission denied", error_data: { details: "Missing whatsapp_business_management" } },
+    }), { status: 403 })) as typeof fetch;
+
+    await expect(ensureMetaWebhookSubscription({
+      wabaId: "waba-1",
+      token: "secret-token",
+    })).resolves.toEqual({ ok: false, motivo: "Missing whatsapp_business_management" });
   });
 });

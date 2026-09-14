@@ -5,6 +5,8 @@
  * completeness guard fails when a screen adds a key without an English value.
  */
 export const DICIONARIO_EN: Readonly<Record<string, string>> = {
+  "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.":
+    "Meta validated the number but could not activate message delivery for this account.",
   "Atendimento, vendas e IA em um só lugar": "Customer service, sales, and AI in one place",
   "Entre para continuar ou crie uma organização para começar.":
     "Sign in to continue, or create an organization to get started.",

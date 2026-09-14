@@ -14,6 +14,51 @@ export type ValidacaoCredencial =
   | { ok: true; displayPhoneNumber: string | null; verifiedName: string | null; qualityRating: string | null }
   | { ok: false; motivo: string; availablePhoneNumberIds?: string[] };
 
+export type AssinaturaWebhookMeta =
+  | { ok: true }
+  | { ok: false; motivo: string };
+
+/**
+ * Inscreve o APP na WABA. Marcar `messages` no dashboard só escolhe os campos;
+ * sem esta aresta a Meta aceita/verifica o callback, mas nunca entrega um POST.
+ * O endpoint é idempotente, portanto reconectar também repara instalações antigas.
+ */
+export async function ensureMetaWebhookSubscription(input: {
+  wabaId: string;
+  token: string;
+  graphVersion?: string;
+}): Promise<AssinaturaWebhookMeta> {
+  const version = input.graphVersion ?? process.env.META_GRAPH_VERSION ?? "v22.0";
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/${version}/${encodeURIComponent(input.wabaId)}/subscribed_apps`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${input.token}` },
+      },
+    );
+    const body = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      error?: { message?: string; error_data?: { details?: string } };
+    };
+    if (!res.ok || body.success !== true) {
+      return {
+        ok: false,
+        motivo:
+          body.error?.error_data?.details ??
+          body.error?.message ??
+          `http_${res.status}`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      motivo: `rede indisponível: ${err instanceof Error ? err.message : "erro"}`,
+    };
+  }
+}
+
 export async function validateMetaCredentials(input: {
   phoneNumberId: string;
   wabaId: string;

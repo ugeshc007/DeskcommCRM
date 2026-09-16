@@ -38,11 +38,9 @@ function toE164Digits(raw: string): string {
 /**
  * Credencial do ambiente — o caminho de instalação de número único.
  *
- * `isConfigured()` continua olhando só o env de propósito: ele responde "dá para
- * tentar?" de forma SÍNCRONA, e a resposta certa para uma instalação que gravou a
- * credencial na sessão vem do banco. Quem sabe disso é o `send`, que é async.
- * Devolver `false` aqui com sessão configurada faria o handler gravar `queued` sem
- * motivo — por isso o `send` resolve de novo, com a sessão, antes de desistir.
+ * O env continua sendo lido pelo `resolveMetaCreds` como fallback depois da
+ * sessão. Ele não decide se o canal está configurado porque essa pergunta não
+ * tem resposta síncrona honesta — ver `isConfigured`.
  */
 import { metaCredsFromEnv } from "../meta/credentials";
 export { metaCredsFromEnv as getMetaCreds };
@@ -97,28 +95,22 @@ export const metaCloudAdapter: ChannelAdapter = {
   },
 
   /**
-   * DÍVIDA CONHECIDA, deixada de propósito — não é descuido.
+   * SEMPRE `true`, e isso não é preguiça: para este canal a pergunta não tem
+   * resposta síncrona honesta.
    *
-   * A credencial deste canal também pode viver na SESSÃO (a tela de "Conectar
-   * canal oficial" grava `meta_token_encrypted` desde a 0118), e `isConfigured`
-   * é síncrono: não consulta o banco. Numa instalação que conectou pela tela e
-   * não escreveu `.env`, isto devolve `false`, e o handler (`_handler.ts:370`)
-   * grava `queued` com `queued_reason: meta_not_configured` sem nunca chamar
-   * `send` — mensagem parada no inbox, sem erro, com o canal conectado.
+   * A credencial pode viver na SESSÃO (a tela de conexão grava
+   * `meta_token_encrypted`), mas `isConfigured` é síncrono e não consulta o
+   * banco. Olhar só o env respondia "não configurado" para uma instalação que
+   * conectou pela tela: o handler gravava `queued` sem nunca chamar `send`.
    *
-   * O canal intermediado JÁ passou por isso e resolveu devolvendo `true` e
-   * fazendo o `send` lançar (ver `adapters/zernio.ts`). O mesmo conserto cabe
-   * aqui, mas ele muda um contrato com dois testes explícitos
-   * (`tests/unit/channel-adapter-meta.test.ts`) cuja justificativa escrita é
-   * "mesmo contrato do outro canal" — justificativa que o fork já não sustenta.
-   *
-   * Trocar contrato testado exige uma mudança própria, com os testes revistos de
-   * propósito e não de passagem. Fica registrado aqui para quem for fazê-la.
+   * O custo de responder `true` é que `send` precisa ser quem desiste — e ele
+   * lança `meta_not_configured` em vez de devolver `{externalId: null}`. Assim
+   * o handler preserva a mensagem em `queued` com motivo quando a credencial
+   * realmente falta, sem afirmar `sent` para algo que nunca saiu.
    */
   isConfigured(): boolean {
-    // Síncrono por contrato. Com credencial na sessão, quem confirma é o `send`
-    // (async) — ver o comentário acima.
-    return metaCredsFromEnv() !== null;
+    // Quem decide é `send()`, que pode consultar o banco. Ver o comentário.
+    return true;
   },
 
   /**
@@ -192,9 +184,14 @@ export const metaCloudAdapter: ChannelAdapter = {
       organizationId: envelope.organizationId,
       phoneNumberId: envelope.sessionRef,
     });
-    // Mesmo contrato do outro canal: sem credencial é NOOP, não exceção. A UI mostra
-    // o banner de "canal não conectado"; transformar em erro mudaria comportamento.
-    if (!creds) return { externalId: null };
+    // Com `isConfigured` sempre true, o ponto assíncrono precisa desistir de
+    // forma explícita. O handler reconhece este prefixo e mantém a mensagem em
+    // `queued`, em vez de marcar `sent` sem receipt do provider.
+    if (!creds) {
+      throw new Error(
+        "meta_not_configured: nenhuma credencial para esta sessão (nem na sessão, nem no ambiente).",
+      );
+    }
 
     const corpo =
       contactPayload(envelope) ??

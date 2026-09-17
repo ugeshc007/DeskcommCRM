@@ -357,7 +357,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
   );
 
   return (
-    <div className="flex h-full min-h-[600px] w-full flex-col">
+    <div className="flex h-[calc(100dvh-160px)] min-h-[480px] w-full flex-col overflow-hidden">
       {flow && (
         <PublishBar
           flowId={flowId}
@@ -374,14 +374,14 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
         />
       )}
       <ol
-        className="flex flex-wrap gap-x-6 gap-y-1 border-b border-border bg-surface px-4 py-2 text-xs text-text-muted"
+        className="flex shrink-0 flex-wrap gap-x-6 gap-y-1 border-b border-border bg-surface px-4 py-2 text-xs text-text-muted"
         aria-label="Builder steps"
       >
         <li>1. {t("Choose blocks or a template")}</li>
         <li>2. {t("Connect and configure")}</li>
         <li>3. {t("Save, test, then publish")}</li>
       </ol>
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <NodePalette
           onAdd={onPaletteAdd}
           onMessage={addMessageBlock}
@@ -445,7 +445,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
                       key={starter.id}
                       variant="secondary"
                       onClick={() => applyStarter(starter.id)}
-                      className="h-auto w-full flex-col items-start gap-1 p-3 text-left whitespace-normal"
+                      className="h-auto w-full shrink-0 flex-col items-start gap-1 p-3 text-left whitespace-normal lg:h-auto"
                     >
                       <span>{t(starter.title)}</span>
                       <span className="text-xs font-normal text-text-muted">

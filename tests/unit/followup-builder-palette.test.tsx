@@ -10,6 +10,17 @@ vi.mock("@/hooks/inbox/useMessageTemplates", () => ({
 afterEach(cleanup);
 
 describe("visual message library", () => {
+  it("keeps multiline cards auto-sized at desktop widths with decorative icons", () => {
+    render(<NodePalette onAdd={vi.fn()} onMessage={vi.fn()} onStarter={vi.fn()} canUseStarter />);
+    for (const name of [/Text message/, /AI reply/, /Saved message/, /Welcome & enquiry/, /Product enquiry/, /Payment assistance/]) {
+      const card = screen.getByRole("button", { name });
+      expect(card).toHaveClass("h-auto", "lg:h-auto", "shrink-0");
+      expect(card).not.toHaveClass("lg:h-9");
+      expect(card.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(screen.getByRole("button", { name: "Repeat" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Action" })).toBeVisible();
+  });
   it("adds message blocks by click and publishes the same identifier on drag", () => {
     const onMessage = vi.fn();
     render(<NodePalette onAdd={vi.fn()} onMessage={onMessage} />);

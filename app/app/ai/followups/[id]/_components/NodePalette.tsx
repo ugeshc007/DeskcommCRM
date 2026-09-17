@@ -1,11 +1,17 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { ChatCircle, Sparkle, FileText, HandWaving, ShoppingBag, CreditCard } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import type { NodeType } from "@/lib/followup/graph-schema";
 import { useT } from "@/hooks/i18n/useT";
 import { NODE_VISUAL_LIST } from "./nodes/nodeVisuals";
 import { FLOW_STARTERS, MESSAGE_BLOCKS, type FlowStarterId } from "@/lib/followup/builder-library";
+
+const MESSAGE_ICONS = { text: ChatCircle, ai: Sparkle, template: FileText };
+const STARTER_ICONS = { welcome: HandWaving, sales: ShoppingBag, payment: CreditCard };
+// Override BOTH button height rules: desktop lg:h-9 otherwise clips multiline cards.
+const libraryCardClass = "h-auto min-h-16 w-full shrink-0 items-start justify-start gap-3 rounded-lg p-3 text-left whitespace-normal lg:h-auto";
 
 interface Props {
   onAdd: (type: NodeType) => void;
@@ -30,10 +36,10 @@ export function NodePalette({
   return (
     <aside
       className={cn(
-        "flex flex-col gap-1.5 overflow-y-auto p-3",
+        "flex min-h-0 flex-col gap-2 overflow-x-hidden overflow-y-auto p-4 [&>section]:shrink-0 [&>h2]:shrink-0 [&>h3]:shrink-0 [&>p]:shrink-0",
         isMobile
           ? "h-full w-full"
-          : "hidden w-64 shrink-0 border-r border-border bg-surface lg:flex",
+          : "hidden w-72 shrink-0 border-r border-border bg-surface lg:flex",
       )}
       data-testid="node-palette"
     >
@@ -46,12 +52,14 @@ export function NodePalette({
       {onMessage && (
         <section className="space-y-2 pb-3" aria-label="Message blocks">
           <h3 className="px-1 text-xs font-semibold text-text-muted">{t("MESSAGES")}</h3>
-          {MESSAGE_BLOCKS.map((block) => (
+          {MESSAGE_BLOCKS.map((block) => {
+            const Icon = MESSAGE_ICONS[block.id as keyof typeof MESSAGE_ICONS];
+            return (
             <Button
               key={block.id}
               type="button"
               variant="secondary"
-              className="h-auto w-full flex-col items-start gap-1 p-3 text-left whitespace-normal"
+              className={libraryCardClass}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData("application/x-followup-message-block", block.id);
@@ -59,10 +67,14 @@ export function NodePalette({
               }}
               onClick={() => onMessage(block.id)}
             >
-              <span className="text-sm font-medium">{t(block.title)}</span>
-              <span className="text-xs font-normal text-text-muted">{t(block.description)}</span>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent"><Icon size={18} aria-hidden /></span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-sm leading-5 font-medium">{t(block.title)}</span>
+                <span className="text-xs leading-4 font-normal text-text-muted">{t(block.description)}</span>
+              </span>
             </Button>
-          ))}
+            );
+          })}
         </section>
       )}
       <h3 className="px-1 text-xs font-semibold text-text-muted">{t("LOGIC & TIMING")}</h3>
@@ -74,7 +86,7 @@ export function NodePalette({
             type="button"
             variant="secondary"
             size="sm"
-            className="justify-start gap-2"
+            className="min-h-10 shrink-0 justify-start gap-3 rounded-md lg:h-10"
             draggable
             onDragStart={(e) => {
               e.dataTransfer.setData("application/x-followup-node-type", visual.type);
@@ -88,7 +100,7 @@ export function NodePalette({
             >
               <Icon size={14} aria-hidden />
             </span>
-            {t(visual.paletteLabel)}
+            {visual.type === "repeat" ? t("Repeat") : visual.type === "action" ? t("Action") : t(visual.paletteLabel)}
           </Button>
         );
       })}
@@ -102,19 +114,25 @@ export function NodePalette({
                 : "Templates are available on an empty canvas, so your existing work is never replaced.",
             )}
           </p>
-          {FLOW_STARTERS.map((starter) => (
+          {FLOW_STARTERS.map((starter) => {
+            const Icon = STARTER_ICONS[starter.id];
+            return (
             <Button
               key={starter.id}
               type="button"
               variant="secondary"
               disabled={!canUseStarter}
-              className="h-auto w-full flex-col items-start gap-1 p-3 text-left whitespace-normal"
+              className={libraryCardClass}
               onClick={() => onStarter(starter.id)}
             >
-              <span>{t(starter.title)}</span>
-              <span className="text-xs font-normal text-text-muted">{t(starter.description)}</span>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-info-bg text-info-fg"><Icon size={18} aria-hidden /></span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-sm leading-5 font-medium">{t(starter.title)}</span>
+                <span className="text-xs leading-4 font-normal text-text-muted">{t(starter.description)}</span>
+              </span>
             </Button>
-          ))}
+            );
+          })}
         </section>
       )}
       <p className="mt-3 rounded-md border border-border p-2 text-xs text-text-muted">

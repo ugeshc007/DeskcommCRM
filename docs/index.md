@@ -52,6 +52,7 @@ de menor precedência e registre.
 | [`prd/05-prd-ai-rag-handoff.md`](prd/05-prd-ai-rag-handoff.md) | IA conversacional, RAG por tenant, sentiment |
 | [`prd/06-prd-nuvemshop-lgpd.md`](prd/06-prd-nuvemshop-lgpd.md) | Integração Nuvemshop + webhooks LGPD |
 | [`business-rules/00-business-rules-catalog.md`](business-rules/00-business-rules-catalog.md) | **Catálogo de regras de negócio** — fonte da verdade fora do código |
+| [`templates/ecommerce-organization-template.md`](templates/ecommerce-organization-template.md) | Reusable e-commerce organization blueprint — catalogue, delivery, payment, agent, pipeline, FAQ, follow-ups, handoff and publication tests |
 | [`presentation/pitch-deck.md`](presentation/pitch-deck.md) | Pitch |
 
 ## 3. Contrato técnico (specs)

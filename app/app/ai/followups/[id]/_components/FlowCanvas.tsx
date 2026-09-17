@@ -30,6 +30,7 @@ import {
   type RFNodeData,
 } from "@/lib/followup/graph-mappers";
 import { conditionLabel } from "@/lib/followup/edge-condition-options";
+import { nextSequenceId } from "@/lib/followup/next-sequence-id";
 import {
   branchIdForCondition,
   conditionForBranch,
@@ -57,6 +58,12 @@ import { MatchReplyNode } from "./nodes/MatchReplyNode";
 import { RepeatNode } from "./nodes/RepeatNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { EndNode } from "./nodes/EndNode";
+import {
+  createFlowStarter,
+  FLOW_STARTERS,
+  MESSAGE_BLOCKS,
+  type FlowStarterId,
+} from "@/lib/followup/builder-library";
 
 const EMPTY_GRAPH: FlowGraph = { nodes: [], edges: [] };
 const DND_MIME = "application/x-followup-node-type";
@@ -92,8 +99,11 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>(initial.edges);
   const [savedGraph, setSavedGraph] = useState<FlowGraph>(initialData.draft_graph ?? EMPTY_GRAPH);
-  const nextId = useRef(1);
-  const nextEdgeId = useRef(1);
+  // Continue after the largest persisted suffix. Starting again at 1 makes a
+  // newly-created node/edge reuse an existing React Flow key and visually
+  // replace a connection in older drafts.
+  const nextId = useRef(nextSequenceId(initial.nodes.map((node) => node.id)));
+  const nextEdgeId = useRef(nextSequenceId(initial.edges.map((edge) => edge.id)));
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -104,12 +114,16 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const markNodeErrors = useCallback(
     (errorsByNode: Record<string, string[]>) => {
-      setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, errors: errorsByNode[n.id] } })));
+      setNodes((nds) =>
+        nds.map((n) => ({ ...n, data: { ...n.data, errors: errorsByNode[n.id] } })),
+      );
     },
     [setNodes],
   );
   const clearNodeErrors = useCallback(() => {
-    setNodes((nds) => nds.map((n) => (n.data.errors ? { ...n, data: { ...n.data, errors: undefined } } : n)));
+    setNodes((nds) =>
+      nds.map((n) => (n.data.errors ? { ...n, data: { ...n.data, errors: undefined } } : n)),
+    );
   }, [setNodes]);
 
   // Node and edge selection are mutually exclusive — opening one panel closes the other's.
@@ -128,14 +142,18 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const updateNodeData = useCallback(
     (id: string, patch: Partial<RFNodeData>) => {
-      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
+      setNodes((nds) =>
+        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
+      );
     },
     [setNodes],
   );
   const updateEdgeCondition = useCallback(
     (id: string, condition: FlowEdge["condition"]) => {
       setEdges((eds) =>
-        eds.map((e) => (e.id === id ? { ...e, data: { priority: e.data?.priority ?? 0, condition } } : e)),
+        eds.map((e) =>
+          e.id === id ? { ...e, data: { priority: e.data?.priority ?? 0, condition } } : e,
+        ),
       );
     },
     [setEdges],
@@ -143,8 +161,12 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId) ?? null;
-  const selectedEdgeSource = selectedEdge ? (nodes.find((n) => n.id === selectedEdge.source) ?? null) : null;
-  const selectedEdgeTarget = selectedEdge ? (nodes.find((n) => n.id === selectedEdge.target) ?? null) : null;
+  const selectedEdgeSource = selectedEdge
+    ? (nodes.find((n) => n.id === selectedEdge.source) ?? null)
+    : null;
+  const selectedEdgeTarget = selectedEdge
+    ? (nodes.find((n) => n.id === selectedEdge.target) ?? null)
+    : null;
 
   // Wire label: derived at render time from `data.condition`, never persisted on the edge
   // itself — `condition` alone stays the source of truth the mapper round-trips.
@@ -230,6 +252,45 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     [nodes.length, addNodeAt],
   );
 
+  const addMessageBlock = useCallback(
+    (id: string, position?: { x: number; y: number }) => {
+      const block = MESSAGE_BLOCKS.find((item) => item.id === id);
+      if (!block) return;
+      const nodeId = `action-${nextId.current++}`;
+      setNodes((current) =>
+        current.concat({
+          id: nodeId,
+          type: "action",
+          position: position ?? {
+            x: 80 + (current.length % 4) * 250,
+            y: 80 + Math.floor(current.length / 4) * 150,
+          },
+          data: { label: block.title, config: { ...block.config } },
+        }),
+      );
+      setSelectedNodeId(nodeId);
+      setSelectedEdgeId(null);
+      setPaletteOpen(false);
+    },
+    [setNodes],
+  );
+
+  const applyStarter = useCallback(
+    (id: FlowStarterId) => {
+      if (nodes.length || edges.length) return;
+      const graph = toReactFlow(createFlowStarter(id));
+      setNodes(graph.nodes);
+      setEdges(graph.edges);
+      nextId.current = nextSequenceId(graph.nodes.map((node) => node.id));
+      nextEdgeId.current = nextSequenceId(graph.edges.map((edge) => edge.id));
+      setPaletteOpen(false);
+      window.setTimeout(() => {
+        void fitView({ padding: 0.2, duration: 200 });
+      }, 0);
+    },
+    [nodes.length, edges.length, setNodes, setEdges, fitView],
+  );
+
   const deleteNode = useCallback(
     (id: string) => {
       setNodes((nds) => semNo(nds, id));
@@ -282,12 +343,17 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      const messageBlock = e.dataTransfer.getData("application/x-followup-message-block");
+      if (messageBlock) {
+        addMessageBlock(messageBlock, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+        return;
+      }
       const type = e.dataTransfer.getData(DND_MIME) as NodeType | "";
-      if (!type) return;
+      if (!type || !Object.hasOwn(NODE_VISUALS, type)) return;
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       addNodeAt(type, position);
     },
-    [screenToFlowPosition, addNodeAt],
+    [screenToFlowPosition, addNodeAt, addMessageBlock],
   );
 
   return (
@@ -307,8 +373,21 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
           canAutoFit={nodes.length > 0}
         />
       )}
+      <ol
+        className="flex flex-wrap gap-x-6 gap-y-1 border-b border-border bg-surface px-4 py-2 text-xs text-text-muted"
+        aria-label="Builder steps"
+      >
+        <li>1. {t("Choose blocks or a template")}</li>
+        <li>2. {t("Connect and configure")}</li>
+        <li>3. {t("Save, test, then publish")}</li>
+      </ol>
       <div className="flex flex-1 overflow-hidden">
-        <NodePalette onAdd={onPaletteAdd} />
+        <NodePalette
+          onAdd={onPaletteAdd}
+          onMessage={addMessageBlock}
+          onStarter={applyStarter}
+          canUseStarter={!nodes.length && !edges.length}
+        />
         {/* Abaixo de `lg` a paleta fixa de 224px não cabe do lado do canvas —
             vira um drawer, disparado por este botão flutuante. */}
         <Sheet open={paletteOpen} onOpenChange={setPaletteOpen}>
@@ -316,6 +395,9 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             <SheetTitle className="sr-only">{t("Adicionar nó")}</SheetTitle>
             <NodePalette
               variant="mobile"
+              onMessage={addMessageBlock}
+              onStarter={applyStarter}
+              canUseStarter={!nodes.length && !edges.length}
               onAdd={(type) => {
                 onPaletteAdd(type);
                 setPaletteOpen(false);
@@ -324,7 +406,12 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
           </SheetContent>
         </Sheet>
 
-        <div className="relative h-full flex-1" data-testid="flow-canvas" onDragOver={onDragOver} onDrop={onDrop}>
+        <div
+          className="relative h-full min-w-0 flex-1"
+          data-testid="flow-canvas"
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edgesForRender}
@@ -342,6 +429,39 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             <Background />
             <Controls />
           </ReactFlow>
+          {nodes.length === 0 && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+              <section className="pointer-events-auto max-h-full w-full max-w-xl overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-sm">
+                <h2 className="text-xl font-semibold">{t("Build your first conversation")}</h2>
+                <p className="mt-2 text-sm text-text-muted">
+                  {t(
+                    "Choose a starting point below, or drag a Trigger block from the library. Click any block to edit its message or rules.",
+                  )}
+                </p>
+                <div className="mt-4 space-y-2">
+                  {FLOW_STARTERS.map((starter) => (
+                    <Button
+                      type="button"
+                      key={starter.id}
+                      variant="secondary"
+                      onClick={() => applyStarter(starter.id)}
+                      className="h-auto w-full flex-col items-start gap-1 p-3 text-left whitespace-normal"
+                    >
+                      <span>{t(starter.title)}</span>
+                      <span className="text-xs font-normal text-text-muted">
+                        {t(starter.steps)}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+                <p className="mt-4 text-xs text-text-muted">
+                  {t(
+                    "Templates create an unsaved draft. Review your trigger, agent access and channel rules before publishing.",
+                  )}
+                </p>
+              </section>
+            </div>
+          )}
           <Button
             type="button"
             variant="secondary"
@@ -364,7 +484,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
         */}
         {selectedNode && (
           <aside
-            className="fixed inset-x-0 bottom-0 z-40 flex max-h-[75vh] flex-col overflow-hidden rounded-t-lg border-t border-border bg-surface shadow-lg lg:static lg:z-auto lg:h-full lg:w-96 lg:max-h-none lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none"
+            className="fixed inset-x-0 bottom-0 z-40 flex max-h-[75vh] flex-col overflow-hidden rounded-t-lg border-t border-border bg-surface shadow-lg lg:static lg:z-auto lg:h-full lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none"
             data-testid="node-config-sheet"
           >
             {/* Barra própria pro X, não sobreposta ao conteúdo — um botão
@@ -395,7 +515,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
         {selectedEdge && (
           <aside
-            className="fixed inset-x-0 bottom-0 z-40 flex max-h-[75vh] flex-col overflow-hidden rounded-t-lg border-t border-border bg-surface shadow-lg lg:static lg:z-auto lg:h-full lg:w-96 lg:max-h-none lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none"
+            className="fixed inset-x-0 bottom-0 z-40 flex max-h-[75vh] flex-col overflow-hidden rounded-t-lg border-t border-border bg-surface shadow-lg lg:static lg:z-auto lg:h-full lg:max-h-none lg:w-96 lg:shrink-0 lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none"
             data-testid="edge-config-sheet"
           >
             <div className="flex shrink-0 justify-end p-2 lg:hidden">

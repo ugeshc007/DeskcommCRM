@@ -49,7 +49,9 @@ function SeletorDeModelo({
   if (!modelos?.length) {
     return (
       <p className="text-xs text-text-muted">
-        {t("Você ainda não tem modelos de mensagem. Crie um em Ajustes → Modelos e ele aparece aqui.")}
+        {t(
+          "Você ainda não tem modelos de mensagem. Crie um em Ajustes → Modelos e ele aparece aqui.",
+        )}
       </p>
     );
   }
@@ -85,11 +87,15 @@ export function ActionForm({
   const t = useT();
   const [mode, setMode] = useState(config.mode);
   const [body, setBody] = useState(config.mode === "text" ? config.body : "");
-  const [promptHint, setPromptHint] = useState(config.mode === "ai_message" ? config.prompt_hint : "");
+  const [promptHint, setPromptHint] = useState(
+    config.mode === "ai_message" ? config.prompt_hint : "",
+  );
   const [fallbackTemplateId, setFallbackTemplateId] = useState(
     config.mode === "ai_message" ? (config.fallback_template_id ?? "") : "",
   );
-  const [templateId, setTemplateId] = useState(config.mode === "template" ? config.template_id : "");
+  const [templateId, setTemplateId] = useState(
+    config.mode === "template" ? config.template_id : "",
+  );
   const [error, setError] = useState<string | null>(null);
 
   const commit = (next: {
@@ -106,7 +112,9 @@ export function ActionForm({
           ? {
               mode: "ai_message" as const,
               prompt_hint: next.promptHint,
-              ...(next.fallbackTemplateId.trim() ? { fallback_template_id: next.fallbackTemplateId } : {}),
+              ...(next.fallbackTemplateId.trim()
+                ? { fallback_template_id: next.fallbackTemplateId }
+                : {}),
             }
           : { mode: "template" as const, template_id: next.templateId };
     const parsed = actionConfigSchema.safeParse(candidate);
@@ -158,7 +166,8 @@ export function ActionForm({
             }}
           />
           <p className="text-xs text-text-muted">
-            {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")} {t("viram o número da volta.")}
+            {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")}{" "}
+            {t("viram o número da volta.")}
           </p>
         </div>
       ) : mode === "ai_message" ? (
@@ -176,7 +185,9 @@ export function ActionForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="action-fallback">{t("Se a IA não conseguir escrever, mandar este modelo")}</Label>
+            <Label htmlFor="action-fallback">
+              {t("Se a IA não conseguir escrever, mandar este modelo")}
+            </Label>
             <SeletorDeModelo
               id="action-fallback"
               valor={fallbackTemplateId}
@@ -203,6 +214,32 @@ export function ActionForm({
         </div>
       )}
       {error && <p className="text-xs text-error-fg">{error}</p>}
+      <section
+        className="overflow-hidden rounded-xl border border-border"
+        aria-label="Message preview"
+      >
+        <div className="border-b border-border bg-surface px-3 py-2 text-xs font-semibold">
+          {t("Customer message preview")}
+        </div>
+        <div className="bg-accent-soft p-4">
+          {mode === "text" ? (
+            <div className="ml-3 rounded-lg rounded-tr-none border border-border bg-surface p-3 text-sm break-words whitespace-pre-wrap shadow-sm">
+              {body || t("Your message will appear here.")}
+            </div>
+          ) : (
+            <p className="rounded-lg bg-surface p-3 text-xs text-text-muted">
+              {t(
+                mode === "ai_message"
+                  ? "The agent generates this message at runtime using the conversation and your instructions. This preview does not call AI or send a message."
+                  : "The selected saved template is sent at runtime. Choose a template above before saving.",
+              )}
+            </p>
+          )}
+        </div>
+        <p className="p-3 text-xs text-text-muted">
+          {t("Preview only — nothing is sent. Channel messaging-window rules still apply.")}
+        </p>
+      </section>
     </div>
   );
 }

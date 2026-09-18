@@ -103,4 +103,3 @@ end; $$;
 revoke all on function public.fn_integration_finish(uuid,text,uuid,text,jsonb,text) from public,anon,authenticated;
 grant execute on function public.fn_integration_finish(uuid,text,uuid,text,jsonb,text) to service_role;
 notify pgrst,'reload schema';
-

@@ -6,4 +6,3 @@ export default async function IntegrationsPage(){
  const auth=await requireRole('manager');if(!auth.ok)redirect('/app');
  return <IntegrationsGallery key={auth.org.orgId} />;
 }
-

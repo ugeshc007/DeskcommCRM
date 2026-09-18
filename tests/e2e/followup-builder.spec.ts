@@ -699,7 +699,23 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
    * on the curved path the bounding-box center lands.
    */
   async function clickEdge(page: Page, edgeId: string): Promise<void> {
-    await page.locator(`[data-testid="rf__edge-${edgeId}"] .react-flow__edge-textbg`).click();
+    // Em ramificações, outro caminho pode cobrir o rótulo. Clique num trecho
+    // realmente exposto da própria aresta, sem force/dispatchEvent.
+    const point = await page.locator(`[data-testid="rf__edge-${edgeId}"] .react-flow__edge-interaction`).evaluate((element) => {
+      const path = element as SVGPathElement;
+      const matrix = path.getScreenCTM();
+      if (!matrix) return null;
+      for (let step = 1; step < 20; step++) {
+        const local = path.getPointAtLength(path.getTotalLength() * step / 20);
+        const screen = new DOMPoint(local.x, local.y).matrixTransform(matrix);
+        if (document.elementFromPoint(screen.x, screen.y)?.closest(".react-flow__edge") === path.closest(".react-flow__edge")) {
+          return { x: screen.x, y: screen.y };
+        }
+      }
+      return null;
+    });
+    if (!point) throw new Error(`aresta sem trecho clicável: ${edgeId}`);
+    await page.mouse.click(point.x, point.y);
   }
 
   async function setEdgeCondition(page: Page, edgeId: string, optionLabel: string): Promise<void> {

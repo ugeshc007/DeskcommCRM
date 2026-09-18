@@ -20,4 +20,3 @@ export async function manageConnection(db:SupabaseClient,actor:string,org:string
  // Explicit projection: no future database columns automatically reach clients.
  return {id:data.id,provider:data.provider,label:data.label,revision:data.revision,active:data.active,auth_kind:data.auth_kind,validated_at:data.validated_at,failure_code:data.failure_code};
 }
-

@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { describe, expect, it } from "vitest";
 
 import { colunasDoCelular } from "@/components/inbox/InboxLayout";

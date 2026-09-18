@@ -21,6 +21,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metaContactsPayload } from "@/lib/channels/meta/contact-card";
+import { metaInteractivePayload } from '../meta/interactive';
 import { resolveMetaCreds } from "../meta/credentials";
 import type {
   ChannelAdapter,
@@ -274,7 +275,7 @@ export const metaCloudAdapter: ChannelAdapter = {
     // o banner de "canal não conectado"; transformar em erro mudaria comportamento.
     if (!creds) return { externalId: null };
 
-    const corpo =
+    const corpo = envelope.interactive ? metaInteractivePayload(envelope.body ?? '', envelope.interactive) :
       contactPayload(envelope) ??
       mediaPayload(envelope) ??
       { type: "text", text: { body: envelope.body ?? "" } };

@@ -50,13 +50,14 @@ export interface EncryptedSecret {
   last4: string;
 }
 
-export function encryptKey(plaintext: string): EncryptedSecret {
+export function encryptKey(plaintext: string, authenticatedData?: Buffer): EncryptedSecret {
   if (!plaintext || typeof plaintext !== "string") {
     throw new Error("plaintext inválido pra encryptKey()");
   }
   const key = getKey();
   const iv = randomBytes(IV_LENGTH_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
+  if (authenticatedData) cipher.setAAD(authenticatedData);
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   if (tag.length !== TAG_LENGTH_BYTES) {
@@ -70,10 +71,11 @@ export function decryptKey(input: {
   ciphertext: Buffer;
   iv: Buffer;
   tag: Buffer;
-}): string {
+}, authenticatedData?: Buffer): string {
   const { ciphertext, iv, tag } = input;
   const key = getKey();
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  if (authenticatedData) decipher.setAAD(authenticatedData);
   decipher.setAuthTag(tag);
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return plaintext.toString("utf8");

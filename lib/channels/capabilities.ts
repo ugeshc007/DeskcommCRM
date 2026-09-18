@@ -10,6 +10,12 @@ import type { ChannelCapabilities, ChannelProvider, ProviderDeMensagem } from ".
 
 export type { ChannelProvider, ChannelCapabilities, ProviderDeMensagem };
 
+/** Restrição de formato: transporte sem implementação recusa, não degrada. */
+export function supportsInteractiveChoices(provider: string | null | undefined): boolean {
+  const supported: Record<ProviderDeMensagem, boolean> = { waha: false, meta_cloud: true, zernio: false };
+  return Object.hasOwn(supported, provider ?? '') && supported[provider as ProviderDeMensagem] === true;
+}
+
 /**
  * A matriz descreve o que um canal de MENSAGEM permite — por isso a chave é
  * `ProviderDeMensagem`, não `ChannelProvider`. Perguntar a uma linha de voz se

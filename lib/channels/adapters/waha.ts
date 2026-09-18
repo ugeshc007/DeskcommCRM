@@ -185,6 +185,7 @@ export const wahaAdapter: ChannelAdapter = {
   },
 
   async send(envelope: OutboundEnvelope): Promise<{ externalId: string | null }> {
+    if (envelope.interactive) throw new Error('interactive_choices_unsupported');
     const client = getWahaClient();
     // Sem env de WAHA o comportamento atual é NOOP, não erro: a UI mostra o
     // banner de "container não está no ar". Transformar em exceção mudaria o

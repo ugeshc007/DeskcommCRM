@@ -4,6 +4,7 @@
 // do provider. Quando a Fase 3 absorver `lib/waha/`, este é o único ponteiro a
 // mudar de casa.
 import type { SendMessageInput } from "@/lib/schemas";
+import type { InteractiveMessage } from '@/lib/messaging/interactive';
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 import type { OutboundMedia } from "@/lib/waha/media-send";
 
@@ -67,6 +68,8 @@ export type OutboundKind = SendMessageInput["type"];
 
 /** O que o CRM sabe sobre o destinatário. Quem traduz para o endereço do canal é o adapter. */
 export interface RecipientInput {
+  /** Identidade da conversa no canal; nunca derivada do telefone do contato. */
+  providerConversationId?: string | null;
   isGroup: boolean;
   groupChatId: string | null;
   phoneNumber: string | null | undefined;
@@ -112,6 +115,7 @@ export interface ChannelTenantScope {
 }
 
 export interface OutboundEnvelope extends ChannelTenantScope {
+  interactive?: InteractiveMessage;
   /** Callback interno: revalida a origem depois do preparo assíncrono e antes do transporte. */
   beforeSend?: () => Promise<void>;
   /** Identificador da sessão/número no provider (WAHA: nome da sessão). */

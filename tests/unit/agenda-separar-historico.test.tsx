@@ -36,7 +36,8 @@
  * Nada de `new Date()`: esta base já pagou o preço de invariante que passava de
  * manhã e reprovava de madrugada.
  */
-import { fireEvent, render, screen, cleanup } from "@testing-library/react";
+import { fireEvent, screen, cleanup } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { afterEach, describe, expect, it } from "vitest";
 
 import { HistoricoDaAgenda, type AbaDoHistorico } from "@/components/agenda/HistoricoDaAgenda";

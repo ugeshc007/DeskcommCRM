@@ -257,6 +257,7 @@ export const AUDIT_ACTIONS = [
   "ai.router_members_updated",
   "followup_flow.created",
   "followup_flow.updated",
+  "followup_flow.media_uploaded",
   "followup_flow.published",
   "followup_flow.disabled",
   "followup_flow.deleted",
@@ -496,6 +497,12 @@ export const AUDIT_ACTIONS = [
   "voice.opt_in_changed",
   "voice.session_unpaired",
   "platform_admin.subscription_updated",
+  "integration.connection_saved",
+  "integration.connection_tested",
+  "integration.connection_disconnected",
+  "integration.oauth_started",
+  "integration.event_received",
+  "ecommerce.template_installed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

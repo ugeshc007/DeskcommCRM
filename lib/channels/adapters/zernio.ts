@@ -162,6 +162,7 @@ export const zernioAdapter: ChannelAdapter = {
   },
 
   async send(envelope: OutboundEnvelope): Promise<{ externalId: string | null }> {
+    if (envelope.interactive) throw new Error('interactive_choices_unsupported');
     if (envelope.kind === "contact") {
       throw new Error("zernio_contact_not_supported: envio de cartão de contato não suportado neste canal.");
     }

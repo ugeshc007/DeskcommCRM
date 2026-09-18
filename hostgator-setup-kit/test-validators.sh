@@ -1752,6 +1752,18 @@ echo "packaging: a instalação resolve a última versão publicada"
   rm -rf "$repo_falso" "$trabalho" "$vazio"
 ) || fail=1
 
+echo "packaging: muitas tags não viram falha por SIGPIPE"
+(
+  # Saída maior que o buffer do pipe: head -1 quebrava o produtor sob pipefail.
+  git() { awk 'BEGIN { print "hash refs/tags/v2.0.0-rc1"; for (i=20000;i>0;i--) print "hash refs/tags/v1." i ".0" }'; }
+  achou="$(ultima_versao_publicada fixture-local)"
+  if [ "$achou" != "1.20000.0" ]; then
+    printf '  ✗ muitas tags descartaram a maior versão estável: "%s"\n' "$achou"
+    exit 1
+  fi
+  printf '  ✓ consome todas as tags e ignora prerelease sem quebrar o pipe\n'
+) || fail=1
+
 echo "packaging: a instalação GRAVA a versão resolvida (não só sabe qual é)"
 # A prova acima mostra que a função escolhe certo; esta mostra que o install.sh
 # a USA. São coisas diferentes, e a diferença não é acadêmica: sabotei o install

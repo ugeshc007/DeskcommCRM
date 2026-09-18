@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { describe, expect, it } from "vitest";
 
 import { AuditFiltersAdmin } from "@/components/admin/audit/AuditFiltersAdmin";

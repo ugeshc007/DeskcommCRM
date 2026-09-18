@@ -6,6 +6,7 @@
  * (quando o payload entra na pipeline pós-verificação HMAC).
  */
 import { z } from "zod";
+import { interactiveMessageSchema } from '@/lib/messaging/interactive';
 import { COMANDOS_DO_BANCO, type ComandoDoBanco } from "@/lib/inbox/comando-da-conversa";
 
 /**
@@ -76,6 +77,7 @@ export const sendMessageSchema = z
     media_mime: z.string().optional(),
     media_size_bytes: z.number().int().positive().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
+    interactive: interactiveMessageSchema.optional(),
     /** Só em `type: "template"`. Nome exato aprovado na Meta. */
     template_name: z.string().min(1).max(512).optional(),
     /** Só em `type: "template"`. `pt_BR` e `pt` são templates DISTINTOS. */
@@ -95,6 +97,9 @@ export const sendMessageSchema = z
      * o vocabulário do canal, que é justamente o que o seam existe para evitar.
      */
     reply_to_message_id: z.string().uuid().optional(),
+  })
+  .refine(d => !d.interactive || (d.type === 'text' && !!d.body?.trim() && d.body.length <= 1024 && !d.media_url && !d.media_storage_path), {
+    message: 'Interactive messages require text up to 1024 characters without media.', path: ['interactive'],
   })
   .refine(
     (d) => {

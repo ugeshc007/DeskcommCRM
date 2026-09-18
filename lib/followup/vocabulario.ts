@@ -71,6 +71,21 @@ export type ModoDeEspera = z.infer<typeof waitConfigSchema>["mode"];
 export type ModoDaAcao = z.infer<typeof actionConfigSchema>["mode"];
 export type TipoDeGatilho = TriggerConfig["kind"];
 
+export const DIAS_DA_SEMANA = {
+  mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
+  fri: "Friday", sat: "Saturday", sun: "Sunday",
+} as const;
+
+export const FORMATOS_DE_RESPOSTA = {
+  text: "Text — non-empty", name: "Name", email: "Email address",
+  number: "Number — decimal point", phone: "Phone — include country code",
+  date: "Date — YYYY-MM-DD", file: "File attachment — not a URL",
+} as const;
+
+export const TIPOS_DE_VARIAVEL = {
+  string: "Text", number: "Number", boolean: "True / false",
+} as const;
+
 /** `{ valor, rotulo }` na ordem de declaração do mapa — pronto para um `<Select>`. */
 export function opcoes<K extends string>(mapa: Record<K, string>): ReadonlyArray<{ valor: K; rotulo: string }> {
   return (Object.keys(mapa) as K[]).map((valor) => ({ valor, rotulo: mapa[valor] }));
@@ -92,6 +107,8 @@ export interface CampoDeCondicao {
 }
 
 export const CAMPOS_DA_CONDICAO: Record<CampoDaCondicao, CampoDeCondicao> = {
+  business_hours: { rotulo: 'Business hours', tipoDeValor: 'texto' },
+  formula: { rotulo: 'Formula result', tipoDeValor: 'numero' },
   lead_stage: { rotulo: "Etapa do funil", tipoDeValor: "etapa" },
   tag: { rotulo: "Etiqueta do contato", tipoDeValor: "etiqueta" },
   steps_taken: { rotulo: "Passos já dados no fluxo", tipoDeValor: "numero" },
@@ -104,7 +121,7 @@ export interface Comparador {
   /** Item do seletor de operador — já escrito para ser lido junto com o campo. */
   rotulo: string;
   /** A checagem inteira em uma frase, com o valor no lugar. */
-  frase: (valor: string | number) => string;
+  frase: (valor: string | number | boolean) => string;
   /**
    * Entra no seletor deste campo? `false` quando o motor entende o par mas
    * oferecê-lo confunde: ou repete um operador que já está na lista, ou nunca
@@ -120,9 +137,9 @@ const AVISO_SO_NUMERO =
   "Comparar maior/menor só funciona com número. Do jeito que está, esta condição nunca é verdadeira.";
 const AVISO_SO_TEXTO = "“Contém” só funciona com texto. Em número, esta condição nunca é verdadeira.";
 
-const aspas = (valor: string | number): string => `“${valor}”`;
+const aspas = (valor: string | number | boolean): string => `“${valor}”`;
 
-function passos(valor: string | number): string {
+function passos(valor: string | number | boolean): string {
   const n = Number(valor);
   return Number.isFinite(n) && Math.abs(n) === 1 ? `${valor} passo` : `${valor} passos`;
 }
@@ -132,6 +149,20 @@ function passos(valor: string | number): string {
  * primeiro), então mexer na ordem aqui mexe na tela.
  */
 const COMPARADORES: Record<CampoDaCondicao, Record<OperadorDaCondicao, Comparador>> = {
+  business_hours: {
+    eq: { rotulo: 'is', frase: v => `Business hours: ${v}`, oferecido: true },
+    neq: { rotulo: 'is not', frase: v => `Business hours: not ${v}`, oferecido: true },
+    gte: { rotulo: 'is at least', frase: v => `${v}`, oferecido: false },
+    lte: { rotulo: 'is at most', frase: v => `${v}`, oferecido: false },
+    contains: { rotulo: 'contains text', frase: v => `${v}`, oferecido: false },
+  },
+  formula: {
+    eq: { rotulo: 'equals', frase: v => `Formula equals ${v}`, oferecido: true },
+    neq: { rotulo: 'does not equal', frase: v => `Formula does not equal ${v}`, oferecido: true },
+    gte: { rotulo: 'is at least', frase: v => `Formula is at least ${v}`, oferecido: true },
+    lte: { rotulo: 'is at most', frase: v => `Formula is at most ${v}`, oferecido: true },
+    contains: { rotulo: 'contains text', frase: v => `Formula contains ${v}`, oferecido: true },
+  },
   lead_stage: {
     eq: {
       rotulo: "está na etapa",
@@ -272,7 +303,7 @@ export function comparadoresDoCampo(
 export function fraseDaCondicao(
   campo: CampoDaCondicao,
   op: OperadorDaCondicao,
-  valor: string | number,
+  valor: string | number | boolean,
 ): string {
   return comparador(campo, op).frase(valor);
 }
@@ -362,7 +393,7 @@ export function fraseDaRegraNomeada(rotulo: string): string {
 export function fraseDaRegraSemNome(
   campo: CampoDaCondicao,
   op: OperadorDaCondicao,
-  valor: string | number,
+  valor: string | number | boolean,
 ): string {
   return `quando ${encaixa(fraseDaCondicao(campo, op, valor))}`;
 }
@@ -429,9 +460,19 @@ export const MODOS_DE_ESPERA: Record<ModoDeEspera, string> = {
 };
 
 export const MODOS_DA_ACAO: Record<ModoDaAcao, string> = {
+  set_variable: 'Set variable',
+  integration: 'Integration action',
+  interactive: 'Buttons / list',
+  media: "Media upload",
   text: "Texto fixo",
   ai_message: "Mensagem escrita pela IA",
   template: "Modelo de mensagem pronto",
+};
+
+export const TIPOS_DE_MIDIA = { image: "Image file", video: "Video file", audio: "Audio file", document: "Document file" };
+export const FORMATOS_DE_MIDIA = {
+  "image/jpeg": "JPEG image", "image/png": "PNG image", "video/mp4": "MP4 video",
+  "audio/mpeg": "MP3 audio", "audio/ogg": "OGG audio", "application/pdf": "PDF document",
 };
 
 // ─── nó final ────────────────────────────────────────────────────────────

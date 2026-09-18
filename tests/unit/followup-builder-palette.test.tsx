@@ -10,6 +10,25 @@ vi.mock("@/hooks/inbox/useMessageTemplates", () => ({
 afterEach(cleanup);
 
 describe("visual message library", () => {
+  it("adds a validated question by click or drag", () => {
+    const onQuestion = vi.fn();
+    render(<NodePalette onAdd={vi.fn()} onQuestion={onQuestion} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "email" } });
+    const card = screen.getByRole("button", { name: /Ask for an email/ });
+    fireEvent.click(card);
+    expect(onQuestion).toHaveBeenCalledWith("email");
+    const setData = vi.fn();
+    fireEvent.dragStart(card, { dataTransfer: { setData } });
+    expect(setData).toHaveBeenCalledWith("application/x-followup-question-block", "email");
+  });
+  it("searches blocks and templates with an explicit empty state", () => {
+    render(<NodePalette onAdd={vi.fn()} onMessage={vi.fn()} onStarter={vi.fn()} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "product" } });
+    expect(screen.getByRole("button", { name: /Product enquiry/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Text message/ })).toBeNull();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no-such-block" } });
+    expect(screen.getByRole("status")).toHaveTextContent("No matching blocks");
+  });
   it("keeps multiline cards auto-sized at desktop widths with decorative icons", () => {
     render(<NodePalette onAdd={vi.fn()} onMessage={vi.fn()} onStarter={vi.fn()} canUseStarter />);
     for (const name of [/Text message/, /AI reply/, /Saved message/, /Welcome & enquiry/, /Product enquiry/, /Payment assistance/]) {

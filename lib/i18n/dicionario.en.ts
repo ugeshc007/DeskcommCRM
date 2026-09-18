@@ -4,7 +4,10 @@
  * Generated from every Portuguese source key in `dicionario.ts`. The
  * completeness guard fails when a screen adds a key without an English value.
  */
+import { CHANNEL_SETUP_EN } from '@/lib/channels/i18n';
+
 export const DICIONARIO_EN: Readonly<Record<string, string>> = {
+  ...CHANNEL_SETUP_EN,
   "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.":
     "Meta validated the number but could not activate message delivery for this account.",
   "Atendimento, vendas e IA em um só lugar": "Customer service, sales, and AI in one place",
@@ -1193,6 +1196,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Follow-up cancelado.": "Follow-up cancelled.",
   "Retorno cancelado.": "Return cancelled.",
   "Rascunho salvo.": "Draft saved.",
+  "Texto fixo": "Fixed text",
   "Fluxo publicado.": "Published stream.",
   "Fluxo desativado.": "Stream disabled.",
   "Fluxo revertido para a versão anterior.": "Flow reverted to previous version.",
@@ -5799,8 +5803,6 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Sessão expirada": "Session expired",
   "Sessão sem token.": "Tokenless session.",
   "Skill não encontrada no catálogo de plataforma.": "Skill not found in the platform catalog.",
-  "Suba o Docker (docker compose up -d waha) e tente novamente.":
-    "Upload Docker (docker compose up -d waha) and try again.",
   "Skill não está instalada nesta organização.": "Skill is not installed in this organization.",
   "Solicitação não encontrada.": "Request not found.",
   "Só manager+ cria template compartilhado.": "Only manager+ creates shared template.",
@@ -6491,12 +6493,6 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "It is not possible to disable the organization's default agent.",
   "Não é possível revogar o último admin do tenant.":
     "It is not possible to revoke the last tenant admin.",
-  "O WhatsApp (WAHA) não está configurado neste ambiente (faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY) — sem ele o número não pode ser desconectado do aparelho.":
-    "WhatsApp (WAHA) is not configured in this environment (WAHA_API_BASE_URL and/or WAHA_API_KEY are missing) — without it the number cannot be disconnected from the device.",
-  "O WhatsApp (WAHA) não está configurado neste ambiente: faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY. Configure-as e tente de novo.":
-    "WhatsApp (WAHA) is not configured in this environment: WAHA_API_BASE_URL and/or WAHA_API_KEY are missing. Configure them and try again.",
-  "O servidor de o WhatsApp (WAHA) foi encontrado, mas recusou a conexão: nada está atendendo naquela porta. Confirme que o serviço está no ar e que a porta configurada é a dele.":
-    "The WhatsApp (WAHA) server was found, but it refused the connection: nothing is listening on that port. Confirm that the service is running and that the configured port is correct.",
   "O cabeçalho aceita imagem JPG ou PNG.": "The header accepts JPG or PNG image.",
   "O caso não está aguardando resposta do atendente (awaiting_human).":
     "The case is not waiting for a response from the attendant (awaiting_human).",

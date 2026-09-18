@@ -9,7 +9,8 @@
  * uma saída para não ficar presa no passo.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 
 import type { CreateAgentResult } from "@/app/actions/onboarding/createDefaultAgent";
 

@@ -37,7 +37,8 @@
  * `AdminShell.tsx` deixa o primeiro caso vermelho, nos dois valores de e-mail.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

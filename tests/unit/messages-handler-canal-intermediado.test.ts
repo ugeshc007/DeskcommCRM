@@ -176,11 +176,11 @@ function makeSupabase(linhaCompleta: Row) {
         return {
           select: (cols: string) => {
             estado.selects.push(cols);
-            return {
-              eq: () => ({
+            const query = {
+              eq: () => query,
                 maybeSingle: async () => ({ data: projetar(linhaCompleta, cols), error: null }),
-              }),
             };
+            return query;
           },
           update: () => ({ eq: async () => ({ error: null }) }),
         };

@@ -144,7 +144,7 @@ export function ActionForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {opcoes(MODOS_DA_ACAO).map(({ valor, rotulo }) => (
+            {opcoes(MODOS_DA_ACAO).filter(({ valor }) => valor !== "media" && valor !== 'interactive' && valor !== 'set_variable').map(({ valor, rotulo }) => (
               <SelectItem key={valor} value={valor}>
                 {t(rotulo)}
               </SelectItem>
@@ -166,8 +166,10 @@ export function ActionForm({
             }}
           />
           <p className="text-xs text-text-muted">
-            {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")}{" "}
-            {t("viram o número da volta.")}
+            {t("Sent exactly as written, without AI. In a loop, {{volta}} is the current repetition and {{voltas}} is the total.")}
+          </p>
+          <p className="text-xs text-text-muted">
+            {'Use {{session.name}} to insert a value collected into the name session variable. Missing values stop the step; file references cannot be sent as text.'}
           </p>
         </div>
       ) : mode === "ai_message" ? (

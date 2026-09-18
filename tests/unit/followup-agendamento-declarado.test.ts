@@ -58,6 +58,10 @@ const DIR = join(process.cwd(), "lib", "followup");
  * `agenda` = 'nenhum' → menciona a coluna sem agendar (leitura, tradução).
  */
 const ESCRITORES: Record<string, { agenda: "agora" | "futuro" | "nenhum"; nota: string }> = {
+  "simulator.ts": {
+    agenda: "nenhum",
+    nota: "Simulação pura em memória: lê a data do resultado para avançar o relógio virtual, sem persistir enrollment nem agendar trabalho real.",
+  },
   "enroll.ts": {
     agenda: "agora",
     nota: "o enrollment nasce vencido — o insert omite next_eval_at e o default now() do banco decide (0147).",

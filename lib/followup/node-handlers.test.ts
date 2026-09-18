@@ -54,6 +54,23 @@ describe("BACKOFF_MS", () => {
   });
 });
 
+describe('typed formula and time conditions', () => {
+  const edges = [edge({ source: 'n1', target: 'yes', condition: { type: 'cond_result', value: true } }), edge({ source: 'n1', target: 'no', condition: { type: 'cond_result', value: false } })];
+  it.each([true, false])('compares a boolean variable without string coercion (%s)', value => {
+    const node: FlowNode = { id: 'n1', type: 'condition', label: 'Goal', position: { x: 0, y: 0 }, config: {
+      combinator: 'and', checks: [{ field: 'formula', op: 'eq', value: true, expression: { kind: 'variable', key: 'goal' } }],
+    } };
+    expect(processNode({ node, edges, enrollment: enrollment(), lead: lead({ variables: { goal: value } }), clock })).toMatchObject({ kind: 'advance', next_node_id: value ? 'yes' : 'no' });
+  });
+  it('routes business hours using the engine clock', () => {
+    const node: FlowNode = { id: 'n1', type: 'condition', label: 'Opening hours', position: { x: 0, y: 0 }, config: {
+      combinator: 'and', checks: [{ field: 'business_hours', op: 'eq', value: 'open', schedule: { tz: 'UTC', days: ['tue'], start: '09:00', end: '17:00' } }],
+    } };
+    expect(processNode({ node, edges, enrollment: enrollment(), lead: lead(), clock })).toMatchObject({ kind: 'advance', next_node_id: 'yes' });
+    expect(processNode({ node, edges, enrollment: enrollment(), lead: lead(), clock: () => new Date('2026-07-21T18:00:00Z') })).toMatchObject({ kind: 'advance', next_node_id: 'no' });
+  });
+});
+
 describe("selectEdge", () => {
   const edges: FlowEdge[] = [
     edge({ source: "n1", target: "low", condition: { type: "always" }, priority: 0 }),

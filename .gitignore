@@ -143,3 +143,8 @@ backups/
 # commit posterior de remoção não tira o blob.
 .qa-backups/
 *.dump
+
+# Local test diagnostics; not release assets.
+/*-regression-results.json
+/structural-fixed-results.json
+/full-eslint-results.json

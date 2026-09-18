@@ -149,6 +149,7 @@ export function describeNodeConfig(
     }
     case "match_reply": {
       const c = config as ConfigOf<"match_reply">;
+      if (c.answer_format) return `${t("Answer format")}: ${c.answer_format} · ${Math.round(c.grace_timeout_ms / 60_000)} min`;
       return `${c.branches.length} ${t("regras · grace")} ${Math.round(c.grace_timeout_ms / 60_000)}min${
         c.save_to
           ? ` · ${t("grava resposta")}${c.if_exists === "skip" ? ` · ${t("pula se já existir")}` : c.if_exists === "confirm" ? ` · ${t("confirma se já existir")}` : ""}`
@@ -162,7 +163,11 @@ export function describeNodeConfig(
     case "action": {
       const c = config as ConfigOf<"action">;
       if (c.mode === "ai_message") return c.prompt_hint;
-      if (c.mode === "text") return c.body;
+        if (c.mode === "text") return c.body;
+        if (c.mode === 'interactive') return c.body;
+        if (c.mode === 'integration') return c.connection_id ? 'Connected app action' : 'Select a connection';
+        if (c.mode === 'set_variable') return `${c.key} · ${c.value_type}`;
+      if (c.mode === "media") return c.assets.length ? `${c.assets.length} ${c.media_kind} ${t("file(s) ready")}` : t("Select this block to upload a file");
       return t("Template fixo");
     }
     case "end": {

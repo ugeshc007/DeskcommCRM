@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Organization integrations", "subtitle": "Gallery and OAuth management → guarded builder execution; not deployed", "output": "integration-execution.html", "quality_profile": "standard" },
+  "lanes": [
+    { "id": "contract", "label": "Execution contract" },
+    { "id": "storage", "label": "Organization-isolated storage" },
+    { "id": "adapter", "label": "Adapter boundary" }
+  ],
+  "mainPath": ["executor", "store", "claim", "adapter"],
+  "nodes": [
+    { "id": "management", "lane": "contract", "col": 0, "type": "service", "label": "Gallery / lifecycle / OAuth", "sublabel": "Current admin + revision CAS; includes Page credential setup, not messaging activation" },
+    { "id": "executor", "lane": "contract", "col": 1, "type": "service", "label": "Follow-up worker → executeIntegration", "sublabel": "Service boundary; mapped input; Success/Error paths" },
+    { "id": "store", "lane": "storage", "col": 2, "type": "lib", "label": "Supabase / PostgreSQL stores", "sublabel": "Explicit organization filters" },
+    { "id": "claim", "lane": "storage", "col": 3, "type": "database", "label": "integration_executions / claim + finish RPCs", "sublabel": "Unique org/key, lease CAS, no blind reclaim" },
+    { "id": "vault", "lane": "storage", "col": 3, "type": "database", "label": "integration_credentials + vault.ts", "sublabel": "Server-only, AES-GCM org/connection/revision AAD" },
+    { "id": "adapter", "lane": "adapter", "col": 4, "type": "service", "label": "Webhook / data / sales adapters", "sublabel": "DNS-pinned request; bounded payload; stable dedup key" },
+    { "id": "variable", "lane": "storage", "col": 5, "type": "database", "label": "Enrollment session variable", "sublabel": "Selected scalar only; atomic step and variable update" },
+    { "id": "inbound", "lane": "adapter", "col": 0, "type": "service", "label": "Signed inbound / Stripe checkout", "sublabel": "Raw-body HMAC + timestamp; connection-owned payment link" }
+  ],
+  "edges": [
+    { "id": "e0", "from": "management", "to": "vault", "label": "encrypted save, rotate or delete; never return credentials" },
+    { "id": "e8", "from": "claim", "to": "management", "label": "redacted execution history for operator review" },
+    { "id": "e1", "from": "executor", "to": "store", "label": "validate identity and request claim" },
+    { "id": "e2", "from": "store", "to": "claim", "label": "atomic claim / projected result" },
+    { "id": "e3", "from": "store", "to": "vault", "label": "active connection + matching revision required" },
+    { "id": "e4", "from": "vault", "to": "adapter", "label": "credential passed only through callback" },
+    { "id": "e5", "from": "claim", "to": "adapter", "label": "only the acquired lease may execute" },
+    { "id": "e6", "from": "adapter", "to": "executor", "label": "schema-projected result or controlled failure" },
+    { "id": "e7", "from": "claim", "to": "executor", "label": "replay or block duplicate; indeterminate cannot resend" },
+    { "id": "e9", "from": "executor", "to": "variable", "label": "successful projected output; organization-scoped atomic update" },
+    { "id": "e10", "from": "variable", "to": "executor", "label": "later node expressions read bounded typed session data" },
+    { "id": "e11", "from": "inbound", "to": "claim", "label": "connection-scoped event ID; immutable bounded projection" },
+    { "id": "e12", "from": "vault", "to": "inbound", "label": "active connection signing secret; fail closed" },
+    { "id": "e13", "from": "claim", "to": "executor", "label": "read_received_event projects one field for same org/connection" }
+  ]
+}

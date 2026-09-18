@@ -24076,103 +24076,94 @@ comment on table public.organization_billing_events is 'Histórico append-only d
 notify pgrst, 'reload schema';
 
 -- ---- comando transacional do ledger SaaS (migration 0240) ----
-create or replace function public.fn_set_organization_subscription(p_actor uuid,p_organization_id uuid,p_idempotency_key uuid,p_request jsonb)
-returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare v_existing public.organization_billing_events%rowtype; v_before public.organization_subscriptions%rowtype; v_after public.organization_subscriptions%rowtype; v_event_type text;
+create or replace function public.fn_set_organization_subscription(
+  p_actor uuid,
+  p_organization_id uuid,
+  p_idempotency_key uuid,
+  p_request jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_existing public.organization_billing_events%rowtype;
+  v_before public.organization_subscriptions%rowtype;
+  v_after public.organization_subscriptions%rowtype;
+  v_event_type text;
 begin
-  if p_actor is null or p_organization_id is null or p_idempotency_key is null or jsonb_typeof(p_request)<>'object' then raise exception 'saas_subscription_invalid_arguments' using errcode='22023'; end if;
-  if not exists(select 1 from public.platform_admins where user_id=p_actor and revoked_at is null and scope='full') then raise exception 'saas_subscription_forbidden' using errcode='42501'; end if;
-  if not exists(select 1 from public.organizations where id=p_organization_id) then raise exception 'saas_subscription_org_not_found' using errcode='P0002'; end if;
-  if (p_request-array['plan_code','status','billing_provider','external_customer_ref','external_subscription_ref','trial_ends_at','current_period_start','current_period_end','cancel_at_period_end','limits']::text[])<>'{}'::jsonb then raise exception 'saas_subscription_unknown_field' using errcode='22023'; end if;
-  select * into v_existing from public.organization_billing_events where organization_id=p_organization_id and idempotency_key=p_idempotency_key;
-  if found then select * into v_after from public.organization_subscriptions where id=v_existing.subscription_id; return to_jsonb(v_after)||jsonb_build_object('created',false,'replayed',true); end if;
-  select * into v_before from public.organization_subscriptions where organization_id=p_organization_id for update;
-  v_event_type:=case when found then 'subscription_updated' else 'subscription_created' end;
-  insert into public.organization_subscriptions(organization_id,plan_code,status,billing_provider,external_customer_ref,external_subscription_ref,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,limits)
-  values(p_organization_id,p_request->>'plan_code',p_request->>'status',coalesce(nullif(p_request->>'billing_provider',''),'manual'),nullif(p_request->>'external_customer_ref',''),nullif(p_request->>'external_subscription_ref',''),nullif(p_request->>'trial_ends_at','')::timestamptz,nullif(p_request->>'current_period_start','')::timestamptz,nullif(p_request->>'current_period_end','')::timestamptz,coalesce((p_request->>'cancel_at_period_end')::boolean,false),coalesce(p_request->'limits','{}'::jsonb))
-  on conflict(organization_id) do update set plan_code=excluded.plan_code,status=excluded.status,billing_provider=excluded.billing_provider,external_customer_ref=excluded.external_customer_ref,external_subscription_ref=excluded.external_subscription_ref,trial_ends_at=excluded.trial_ends_at,current_period_start=excluded.current_period_start,current_period_end=excluded.current_period_end,cancel_at_period_end=excluded.cancel_at_period_end,limits=excluded.limits,revision=public.organization_subscriptions.revision+1 returning * into v_after;
-  insert into public.organization_billing_events(organization_id,subscription_id,event_type,billing_provider,idempotency_key,actor_user_id,previous_status,new_status,summary)
-  values(p_organization_id,v_after.id,v_event_type,v_after.billing_provider,p_idempotency_key,p_actor,v_before.status,v_after.status,jsonb_build_object('plan_code',v_after.plan_code,'revision',v_after.revision));
-  return to_jsonb(v_after)||jsonb_build_object('created',v_event_type='subscription_created','replayed',false);
-end; $$;
+  if p_actor is null or p_organization_id is null or p_idempotency_key is null
+     or jsonb_typeof(p_request) <> 'object' then
+    raise exception 'saas_subscription_invalid_arguments' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.platform_admins
+     where user_id = p_actor and revoked_at is null and scope = 'full'
+  ) then
+    raise exception 'saas_subscription_forbidden' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.organizations where id = p_organization_id) then
+    raise exception 'saas_subscription_org_not_found' using errcode = 'P0002';
+  end if;
+  if (p_request - array['plan_code','status','billing_provider','external_customer_ref',
+      'external_subscription_ref','trial_ends_at','current_period_start','current_period_end',
+      'cancel_at_period_end','limits']::text[]) <> '{}'::jsonb then
+    raise exception 'saas_subscription_unknown_field' using errcode = '22023';
+  end if;
+
+  select * into v_existing from public.organization_billing_events
+   where organization_id = p_organization_id and idempotency_key = p_idempotency_key;
+  if found then
+    select * into v_after from public.organization_subscriptions where id = v_existing.subscription_id;
+    return to_jsonb(v_after) || jsonb_build_object('created', false, 'replayed', true);
+  end if;
+
+  select * into v_before from public.organization_subscriptions
+   where organization_id = p_organization_id for update;
+  v_event_type := case when found then 'subscription_updated' else 'subscription_created' end;
+
+  insert into public.organization_subscriptions (
+    organization_id, plan_code, status, billing_provider, external_customer_ref,
+    external_subscription_ref, trial_ends_at, current_period_start, current_period_end,
+    cancel_at_period_end, limits
+  ) values (
+    p_organization_id, p_request->>'plan_code', p_request->>'status',
+    coalesce(nullif(p_request->>'billing_provider',''), 'manual'),
+    nullif(p_request->>'external_customer_ref',''), nullif(p_request->>'external_subscription_ref',''),
+    nullif(p_request->>'trial_ends_at','')::timestamptz,
+    nullif(p_request->>'current_period_start','')::timestamptz,
+    nullif(p_request->>'current_period_end','')::timestamptz,
+    coalesce((p_request->>'cancel_at_period_end')::boolean, false),
+    coalesce(p_request->'limits', '{}'::jsonb)
+  )
+  on conflict (organization_id) do update set
+    plan_code = excluded.plan_code, status = excluded.status,
+    billing_provider = excluded.billing_provider,
+    external_customer_ref = excluded.external_customer_ref,
+    external_subscription_ref = excluded.external_subscription_ref,
+    trial_ends_at = excluded.trial_ends_at,
+    current_period_start = excluded.current_period_start,
+    current_period_end = excluded.current_period_end,
+    cancel_at_period_end = excluded.cancel_at_period_end,
+    limits = excluded.limits,
+    revision = public.organization_subscriptions.revision + 1
+  returning * into v_after;
+
+  insert into public.organization_billing_events (
+    organization_id, subscription_id, event_type, billing_provider,
+    idempotency_key, actor_user_id, previous_status, new_status, summary
+  ) values (
+    p_organization_id, v_after.id, v_event_type, v_after.billing_provider,
+    p_idempotency_key, p_actor, v_before.status, v_after.status,
+    jsonb_build_object('plan_code', v_after.plan_code, 'revision', v_after.revision)
+  );
+  return to_jsonb(v_after) || jsonb_build_object('created', v_event_type = 'subscription_created', 'replayed', false);
+end;
+$$;
 revoke execute on function public.fn_set_organization_subscription(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.fn_set_organization_subscription(uuid,uuid,uuid,jsonb) to service_role;
 notify pgrst, 'reload schema';
 
--- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
---
--- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
-
--- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
--- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
---
--- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
--- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
--- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
--- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
--- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
---
--- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
--- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
--- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
---
--- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
--- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
--- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
--- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
---
--- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
--- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
--- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
--- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
-do $$
-declare
-  f record;
-  tinha_auth boolean;
-  tinha_service boolean;
-begin
-  if to_regrole('anon') is null then
-    return;
-  end if;
-
-  for f in
-    select p.oid, p.oid::regprocedure as assinatura
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
-       and p.prosecdef
-  loop
-    tinha_auth := to_regrole('authenticated') is not null
-                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
-    tinha_service := to_regrole('service_role') is not null
-                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
-
-    execute format('revoke execute on function %s from public, anon', f.assinatura);
-
-    if tinha_auth then
-      execute format('grant execute on function %s to authenticated', f.assinatura);
-    end if;
-    if tinha_service then
-      execute format('grant execute on function %s to service_role', f.assinatura);
-    end if;
-  end loop;
-end $$;
-
--- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
--- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
--- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
--- e o alvo de cada linha é o valor que um install fresco produz, medido.
-revoke execute on function public.fn_audit_log_row() from authenticated;
-revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
-revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
-revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
-revoke execute on function public.fn_update_budget_consumption() from authenticated;
-
-grant execute on function public.fn_audit_log_row() to service_role;
-grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
-grant execute on function public.fn_encrypt_oauth(text) to service_role;
-grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
-grant execute on function public.fn_update_budget_consumption() to service_role;
 -- BEGIN APPEND 0241: SaaS provider events
 -- Ingestão transacional e idempotente de eventos normalizados de billing.
 -- O tenant é resolvido pela referência externa já vinculada pelo platform
@@ -24290,3 +24281,337 @@ drop trigger if exists trg_platform_meta_webhook_updated_at on public.platform_m
 create trigger trg_platform_meta_webhook_updated_at
   before update on public.platform_meta_webhook
   for each row execute function public.fn_set_updated_at();
+
+-- ---- Sessão tipada do construtor (migration 0265) ----
+-- Sessão tipada pertence ao enrollment; nenhum valor entra no evento de auditoria.
+alter table public.followup_enrollments add column if not exists variables jsonb not null default '{}'::jsonb;
+
+create or replace function public.fn_guard_followup_variables()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ if current_setting('role',true) in ('anon','authenticated') and
+   ((tg_op='INSERT' and new.variables <> '{}'::jsonb) or (tg_op='UPDATE' and new.variables is distinct from old.variables)) then
+   raise exception 'session_variables_server_only' using errcode='42501';
+ end if;
+ if jsonb_typeof(new.variables) is distinct from 'object' or octet_length(new.variables::text)>32768 then
+   raise exception 'invalid_session_variables' using errcode='22023';
+ end if;
+ return new;
+end; $$;
+revoke all on function public.fn_guard_followup_variables() from public,anon,authenticated;
+drop trigger if exists trg_guard_followup_variables on public.followup_enrollments;
+create trigger trg_guard_followup_variables before insert or update on public.followup_enrollments
+ for each row execute function public.fn_guard_followup_variables();
+
+create or replace function public.fn_followup_set_variable(
+ p_org uuid,p_id uuid,p_revision bigint,p_node text,p_next text,p_key text,p_type text,p_value jsonb)
+returns bigint language plpgsql security definer set search_path=public as $$
+declare current public.followup_enrollments; contact uuid; next_variables jsonb; changed bigint; boundary jsonb;
+begin
+ select contact_id into contact from public.followup_enrollments where organization_id=p_org and id=p_id;
+ if not found then raise exception 'followup_stale' using errcode='40001'; end if;
+ perform public.fn_service_lock(p_org,contact);
+ select * into current from public.followup_enrollments where organization_id=p_org and id=p_id for update;
+ boundary:=public.fn_service_boundary(p_org,current.conversation_id);
+ if current.service_boundary is null or boundary is null or not (boundary @> current.service_boundary)
+   or boundary->>'status' in ('closed','resolved','archived') or boundary->>'demanda_fechada_em' is not null then
+   raise exception 'followup_stale' using errcode='40001'; end if;
+ if current.revision is distinct from p_revision or current.current_node_id is distinct from p_node
+   or current.status not in ('active','waiting_reply') then raise exception 'followup_stale' using errcode='40001'; end if;
+ if p_key is null or p_key !~ '^[a-zA-Z][a-zA-Z0-9_]{0,59}$'
+   or lower(p_key) in ('constructor','prototype','password','secret','token','api_key')
+   or p_type is null or p_type not in ('string','number','boolean')
+   or p_value is null or jsonb_typeof(p_value) is distinct from p_type or octet_length(p_value::text)>8000
+   or (p_type='string' and char_length(p_value #>> '{}')>2000) then
+   raise exception 'invalid_variable' using errcode='22023'; end if;
+ if current.variables ? p_key and current.variables->p_key->>'type' is distinct from p_type then
+   raise exception 'variable_type_mismatch' using errcode='22023'; end if;
+ if p_next is null or not exists (
+   select 1 from public.followup_flow_versions v, jsonb_array_elements(v.graph->'nodes') n
+   where v.organization_id=p_org and v.id=current.version_id and n->>'id'=p_next
+ ) then raise exception 'invalid_next_node' using errcode='22023'; end if;
+ if not exists (
+   select 1 from public.followup_flow_versions v, jsonb_array_elements(v.graph->'edges') e
+   where v.organization_id=p_org and v.id=current.version_id and e->>'source'=p_node and e->>'target'=p_next
+ ) then raise exception 'invalid_next_edge' using errcode='22023'; end if;
+ next_variables:=current.variables||jsonb_build_object(p_key,jsonb_build_object('type',p_type,'value',p_value));
+ if (select count(*) from jsonb_object_keys(next_variables))>50 or octet_length(next_variables::text)>32768 then
+   raise exception 'variable_limit_exceeded' using errcode='22023'; end if;
+ update public.followup_enrollments set variables=next_variables where organization_id=p_org and id=p_id returning revision into changed;
+ return public.fn_followup_apply_step(p_org,p_id,changed,
+   jsonb_build_object('current_node_id',p_next,'status','active','next_eval_at',now(),'claimed_until',null,'steps_taken',current.steps_taken+1),
+   jsonb_build_object('node_id',p_node,'event_type','variable_set','idempotency_key',p_node||':'||current.steps_taken,
+     'payload',jsonb_build_object('key',p_key,'value_type',p_type)));
+end; $$;
+revoke all on function public.fn_followup_set_variable(uuid,uuid,bigint,text,text,text,text,jsonb) from public,anon,authenticated;
+grant execute on function public.fn_followup_set_variable(uuid,uuid,bigint,text,text,text,text,jsonb) to service_role;
+notify pgrst,'reload schema';
+
+-- ---- integration execution ledger (migration 0275) ----
+-- Fundação compartilhada de integrações (núcleo): nenhuma conta/provedor é ativado.
+-- Segredos e resultados são server-only; RLS não substitui REVOKE do default ACL.
+create table if not exists public.integration_connections (
+ id uuid primary key default gen_random_uuid(),
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ provider text not null check (provider ~ '^[a-z][a-z0-9_]{0,63}$'),
+ label text not null check (char_length(label) between 1 and 120),
+ revision integer not null default 1 check (revision > 0),
+ active boolean not null default false,
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now(),
+ unique (organization_id,id)
+);
+create table if not exists public.integration_credentials (
+ connection_id uuid primary key,
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ revision integer not null check (revision > 0),
+ ciphertext bytea not null check (octet_length(ciphertext) between 1 and 65536),
+ iv bytea not null check (octet_length(iv)=12),
+ tag bytea not null check (octet_length(tag)=16),
+ foreign key (organization_id,connection_id) references public.integration_connections(organization_id,id) on delete cascade
+);
+create table if not exists public.integration_executions (
+ id uuid primary key default gen_random_uuid(),
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ connection_id uuid not null,
+ connection_revision integer not null check (connection_revision > 0),
+ execution_key text not null check (char_length(execution_key) between 1 and 200),
+ fingerprint text not null check (fingerprint ~ '^[a-f0-9]{64}$'),
+ action text not null check (action ~ '^[a-z][a-z0-9_]{0,63}$'),
+ retry_class text not null check (retry_class in ('read_only','provider_idempotent','never')),
+ lease uuid not null default gen_random_uuid(),
+ status text not null default 'pending' check (status in ('pending','succeeded','failed','indeterminate')),
+ failure_code text check (failure_code in ('connection_unavailable','provider_rejected','invalid_output','reconciliation_required')),
+ output jsonb check (octet_length(output::text)<=262144),
+ created_at timestamptz not null default now(),
+ finished_at timestamptz,
+ unique (organization_id,execution_key),
+ foreign key (organization_id,connection_id) references public.integration_connections(organization_id,id) on delete cascade,
+ check (
+  (status='pending' and failure_code is null and output is null and finished_at is null) or
+  (status='succeeded' and failure_code is null and output is not null and finished_at is not null) or
+  (status in ('failed','indeterminate') and failure_code is not null and output is null and finished_at is not null)
+ )
+);
+create index if not exists integration_executions_history on public.integration_executions(organization_id,created_at desc,id);
+alter table public.integration_connections enable row level security;
+alter table public.integration_credentials enable row level security;
+alter table public.integration_executions enable row level security;
+drop policy if exists tenant_isolation_integration_connections_all on public.integration_connections;
+create policy tenant_isolation_integration_connections_all on public.integration_connections for select to authenticated
+ using (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager'));
+-- Nenhuma policy de browser para cofre/ledger. Histórico expõe projeção por rota guardada.
+revoke all on public.integration_connections,public.integration_credentials,public.integration_executions from public,anon,authenticated,service_role;
+grant select on public.integration_connections to authenticated;
+grant select,insert,update on public.integration_connections to service_role;
+grant select,insert,update,delete on public.integration_credentials to service_role;
+grant select on public.integration_executions to service_role;
+
+create or replace function public.fn_integration_claim(
+ p_org uuid,p_key text,p_connection uuid,p_revision integer,p_action text,p_fingerprint text,p_retry text
+) returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare v public.integration_executions%rowtype; acquired uuid;
+begin
+ if p_org is null or p_connection is null or p_revision is null or p_revision<1
+  or p_key is null or char_length(p_key) not between 1 and 200
+  or p_action is null or p_action !~ '^[a-z][a-z0-9_]{0,63}$'
+  or p_fingerprint is null or p_fingerprint !~ '^[a-f0-9]{64}$'
+  or p_retry is null or p_retry not in ('read_only','provider_idempotent','never')
+ then raise exception 'integration_invalid_input' using errcode='22023'; end if;
+ perform 1 from public.integration_connections
+  where organization_id=p_org and id=p_connection and revision=p_revision and active for share;
+ if not found then return jsonb_build_object('kind','failed','code','connection_unavailable'); end if;
+ insert into public.integration_executions(organization_id,execution_key,connection_id,connection_revision,action,fingerprint,retry_class)
+ values(p_org,p_key,p_connection,p_revision,p_action,p_fingerprint,p_retry)
+ on conflict(organization_id,execution_key) do nothing returning lease into acquired;
+ if acquired is not null then return jsonb_build_object('kind','acquired','lease',acquired); end if;
+ select * into strict v from public.integration_executions where organization_id=p_org and execution_key=p_key for update;
+ if v.fingerprint<>p_fingerprint or v.connection_id<>p_connection or v.connection_revision<>p_revision
+  or v.action<>p_action or v.retry_class<>p_retry then return jsonb_build_object('kind','conflict'); end if;
+ if v.status='succeeded' then return jsonb_build_object('kind','completed','output',v.output); end if;
+ if v.status='failed' then return jsonb_build_object('kind','failed','code',v.failure_code); end if;
+ if v.status='indeterminate' then return jsonb_build_object('kind','indeterminate'); end if;
+ -- Não expira/reclama lease: timeout não prova que o efeito externo não ocorreu.
+ return jsonb_build_object('kind','busy');
+end; $$;
+revoke all on function public.fn_integration_claim(uuid,text,uuid,integer,text,text,text) from public,anon,authenticated;
+grant execute on function public.fn_integration_claim(uuid,text,uuid,integer,text,text,text) to service_role;
+
+create or replace function public.fn_integration_finish(p_org uuid,p_key text,p_lease uuid,p_status text,p_output jsonb,p_code text)
+ returns void language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ if p_org is null or p_key is null or p_lease is null or p_status is null
+  or p_status not in ('succeeded','failed','indeterminate')
+  or (p_status='succeeded' and (p_output is null or p_code is not null))
+  or (p_status in ('failed','indeterminate') and (p_output is not null or p_code is null
+    or p_code not in ('connection_unavailable','provider_rejected','invalid_output','reconciliation_required')))
+ then raise exception 'integration_invalid_result' using errcode='22023'; end if;
+ update public.integration_executions set status=p_status,output=p_output,failure_code=p_code,finished_at=now()
+ where organization_id=p_org and execution_key=p_key and lease=p_lease and status='pending';
+ if not found then raise exception 'integration_execution_conflict' using errcode='40001'; end if;
+end; $$;
+revoke all on function public.fn_integration_finish(uuid,text,uuid,text,jsonb,text) from public,anon,authenticated;
+grant execute on function public.fn_integration_finish(uuid,text,uuid,text,jsonb,text) to service_role;
+notify pgrst,'reload schema';
+
+-- ---- integration connection management (migration 0278) ----
+-- Controle de conexões: escrita apenas por RPC server-only, ator atual revalidado.
+alter table public.integration_connections add column if not exists auth_kind text not null default 'api_key' check(auth_kind in ('api_key','oauth'));
+alter table public.integration_connections add column if not exists validated_at timestamptz;
+alter table public.integration_connections add column if not exists failure_code text check(failure_code in ('validation_failed','reconnect_required'));
+create table if not exists public.integration_oauth_states (
+ state_hash text primary key check(state_hash ~ '^[a-f0-9]{64}$'),
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ connection_id uuid not null,
+ actor_user_id uuid not null references auth.users(id) on delete cascade,
+ revision integer not null check(revision>0),
+ browser_hash text not null check(browser_hash ~ '^[a-f0-9]{64}$'),
+ verifier jsonb not null,
+ expires_at timestamptz not null,
+ foreign key(organization_id,connection_id) references public.integration_connections(organization_id,id) on delete cascade
+);
+alter table public.integration_oauth_states enable row level security;
+revoke all on public.integration_oauth_states from public,anon,authenticated,service_role;
+grant select,insert,delete on public.integration_oauth_states to service_role;
+
+create or replace function public.fn_integration_manage(
+ p_org uuid,p_actor uuid,p_id uuid,p_revision integer,p_provider text,p_label text,p_auth_kind text,p_op text,
+ p_ciphertext bytea default null,p_iv bytea default null,p_tag bytea default null,p_verified boolean default false
+) returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare c public.integration_connections%rowtype;
+begin
+ if p_actor is null or not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_actor and role='admin' and revoked_at is null and accepted_at is not null)
+ then raise exception 'integration_forbidden' using errcode='42501'; end if;
+ if p_id is null or p_org is null or p_revision is null or p_revision<0 or p_op is null or p_op not in ('save','disconnect','test')
+ then raise exception 'integration_invalid_input' using errcode='22023'; end if;
+ if p_revision=0 then
+  if p_op<>'save' then raise exception 'integration_conflict' using errcode='40001'; end if;
+  insert into public.integration_connections(id,organization_id,provider,label,auth_kind)
+   values(p_id,p_org,p_provider,p_label,p_auth_kind) on conflict(id) do nothing;
+  if not found then raise exception 'integration_conflict' using errcode='40001'; end if;
+ end if;
+ select * into c from public.integration_connections where organization_id=p_org and id=p_id for update;
+ if not found or (p_revision<>0 and c.revision<>p_revision) then raise exception 'integration_conflict' using errcode='40001'; end if;
+ if p_op='save' then
+  if p_provider is distinct from c.provider or p_auth_kind is distinct from c.auth_kind or p_label is null or char_length(trim(p_label)) not between 1 and 120
+   then raise exception 'integration_invalid_input' using errcode='22023'; end if;
+  if p_ciphertext is null and (c.auth_kind<>'oauth' or p_revision<>0 or p_verified)
+   then raise exception 'integration_missing_credential' using errcode='22023'; end if;
+  update public.integration_connections set label=p_label, revision=case when p_revision=0 then 1 else revision+1 end,
+   active=coalesce(p_verified,false),validated_at=case when p_verified then now() else null end,failure_code=null,updated_at=now()
+   where organization_id=p_org and id=p_id returning * into c;
+  if p_ciphertext is not null then
+   insert into public.integration_credentials(organization_id,connection_id,revision,ciphertext,iv,tag)
+    values(p_org,p_id,c.revision,p_ciphertext,p_iv,p_tag)
+   on conflict(connection_id) do update set revision=excluded.revision,ciphertext=excluded.ciphertext,iv=excluded.iv,tag=excluded.tag
+    where integration_credentials.organization_id=p_org;
+  end if;
+ elsif p_op='disconnect' then
+  delete from public.integration_credentials where organization_id=p_org and connection_id=p_id;
+  delete from public.integration_oauth_states where organization_id=p_org and connection_id=p_id;
+  update public.integration_connections set active=false,revision=revision+1,validated_at=null,failure_code='reconnect_required',updated_at=now()
+   where organization_id=p_org and id=p_id returning * into c;
+ else
+  if not exists(select 1 from public.integration_credentials where organization_id=p_org and connection_id=p_id and revision=c.revision)
+   then raise exception 'integration_missing_credential' using errcode='22023'; end if;
+  update public.integration_connections set active=coalesce(p_verified,false),validated_at=case when p_verified then now() else null end,
+   failure_code=case when p_verified then null else 'validation_failed' end,updated_at=now()
+   where organization_id=p_org and id=p_id returning * into c;
+ end if;
+ return to_jsonb(c);
+end; $$;
+revoke all on function public.fn_integration_manage(uuid,uuid,uuid,integer,text,text,text,text,bytea,bytea,bytea,boolean) from public,anon,authenticated;
+grant execute on function public.fn_integration_manage(uuid,uuid,uuid,integer,text,text,text,text,bytea,bytea,bytea,boolean) to service_role;
+-- API/worker não podem contornar CAS por UPDATE direto.
+revoke insert,update on public.integration_connections from service_role;
+revoke insert,update,delete on public.integration_credentials from service_role;
+
+create or replace function public.fn_integration_oauth_consume(p_state text,p_browser text)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare s public.integration_oauth_states%rowtype;
+begin
+ delete from public.integration_oauth_states where state_hash=p_state and browser_hash=p_browser and expires_at>now() returning * into s;
+ if not found then return null; end if;
+ if not exists(select 1 from public.user_organizations where organization_id=s.organization_id and user_id=s.actor_user_id and role='admin' and revoked_at is null and accepted_at is not null)
+  or not exists(select 1 from public.integration_connections where organization_id=s.organization_id and id=s.connection_id and revision=s.revision and auth_kind='oauth')
+ then return null; end if;
+ return to_jsonb(s);
+end; $$;
+revoke all on function public.fn_integration_oauth_consume(text,text) from public,anon,authenticated;
+grant execute on function public.fn_integration_oauth_consume(text,text) to service_role;
+notify pgrst,'reload schema';
+
+-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
+--
+-- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
+
+-- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
+-- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
+--
+-- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
+-- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
+-- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
+-- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
+-- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
+--
+-- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
+-- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
+-- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
+--
+-- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
+-- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
+-- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
+-- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
+--
+-- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
+-- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
+-- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
+-- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
+do $$
+declare
+  f record;
+  tinha_auth boolean;
+  tinha_service boolean;
+begin
+  if to_regrole('anon') is null then
+    return;
+  end if;
+
+  for f in
+    select p.oid, p.oid::regprocedure as assinatura
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prosecdef
+  loop
+    tinha_auth := to_regrole('authenticated') is not null
+                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
+    tinha_service := to_regrole('service_role') is not null
+                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
+
+    execute format('revoke execute on function %s from public, anon', f.assinatura);
+
+    if tinha_auth then
+      execute format('grant execute on function %s to authenticated', f.assinatura);
+    end if;
+    if tinha_service then
+      execute format('grant execute on function %s to service_role', f.assinatura);
+    end if;
+  end loop;
+end $$;
+
+-- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
+-- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
+-- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
+-- e o alvo de cada linha é o valor que um install fresco produz, medido.
+revoke execute on function public.fn_audit_log_row() from authenticated;
+revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
+revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
+revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
+revoke execute on function public.fn_update_budget_consumption() from authenticated;
+
+grant execute on function public.fn_audit_log_row() to service_role;
+grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
+grant execute on function public.fn_encrypt_oauth(text) to service_role;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
+grant execute on function public.fn_update_budget_consumption() to service_role;

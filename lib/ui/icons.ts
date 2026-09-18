@@ -91,6 +91,8 @@ export {
   MonitorPlay,
   // conversation
   ChatCircle,
+  EnvelopeSimple,
+  Hash,
   Phone,
   PhoneIncoming,
   PhoneOutgoing,

@@ -1,5 +1,12 @@
 # Migration Manifest — DeskcommCRM
 
+## Local development — not deployed
+
+| Timestamp | Migration | Purpose |
+|---|---|---|
+| `20260918020000` | `0278_integration_connection_management` | Atomic actor-checked connection save/test/disconnect, revision CAS and one-use browser-bound OAuth state. |
+| `20260918002000` | `0275_integration_execution_ledger` | Shared organization-scoped connection metadata, server-only credential vault and atomic execution ledger. No provider enabled. Number follows upstream maximum 0274 checked on 2026-09-17. |
+
 Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgres 17) via Supabase MCP on 2026-04-28.
 
 ## Nota — renomeação de 4 prefixos em 2026-08-05 (issue #143)
@@ -45,6 +52,7 @@ aplica.
 
 | Version | Name | Description |
 |---|---|---|
+| `20260918001000` | `0265_followup_session_variables` | Variáveis tipadas por enrollment; escrita server-only, limitada, org-scoped, atômica com avanço e evento sem valores pessoais. |
 | `20260428195354` | `0001_platform_base` | organizations, user_organizations, platform_admins, api_tokens, api_audit_log, user_recovery_codes, idempotency_keys + RLS helpers (fn_user_org_ids, fn_is_platform_admin, fn_user_role_in_org, fn_role_at_least) |
 | `20260428195513` | `0002_event_log_and_compat` | event_log + emit_event/fn_log_event helpers + compat aliases (fn_set_updated_at, fn_user_role_in returning int) |
 | `20260428195708` | `0003_customer_360` | contacts (CPF encrypted), crm_pipelines, crm_stages, crm_leads, crm_lead_activities, crm_lead_links, merge_queue + 5 domain triggers |

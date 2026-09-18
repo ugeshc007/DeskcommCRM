@@ -1,7 +1,34 @@
 import { flowGraphSchema, type FlowGraph, type FlowNode } from "./graph-schema";
+import { createStoreEnquiryFlow } from '@/lib/ecommerce/template';
 
 /** Editor presets use the existing execution contract; no UI-only node types. */
 export const MESSAGE_BLOCKS = [
+  { id: 'integration', title: 'Integration action', description: 'Use an organization connection with success / error branches.', config: {
+    mode: 'integration', action: 'send_event', mappings: { event: {kind:'literal',value:'flow_event'},value:{kind:'literal',value:''} },
+  } },
+  { id: 'variable', title: 'Set variable / formula', description: 'Set a typed session value, score or goal.', config: {
+    mode: 'set_variable', key: 'score', value_type: 'number', expression: { kind: 'literal', value: 0 },
+  } },
+  { id: 'buttons', title: 'Reply buttons', description: 'Offer up to 3 native choices.', config: {
+    mode: 'interactive', body: 'How can we help you?', interactive: { kind: 'buttons', choices: [
+      { id: 'products', title: 'Products' }, { id: 'support', title: 'Support' },
+    ] },
+  } },
+  { id: 'list', title: 'List menu', description: 'Offer up to 10 choices in a native menu.', config: {
+    mode: 'interactive', body: 'Choose a category.', interactive: { kind: 'list', button_label: 'View options', sections: [
+      { title: 'Categories', rows: [{ id: 'products', title: 'Products' }, { id: 'support', title: 'Support' }] },
+    ] },
+  } },
+  { id: "image", title: "Image", description: "Upload one product photo with a caption.",
+    config: { mode: "media", media_kind: "image", multiple: false, assets: [] } },
+  { id: "images", title: "Multiple images", description: "Upload and order up to 10 photos, sent one at a time.",
+    config: { mode: "media", media_kind: "image", multiple: true, assets: [] } },
+  { id: "video", title: "Video", description: "Upload an MP4 demonstration or product video.",
+    config: { mode: "media", media_kind: "video", multiple: false, assets: [] } },
+  { id: "audio", title: "Audio", description: "Upload an MP3 or OGG audio message.",
+    config: { mode: "media", media_kind: "audio", multiple: false, assets: [] } },
+  { id: "document", title: "Document", description: "Upload a PDF catalogue or information sheet.",
+    config: { mode: "media", media_kind: "document", multiple: false, assets: [] } },
   {
     id: "text",
     title: "Text message",
@@ -33,6 +60,12 @@ export const MESSAGE_BLOCKS = [
 
 export const FLOW_STARTERS = [
   {
+    id: "store-enquiry",
+    title: "Store enquiry",
+    description: "Collect product, quantity, delivery and payment preferences. Requires catalogue and policy setup; does not create orders.",
+    steps: "Welcome → Product → Quantity → Delivery → Payment preference → Review",
+  },
+  {
     id: "welcome",
     title: "Welcome & enquiry",
     description: "Greet a customer and ask what they need.",
@@ -55,6 +88,7 @@ export type FlowStarterId = (typeof FLOW_STARTERS)[number]["id"];
 
 /** Fresh graphs per use. Applying a starter is a local draft edit, never publication. */
 export function createFlowStarter(id: FlowStarterId): FlowGraph {
+  if (id === 'store-enquiry') return createStoreEnquiryFlow();
   const start: FlowNode = {
     id: "trigger-1",
     type: "trigger",

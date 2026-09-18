@@ -1,5 +1,8 @@
 import { assertAgentOperationPg } from '@/lib/ai/agents/operation';
 import type { AgentOperationContext } from '@/lib/ai/agents/operation';
+import type { FlowMediaAsset } from '@/lib/messaging/media/flow-media';
+import type { InteractiveMessage } from '@/lib/messaging/interactive';
+import { materializeFlowMedia } from '@/lib/messaging/media/materialize-flow-media';
 import { assertApprovedReplyPg, type ApprovedReplyContext } from '@/lib/ai/replies/delivery';
 import { assertMeetingDeliveryPg, type MeetingDeliveryContext } from '@/lib/agenda/meet-delivery';
 import type { JobClaim } from '../../queue/claim';
@@ -56,6 +59,8 @@ export interface SendMessageInput {
   seq: number;
   conversationId: string;
   body: string;
+  media?: FlowMediaAsset;
+  interactive?: InteractiveMessage;
   /**
    * Presente = envio de TEMPLATE. O `body` continua sendo o texto RENDERIZADO — é
    * ele que entra no hash de idempotência e é ele que os gates de conteúdo avaliaram.
@@ -127,9 +132,13 @@ export async function sendTurnMessage(
     if (policy.body !== input.body || policy.conversation_id !== input.conversationId)
       throw new StaleServiceBoundaryError();
   }
-  return sendWithLedger(pgSendLedger(db), input, async (idempotencyKey, messageId) => {
+  const intent = input.media || input.interactive ? { ...input, body: JSON.stringify([input.body, input.media ?? null, input.interactive ?? null]) } : input;
+  return sendWithLedger(pgSendLedger(db), intent, async (idempotencyKey, messageId) => {
     let message: Message;
     try {
+      const mediaPath = input.media ? await materializeFlowMedia(cfg.supabase, {
+        organizationId: input.tenantId, conversationId: input.conversationId, messageId, asset: input.media,
+      }) : undefined;
       message = await sendMessageHandler(
         cfg.supabase,
         {
@@ -145,7 +154,9 @@ export async function sendTurnMessage(
         },
         {
           conversation_id: input.conversationId,
-          ...(input.template
+          ...(input.media
+            ? { type: input.media.kind, media_storage_path: mediaPath, media_mime: input.media.mime, media_size_bytes: input.media.size_bytes }
+            : input.template
             ? {
                 type: 'template' as const,
                 template_name: input.template.name,
@@ -154,6 +165,7 @@ export async function sendTurnMessage(
               }
             : { type: 'text' as const }),
           body: input.body,
+          interactive: input.interactive,
           metadata: { idempotency_key: idempotencyKey },
         },
       );

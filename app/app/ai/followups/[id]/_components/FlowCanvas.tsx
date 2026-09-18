@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useGraphHistory } from "@/hooks/followup/useGraphHistory";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -44,11 +45,13 @@ import { useFollowupFlow, type FollowupFlowDetailRow } from "@/hooks/followup/us
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { Plus, X } from "@/lib/ui/icons";
+import { Plus, X, ArrowBendUpLeft } from "@/lib/ui/icons";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import { EdgeConfigPanel } from "./EdgeConfigPanel";
 import { NodePalette } from "./NodePalette";
+import { CanvasDeleteControl } from "./CanvasDeleteControl";
 import { PublishBar } from "./PublishBar";
+import { FlowSimulator } from "./FlowSimulator";
 import { NODE_VISUALS } from "./nodes/nodeVisuals";
 import { TriggerNode } from "./nodes/TriggerNode";
 import { WaitNode } from "./nodes/WaitNode";
@@ -64,6 +67,9 @@ import {
   MESSAGE_BLOCKS,
   type FlowStarterId,
 } from "@/lib/followup/builder-library";
+import { createQuestionBlock } from "@/lib/followup/question-presets";
+import { createChoiceReply, choiceBranches } from '@/lib/followup/choice-presets';
+import { actionConfigSchema, matchReplyConfigSchema } from '@/lib/followup/graph-schema';
 
 const EMPTY_GRAPH: FlowGraph = { nodes: [], edges: [] };
 const DND_MIME = "application/x-followup-node-type";
@@ -108,9 +114,34 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const liveGraph = useMemo(() => fromReactFlow(nodes, edges), [nodes, edges]);
   const dirty = useMemo(() => !graphsEqual(liveGraph, savedGraph), [liveGraph, savedGraph]);
+  const restoreGraph = useCallback((graph: FlowGraph) => {
+    const restored = toReactFlow(graph);
+    setNodes(restored.nodes);
+    setEdges(restored.edges);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    nextId.current = Math.max(nextId.current, nextSequenceId(graph.nodes.map((node) => node.id)));
+    nextEdgeId.current = Math.max(nextEdgeId.current, nextSequenceId(graph.edges.map((edge) => edge.id)));
+  }, [setNodes, setEdges]);
+  const history = useGraphHistory(liveGraph, nodes.some((node) => node.dragging), restoreGraph);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    const guardLink = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (link instanceof HTMLAnchorElement && link.target !== "_blank" && link.href !== window.location.href &&
+          !window.confirm(t("You have unsaved changes. Leave without saving?"))) {
+        event.preventDefault(); event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    document.addEventListener("click", guardLink, true);
+    return () => { window.removeEventListener("beforeunload", warn); document.removeEventListener("click", guardLink, true); };
+  }, [dirty, t]);
 
   const markNodeErrors = useCallback(
     (errorsByNode: Record<string, string[]>) => {
@@ -142,8 +173,15 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const updateNodeData = useCallback(
     (id: string, patch: Partial<RFNodeData>) => {
+      const action = actionConfigSchema.safeParse(patch.config);
       setNodes((nds) =>
-        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
+        nds.map((n) => {
+          if (n.id === id) return { ...n, data: { ...n.data, ...patch } };
+          const reply = n.type === 'match_reply' ? matchReplyConfigSchema.safeParse(n.data.config) : null;
+          if (action.success && action.data.mode === 'interactive' && reply?.success && reply.data.choice_source_node_id === id)
+            return { ...n, data: { ...n.data, config: { ...reply.data, branches: choiceBranches(action.data.interactive) } } };
+          return n;
+        }),
       );
     },
     [setNodes],
@@ -240,8 +278,12 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
         data: { label: t(visual.defaultLabel), config: visual.defaultConfig() },
       };
       setNodes((nds) => nds.concat(newNode));
+      setSelectedNodeId(id);
+      setSelectedEdgeId(null);
+      setPaletteOpen(false);
+      requestAnimationFrame(() => requestAnimationFrame(() => { void fitView({ nodes: [{ id }], padding: 0.5, maxZoom: 1, duration: 200 }); }));
     },
-    [setNodes, t],
+    [setNodes, t, fitView],
   );
 
   const onPaletteAdd = useCallback(
@@ -257,23 +299,43 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       const block = MESSAGE_BLOCKS.find((item) => item.id === id);
       if (!block) return;
       const nodeId = `action-${nextId.current++}`;
+      const bottom = Math.max(0, ...nodes.map(n => n.position.y + (n.measured?.height ?? 220)));
+      const at = position ?? { x: 80, y: bottom + 80 };
       setNodes((current) =>
         current.concat({
           id: nodeId,
           type: "action",
-          position: position ?? {
-            x: 80 + (current.length % 4) * 250,
-            y: 80 + Math.floor(current.length / 4) * 150,
-          },
-          data: { label: block.title, config: { ...block.config } },
+          position: at,
+          data: { label: block.title, config: structuredClone(block.config) },
         }),
       );
+      if (block.config.mode === 'interactive') {
+        const reply = toReactFlow(createChoiceReply(nodeId, `match_reply-${nextId.current++}`, `edge-${nextEdgeId.current++}`,
+          block.config.interactive, { x: at.x + 380, y: at.y }));
+        setNodes(current => current.concat(reply.nodes));
+        setEdges(current => current.concat(reply.edges));
+      }
       setSelectedNodeId(nodeId);
       setSelectedEdgeId(null);
       setPaletteOpen(false);
+      requestAnimationFrame(() => requestAnimationFrame(() => { void fitView({ nodes: [{ id: nodeId }], padding: 0.5, maxZoom: 1, duration: 200 }); }));
     },
-    [setNodes],
+    [nodes, setNodes, setEdges, fitView],
   );
+
+  const addQuestionBlock = useCallback((id: string, position?: { x: number; y: number }) => {
+    const ids = { prompt: `action-${nextId.current++}`, reply: `match_reply-${nextId.current++}`, edge: `edge-${nextEdgeId.current++}` };
+    const bottom = Math.max(0, ...nodes.map((node) => node.position.y + (node.measured?.height ?? 220)));
+    const block = createQuestionBlock(id, ids, position ?? { x: 80, y: bottom + 80 });
+    if (!block) return;
+    const mapped = toReactFlow(block);
+    setNodes((current) => current.concat(mapped.nodes));
+    setEdges((current) => current.concat(mapped.edges));
+    setSelectedNodeId(ids.reply);
+    setSelectedEdgeId(null);
+    setPaletteOpen(false);
+    requestAnimationFrame(() => requestAnimationFrame(() => { void fitView({ nodes: mapped.nodes, padding: 0.5, maxZoom: 1, duration: 200 }); }));
+  }, [nodes, setNodes, setEdges, fitView]);
 
   const applyStarter = useCallback(
     (id: FlowStarterId) => {
@@ -308,10 +370,18 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     [setEdges],
   );
 
-  const onDeleteSelection = useCallback(() => {
-    if (selectedNodeId) deleteNode(selectedNodeId);
-    else if (selectedEdgeId) deleteEdge(selectedEdgeId);
-  }, [selectedNodeId, selectedEdgeId, deleteNode, deleteEdge]);
+  const onDeleteSelection = useCallback(() => setDeleteOpen(true), []);
+  const duplicateSelected = () => {
+    if (!selectedNode) return;
+    const id = `${selectedNode.type}-${nextId.current++}`;
+    const clone = structuredClone(toFlowNode(selectedNode));
+    clone.id = id;
+    clone.label = `${clone.label.slice(0, 53)} (copy)`;
+    clone.position = { x: clone.position.x + 60, y: clone.position.y + 80 };
+    setNodes((current) => [...current, ...toReactFlow({ nodes: [clone], edges: [] }).nodes]);
+    setSelectedNodeId(id);
+    requestAnimationFrame(() => requestAnimationFrame(() => { void fitView({ nodes: [{ id }], padding: 0.5, maxZoom: 1, duration: 200 }); }));
+  };
 
   const onAutoFit = useCallback(() => {
     if (nodes.length === 0) return;
@@ -344,6 +414,11 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
     (e: React.DragEvent) => {
       e.preventDefault();
       const messageBlock = e.dataTransfer.getData("application/x-followup-message-block");
+      const questionBlock = e.dataTransfer.getData("application/x-followup-question-block");
+      if (questionBlock) {
+        addQuestionBlock(questionBlock, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+        return;
+      }
       if (messageBlock) {
         addMessageBlock(messageBlock, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
         return;
@@ -353,7 +428,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       addNodeAt(type, position);
     },
-    [screenToFlowPosition, addNodeAt, addMessageBlock],
+    [screenToFlowPosition, addNodeAt, addMessageBlock, addQuestionBlock],
   );
 
   return (
@@ -381,10 +456,17 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
         <li>2. {t("Connect and configure")}</li>
         <li>3. {t("Save, test, then publish")}</li>
       </ol>
+      <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface px-4 py-2" aria-label="Workspace history">
+        <Button type="button" size="sm" variant="secondary" disabled={!history.canUndo} onClick={history.undo}><ArrowBendUpLeft size={16} aria-hidden />{t("Undo")}</Button>
+        <Button type="button" size="sm" variant="secondary" disabled={!history.canRedo} onClick={history.redo}><ArrowBendUpLeft size={16} className="-scale-x-100" aria-hidden />{t("Redo")}</Button>
+        <span role="status" className="text-xs text-text-muted">{dirty ? t("Unsaved draft changes") : t("Draft is saved")}</span>
+        <FlowSimulator graph={liveGraph} />
+      </div>
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <NodePalette
           onAdd={onPaletteAdd}
           onMessage={addMessageBlock}
+          onQuestion={addQuestionBlock}
           onStarter={applyStarter}
           canUseStarter={!nodes.length && !edges.length}
         />
@@ -396,6 +478,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             <NodePalette
               variant="mobile"
               onMessage={addMessageBlock}
+              onQuestion={addQuestionBlock}
               onStarter={applyStarter}
               canUseStarter={!nodes.length && !edges.length}
               onAdd={(type) => {
@@ -424,11 +507,32 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             onPaneClick={onPaneClick}
             defaultEdgeOptions={{ type: "smoothstep" }}
             connectionLineType={ConnectionLineType.SmoothStep}
+            deleteKeyCode={null}
             fitView
           >
             <Background />
             <Controls />
           </ReactFlow>
+          {selectedNode ? (
+            <CanvasDeleteControl
+              key={`block-${selectedNode.id}`}
+              kind="block"
+              label={selectedNode.data.label || t("Block")}
+              onDelete={() => deleteNode(selectedNode.id)}
+              onDuplicate={duplicateSelected}
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+            />
+          ) : selectedEdge ? (
+            <CanvasDeleteControl
+              key={`connection-${selectedEdge.id}`}
+              kind="connection"
+              label={`${selectedEdgeSource?.data.label || t("Block")} → ${selectedEdgeTarget?.data.label || t("Block")}`}
+              onDelete={() => deleteEdge(selectedEdge.id)}
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+            />
+          ) : null}
           {nodes.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
               <section className="pointer-events-auto max-h-full w-full max-w-xl overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-sm">
@@ -504,9 +608,10 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             <div className="flex-1 overflow-y-auto p-4 pt-0 lg:pt-4">
               <NodeConfigPanel
                 key={selectedNode.id}
+                flowId={flowId}
                 node={selectedNode}
                 onChange={(patch) => updateNodeData(selectedNode.id, patch)}
-                onDelete={() => deleteNode(selectedNode.id)}
+                onDelete={onDeleteSelection}
                 ramosLigados={ramosLigadosDoSelecionado}
               />
             </div>
@@ -536,7 +641,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
                 targetNode={selectedEdgeTarget ? toFlowNode(selectedEdgeTarget) : undefined}
                 condition={selectedEdge.data?.condition ?? { type: "always" }}
                 onChange={(condition) => updateEdgeCondition(selectedEdge.id, condition)}
-                onDelete={() => deleteEdge(selectedEdge.id)}
+                onDelete={onDeleteSelection}
               />
             </div>
           </aside>

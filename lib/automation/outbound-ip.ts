@@ -64,6 +64,11 @@ export function ipEhEspecial(ip: string): boolean {
     // IPv4-mapped (::ffff:127.0.0.1) esconde um IPv4 — decide pelo IPv4 embutido.
     const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normal);
     if (mapped?.[1]) return ipEhEspecial(mapped[1]);
+    // Apenas unicast global 2000::/3. Inclui o restante de fe80::/10 e
+    // formas IPv4-mapped hexadecimais que não casam com o padrão acima.
+    if (!/^[23]/.test(normal)) return true;
+    if (normal.startsWith('2002:')) return true; // 6to4 pode encapsular IPv4 privado
+    if (/^2001:(?:0{1,4}:|:)/.test(normal)) return true; // Teredo / tradução
     if (normal === "::" || normal === "::1") return true;
     if (normal.startsWith("fe80")) return true; // link-local
     if (/^f[cd]/.test(normal)) return true; // ULA fc00::/7

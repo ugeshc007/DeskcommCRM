@@ -33,11 +33,13 @@
  */
 import type { Idioma } from "./idiomas";
 import { DICIONARIO_EN } from "./dicionario.en";
+import { BUILDER_ES } from "./builder";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 const DICIONARIO_BASE: Traducoes = {
+  "Texto fixo": { es: "Texto fijo" },
   "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.": {
     es: "Meta validó el número, pero no pudo activar la entrega de mensajes para esta cuenta.",
   },
@@ -8672,12 +8674,13 @@ const DICIONARIO_BASE: Traducoes = {
   "Valor do negócio": { es: "Valor del negocio" },
 };
 
-export const DICIONARIO: Traducoes = Object.fromEntries(
-  Object.entries(DICIONARIO_BASE).map(([texto, traducoes]) => [
+export const DICIONARIO: Traducoes = Object.fromEntries([
+  ...Object.entries(DICIONARIO_BASE).map(([texto, traducoes]) => [
     texto,
     { ...traducoes, en: DICIONARIO_EN[texto] },
   ]),
-);
+  ...Object.entries(BUILDER_ES).map(([texto, es]) => [texto, { es, en: texto }]),
+]);
 
 /**
  * Traduz, ou devolve o próprio texto.

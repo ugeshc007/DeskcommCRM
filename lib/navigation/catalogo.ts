@@ -412,6 +412,15 @@ export const NAV_CATALOG = [
 
   // ---- Canais — por onde as mensagens entram e saem ----
   {
+    href: "/app/integrations",
+    label: "Integrations",
+    description: "Connect organization apps, manage credentials and inspect execution history.",
+    icon: "PlugsConnected",
+    group: "canais",
+    minRole: "manager",
+    sidebar: true,
+  },
+  {
     href: "/app/connections",
     label: "Conexões",
     // Cobre os DOIS caminhos desde o PR #105: número por QR e canal oficial da

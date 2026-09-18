@@ -550,8 +550,13 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     for (const [key, table, query] of sources) {
       let offset = 0;
       for (;;) {
-        const { data, error } = await query().eq('organization_id', organizationId).eq('contact_id', contactId)
-          .order(table === 'channel_contact_identities' ? 'channel_session_id' : 'id').range(offset, offset + 499);
+        const { data, error } = await Promise.resolve(query().eq('organization_id', organizationId).eq('contact_id', contactId)
+          .order(table === 'channel_contact_identities' ? 'channel_session_id' : 'id').range(offset, offset + 499))
+          .catch((failure: unknown) => {
+            const code = failure && typeof failure === 'object' && 'code' in failure ? String(failure.code) : '';
+            if (table !== 'channel_contact_identities' && ['42P01', 'PGRST205'].includes(code)) return { data: null, error: { code } };
+            throw new Error('native_privacy_export_unavailable');
+          });
         if (error) {
           if (table !== 'channel_contact_identities' && ['42P01', 'PGRST205'].includes(error.code)) break;
           throw new Error('native_privacy_export_unavailable');

@@ -82,7 +82,18 @@ describe('native Page channel organization boundary', () => {
     await expect(f.bind()).rejects.toMatchObject({ code: '40001' });
   });
   it('does not expose identity reads or privileged RPCs to browser roles', async () => {
+    const f = await fixture(), receipt = await f.ingest();
+    await pool.query('select fn_dispatch_inbound_once($1,$2)', [f.org, receipt.message_id]);
     for (const role of ['anon', 'authenticated']) {
+      for (const table of ['channel_contact_identities', 'inbound_dispatch_receipts']) {
+        const client = await pool.connect();
+        try {
+          await client.query('begin');
+          await client.query(`set local role ${role}`);
+          await client.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify({ sub: f.actor, role })]);
+          await expect(client.query(`select * from public.${table}`)).rejects.toMatchObject({ code: '42501' });
+        } finally { await client.query('rollback'); client.release(); }
+      }
       expect((await pool.query("select has_table_privilege($1,'channel_contact_identities','SELECT') allowed", [role])).rows[0].allowed).toBe(false);
       for (const fn of ['fn_dispatch_inbound_once(uuid,uuid)', 'fn_ingest_page_message_v2(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean)', 'fn_bind_page_channel(uuid,uuid,uuid,integer,text)', 'fn_ingest_page_message(uuid,uuid,integer,text,text,timestamptz,text,text)']) {
         expect((await pool.query('select has_function_privilege($1,$2,\'EXECUTE\') allowed', [role, fn])).rows[0].allowed).toBe(false);

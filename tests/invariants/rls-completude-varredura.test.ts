@@ -75,6 +75,8 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "channel_contact_identities", razao: "tests/invariants/native-page-channel.test.ts — SELECT real sob anon/authenticated negado, mesmo para administrador do tenant; ingestão rejeita organização estrangeira." },
+  { tabela: "inbound_dispatch_receipts", razao: "tests/invariants/native-page-channel.test.ts — SELECT real sob anon/authenticated negado; dispatch rejeita mensagem de outra organização e mantém recibo idempotente." },
   { tabela: "integration_connections", razao: "tests/invariants/integration-ledger.test.ts — JWT de manager lê apenas conexão própria entre duas organizações; viewer não lê nenhuma." },
   { tabela: "integration_credentials", razao: "tests/invariants/integration-ledger.test.ts — SELECT real sob anon/authenticated é negado, ACLs de escrita revogadas; executor recusa organização estrangeira." },
   { tabela: "integration_executions", razao: "tests/invariants/integration-ledger.test.ts — SELECT real sob anon/authenticated é negado; ledger valida organização e lease no claim/finish." },

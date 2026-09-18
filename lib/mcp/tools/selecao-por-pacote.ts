@@ -58,6 +58,7 @@ export const TETO_TOOLS_POR_AGENTE = 25;
 /** O mínimo que a regra precisa saber de uma capacidade. */
 export interface CapacidadeSelecionavel {
   name: string;
+  opt_in_only?: boolean;
   risco: ToolRisk;
   pacotes: ReadonlyArray<ToolBundle>;
 }
@@ -71,13 +72,13 @@ function doPacote(
   return catalogo.filter((c) => c.pacotes.includes(pacote));
 }
 
-/** As que o toggle do pacote liga sozinho — tudo que não é `critico`. */
+/** Automáticas: não críticas e não dependentes de opt-in de módulo opcional. */
 export function capacidadesAutomaticasDoPacote(
   catalogo: ReadonlyArray<CapacidadeSelecionavel>,
   pacote: ToolBundle,
 ): string[] {
   return doPacote(catalogo, pacote)
-    .filter((c) => entraPorPacote(c.risco))
+    .filter((c) => entraPorPacote(c.risco) && !c.opt_in_only)
     .map((c) => c.name);
 }
 

@@ -11,7 +11,7 @@ charge cards. Each organization supplies its own accounts and policies.
    credential and webhook signing secret, and tests the connection. Configure
    the signed webhook endpoint shown by the connection. Never paste secrets into
    prompts, catalogue fields or chat.
-3. Open **Store → Store and delivery settings**. Select the payment connection,
+3. Open **CRM → Store → Store and delivery settings**. Select the payment connection,
    configure card payment and destination-specific courier rules, and confirm
    whether catalogue/courier prices include all applicable taxes. This checkout
    does not calculate additional taxes. Missing or ambiguous rates stop checkout.
@@ -24,6 +24,8 @@ charge cards. Each organization supplies its own accounts and policies.
    generated draft agent, Sales pipeline and enquiry flow. The agent's native
    capabilities are product search, verified quote, confirmed checkout and order
    status. Existing agent drafts need these capabilities selected explicitly.
+   The generic Sales capability bundle does not enable optional store tools:
+   use the store installer or select them individually in the agent's capabilities.
 7. Test before publishing. The separate enquiry flow gathers requirements; the
    published sales agent performs customer-confirmed checkout through its tools.
 

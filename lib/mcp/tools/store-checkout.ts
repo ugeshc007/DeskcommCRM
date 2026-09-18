@@ -23,7 +23,7 @@ function failure(error: unknown) {
 }
 const quoteInput = { cart: cartRequestSchema };
 export const crmQuoteStoreCheckout: McpToolDefinition<typeof quoteInput> = {
-  name: 'crm_quote_store_checkout', category: 'write', requiresRole: 'ai_operator', requiresScope: 'mcp:write',
+  name: "crm_quote_store_checkout", category: "write", requiresRole: 'ai_operator', requiresScope: 'mcp:write',
   description: 'Calculate the current customer’s exact store quote from server catalogue and delivery rules. Present the full quote and ask them to send the returned confirmation text verbatim. Does not reserve or charge. Native inbound agent only; organization must enable automatic checkout.',
   inputSchema: quoteInput,
   async handler(input, ctx) {
@@ -33,7 +33,7 @@ export const crmQuoteStoreCheckout: McpToolDefinition<typeof quoteInput> = {
 };
 const confirmInput = { proposal_id: z.uuid() };
 export const crmConfirmStoreCheckout: McpToolDefinition<typeof confirmInput> = {
-  name: 'crm_confirm_store_checkout', category: 'write', requiresRole: 'ai_operator', requiresScope: 'mcp:write',
+  name: "crm_confirm_store_checkout", category: "write", requiresRole: 'ai_operator', requiresScope: 'mcp:write',
   description: 'Reserve stock and prepare a secure payment link for a previously quoted proposal. The server requires the actual latest customer message to exactly match the confirmation text; an AI assertion of agreement is not accepted. Retry only the same proposal. Never call a payment link proof of payment.',
   inputSchema: confirmInput,
   async handler(input, ctx) {
@@ -48,7 +48,7 @@ export const crmConfirmStoreCheckout: McpToolDefinition<typeof confirmInput> = {
 };
 const statusInput = { order_id: z.uuid() };
 export const crmStoreOrderStatus: McpToolDefinition<typeof statusInput> = {
-  name: 'crm_store_order_status', category: 'read', requiresRole: 'ai_operator', requiresScope: 'mcp:read',
+  name: "crm_store_order_status", category: "read", requiresRole: 'ai_operator', requiresScope: 'mcp:read',
   description: 'Read the current customer’s server-verified native order status. Payment is confirmed only when status is paid. No other customer’s orders or payment URLs are returned.',
   inputSchema: statusInput,
   async handler(input, ctx) {

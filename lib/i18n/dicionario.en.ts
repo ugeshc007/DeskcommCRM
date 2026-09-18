@@ -8,6 +8,8 @@ import { CHANNEL_SETUP_EN } from '@/lib/channels/i18n';
 
 export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   ...CHANNEL_SETUP_EN,
+  "Store": "Store",
+  "Manage your product catalogue, delivery charges and reviewed orders.": "Manage your product catalogue, delivery charges and reviewed orders.",
   "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.":
     "Meta validated the number but could not activate message delivery for this account.",
   "Atendimento, vendas e IA em um só lugar": "Customer service, sales, and AI in one place",

@@ -62,8 +62,30 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
   if (error) return { consumer_key, status: "error", detail: error.message };
 
   const msg = data as MessageMediaRow | null;
-  if (!msg?.media_url) return { consumer_key, status: "skipped", detail: "no media_url" };
-  if (msg.media_storage_path) return { consumer_key, status: "skipped", detail: "already stored" };
+  if (!msg) return { consumer_key, status: "skipped", detail: "no message" };
+
+  // A gravação dos bytes e o evento não são uma transação. No retry, continua
+  // pela aresta faltante sem baixar novamente. O consumidor de derivação pula
+  // mídia já pronta; entrega repetida é preferível a perder o próximo passo.
+  const requestDerivation = async (): Promise<HandlerResult> => {
+    try {
+      const { error: emitErr } = await admin.rpc("emit_event" as never, {
+        p_event_type: "media.derive_requested",
+        p_entity_kind: "message",
+        p_entity_id: msg.id,
+        p_payload: { message_id: msg.id },
+        p_metadata: { source: "media_persist" },
+        p_organization_id: msg.organization_id,
+      } as never);
+      return emitErr
+        ? { consumer_key, status: "error", detail: "media_derivation_enqueue_failed" }
+        : { consumer_key, status: "ok" };
+    } catch {
+      return { consumer_key, status: "error", detail: "media_derivation_enqueue_failed" };
+    }
+  };
+  if (msg.media_storage_path) return requestDerivation();
+  if (!msg.media_url) return { consumer_key, status: "skipped", detail: "no media_url" };
 
   const markStatus = async (media_status: "stored" | "failed", patch: Record<string, unknown> = {}) => {
     const { error: updErr } = await admin
@@ -140,17 +162,5 @@ export async function persistMessageMedia(row: EventRow): Promise<HandlerResult>
     media_mime: media.mime,
   });
 
-  // Dispara a derivação textual (Onda 3) — fire-and-forget, mesmo padrão do
-  // resto do repo: falha de emit não reverte a persistência já concluída.
-  const { error: emitErr } = await admin.rpc("emit_event" as never, {
-    p_event_type: "media.derive_requested",
-    p_entity_kind: "message",
-    p_entity_id: msg.id,
-    p_payload: { message_id: msg.id },
-    p_metadata: { source: "media_persist" },
-    p_organization_id: msg.organization_id,
-  } as never);
-  if (emitErr) logger.warn("[media-persist] emit_event failed (non-blocking)", { message_id: msg.id, detail: emitErr.message });
-
-  return { consumer_key, status: "ok" };
+  return requestDerivation();
 }

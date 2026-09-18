@@ -4,8 +4,10 @@ import { loadAuthUser, mfaEmDivida } from '@/lib/auth/server';
 import { getRequestPool } from '@/lib/agent-engine/db/request-pool';
 import { ok, fail } from '@/lib/api/wrappers';
 import { readIntegrationJson } from '../../integration-connections/_shared';
+import { requireSupportWrite } from '@/lib/impersonate/support';
 
 export async function POST(req: Request) {
+  const denied = await requireSupportWrite(); if (denied) return denied;
   let auth: Awaited<ReturnType<typeof requirePlatformAdmin>>;
   try { auth = await requirePlatformAdmin(); } catch { return fail('forbidden', 'Platform administrator access is required.', 403); }
   if (auth.platformAdmin.scope !== 'full' || (await loadAuthUser())?.support) return fail('forbidden', 'Use a full platform administrator session outside support mode.', 403);

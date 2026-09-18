@@ -59,8 +59,9 @@ export async function POST(req: Request, context: Context) {
       if (result.error.code === '23505') return fail('conflict', 'This Page is already bound. Ask the installation administrator to review its ownership.', 409);
       throw new Error(result.error.code === '40001' ? 'integration_conflict' : result.error.code === '42501' ? 'integration_forbidden' : 'integration_storage_unavailable');
     }
+    const channelId = z.uuid().parse(result.data);
     await audit({ action: 'channel.reactivated', actorUserId: auth.user.id, organizationId: auth.org.orgId,
-      resourceType: 'channel_session', resourceId: z.uuid().parse(result.data), metadata: { revision: input.revision } });
+      resourceType: 'channel_session', resourceId: channelId, metadata: { revision: input.revision } });
     return ok(await channelView(db, auth.org.orgId, id), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return integrationError(error); }
 }

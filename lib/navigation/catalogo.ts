@@ -413,13 +413,12 @@ export const NAV_CATALOG = [
   // ---- Canais — por onde as mensagens entram e saem ----
   {
     href: "/app/store",
-    label: "Store",
+      label: "Store",
     description: "Manage your product catalogue, delivery charges and reviewed orders.",
     icon: "ShoppingBag",
     group: "crm",
-    section: "Store",
-    minRole: "admin",
-    sidebar: true,
+      section: "Preparar a venda",
+      minRole: "admin",
   },
   {
     href: "/app/integrations",

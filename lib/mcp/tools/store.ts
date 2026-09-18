@@ -4,7 +4,7 @@ import { productTemplateSchema } from '@/lib/ecommerce/config';
 
 const inputShape = { query: z.string().trim().min(1).max(100), limit: z.number().int().min(1).max(20).default(10) };
 export const crmSearchStoreProducts: McpToolDefinition<typeof inputShape> = {
-  name: 'crm_search_store_products', category: 'read', requiresRole: 'agent', requiresScope: 'mcp:read',
+  name: "crm_search_store_products", category: "read", requiresRole: 'agent', requiresScope: 'mcp:read',
   description: 'Search this organization’s native store catalogue for exact prices, SKU, stock available after reservations, media and product links. Never invent missing prices or availability. This does not reserve stock or place an order.',
   inputSchema: inputShape,
   async handler(input, ctx) {

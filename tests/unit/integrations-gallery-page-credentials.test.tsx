@@ -7,6 +7,7 @@ let rows: typeof saved[] = [];
 beforeEach(() => {
   rows = []; fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock);
   fetchMock.mockImplementation(async (_url: string, options: RequestInit) => {
+    if (_url.endsWith('/channel')) return { ok: true, json: async () => ({ data: null }) };
     if (options.method === 'POST') { rows = [saved]; return { ok: true, json: async () => ({ data: saved }) }; }
     return { ok: true, json: async () => ({ data: { connections: rows, runs: [], can_manage: true, google_oauth_configured: false } }) };
   });
@@ -20,12 +21,12 @@ async function openForm() {
   fireEvent.click(within(card!).getByRole('button', { name: 'Add connection' }));
   return screen.findByRole('dialog');
 }
-it('offers Page setup with masked secrets and explicitly states activation is unavailable', async () => {
+it('offers Page setup with masked secrets without automatically activating a bot', async () => {
   await openForm();
   expect(screen.getByLabelText('Page access token')).toHaveAttribute('type', 'password');
   expect(screen.getByLabelText('Meta app secret')).toHaveAttribute('type', 'password');
   expect(screen.getByLabelText(/Webhook verification token/)).toHaveAttribute('type', 'password');
-  expect(screen.getByText(/Messaging activation is not available yet/)).toBeInTheDocument();
+  expect(screen.getByText(/This setup does not activate a bot or send messages/)).toBeInTheDocument();
 });
 it('saves through the shared endpoint without client organization authority and clears secrets after save', async () => {
   const dialog = await openForm();
@@ -43,12 +44,13 @@ it('saves through the shared endpoint without client organization authority and 
     page_id: '1234', token: 'synthetic-token', app_secret: 'a'.repeat(32), verify_token: 'synthetic_verify_token', graph_version: 'v26.0',
   } });
   expect(screen.queryByDisplayValue('synthetic-token')).toBeNull();
-  expect(screen.getByRole('status')).toHaveTextContent('messaging activation is not available yet');
+  expect(screen.getByRole('status')).toHaveTextContent('then activate the messaging channel and configure its webhook');
 });
 it('does not label a successfully tested Page as a working messaging channel', async () => {
   rows = [{ ...saved, active: true }];
   render(<IntegrationsGallery />);
   await screen.findByText('Credentials verified');
   expect(screen.queryByText('Connected', { exact: true })).toBeNull();
-  expect(screen.getByText(/Messaging is not active/)).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Activate messaging channel' })).toBeInTheDocument();
+  expect(screen.getByText(/Activate the tested credentials/)).toBeInTheDocument();
 });

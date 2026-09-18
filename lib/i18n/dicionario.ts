@@ -39,6 +39,8 @@ import { BUILDER_ES } from "./builder";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 const DICIONARIO_BASE: Traducoes = {
+  "Store": { es: "Tienda" },
+  "Manage your product catalogue, delivery charges and reviewed orders.": { es: "Administra tu catálogo de productos, gastos de envío y pedidos revisados." },
   "Texto fixo": { es: "Texto fijo" },
   "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.": {
     es: "Meta validó el número, pero no pudo activar la entrega de mensajes para esta cuenta.",

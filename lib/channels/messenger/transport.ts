@@ -26,13 +26,13 @@ export class MessengerDeliveryError extends Error {
 /** Chamado apenas depois dos gates canônicos; não concede autorização por si só. */
 export async function sendMessengerEnvelope(envelope: OutboundEnvelope, resolve: MessengerConnectionResolver): Promise<{ externalId: string }> {
   const payload = messengerOutboundPayload(envelope);
+  await envelope.beforeSend?.();
   // Contrato escopado obrigatório: nenhuma credencial global/fallback de ambiente.
   const raw = await resolve({ organizationId: envelope.organizationId, pageId: envelope.sessionRef });
   const result = connectionSchema.safeParse(raw);
   if (!result.success || result.data.organizationId !== envelope.organizationId || result.data.pageId !== envelope.sessionRef)
     throw new MessengerDeliveryError('rejected', 'messenger_connection_unavailable');
   const connection = result.data;
-  await envelope.beforeSend?.();
   let response: Awaited<ReturnType<typeof providerHttp>>;
   try {
     response = await providerHttp(

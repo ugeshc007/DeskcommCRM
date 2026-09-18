@@ -21,11 +21,15 @@ import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
+import { inboundPostprocessHandler } from '@/workers/inbound-postprocess.handler';
+import { storePaymentHandler } from '@/workers/store-payment.handler';
 
 let _registered = false;
 
 export function ensureHandlersRegistered(): void {
   if (_registered) return;
+  registerHandler(inboundPostprocessHandler);
+  registerHandler(storePaymentHandler);
   // Follow-up de inbound ANTES do LLM: no Hobby o drain da mensagem
   // estourava no worker de IA e o match_reply nunca lia a resposta.
   registerHandler(followupReactivityHandler);

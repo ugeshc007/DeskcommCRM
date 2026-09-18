@@ -22,7 +22,7 @@ describe('Messenger signed Page-scoped protocol', () => {
   it('normalizes text without turning the sender into a phone number', () => {
     expect(parse([event])).toEqual([{
       pageId: page, senderId: '5678', externalId: 'synthetic-message-1',
-      timestamp: event.timestamp, text: 'Hello', selection: null, attachmentTypes: [],
+      timestamp: event.timestamp, text: 'Hello', selection: null, attachmentTypes: [], attachments: [],
     }]);
   });
   it('rejects the same signed event for a different Page', () => {
@@ -49,12 +49,17 @@ describe('Messenger signed Page-scoped protocol', () => {
     const { message: _message, ...base } = event;
     expect(() => parse([{ ...base, postback: { payload: 'sku_1' } }])).toThrow('webhook_message_id_missing');
   });
-  it('does not expose attachment URLs to the ingestion caller', () => {
-    const result = parse([{ ...event, message: {
+  it('rejects unsafe attachment URLs before persistence or downloads', () => {
+    expect(() => parse([{ ...event, message: {
       mid: 'media-1', attachments: [{ type: 'image', payload: { url: 'http://127.0.0.1/private' } }],
-    } }]);
-    expect(result[0]?.attachmentTypes).toEqual(['image']);
-    expect(JSON.stringify(result)).not.toContain('127.0.0.1');
+    } }])).toThrow();
+  });
+  it('preserves every supported attachment for private persistence', () => {
+    const result = parse([{ ...event, message: { mid: 'media-2', attachments: [
+      { type: 'image', payload: { url: 'https://cdn.example/one.png' } },
+      { type: 'file', payload: { url: 'https://cdn.example/one.pdf' } },
+    ] } }]);
+    expect(result[0]?.attachments).toEqual([{ kind: 'image', url: 'https://cdn.example/one.png' }, { kind: 'document', url: 'https://cdn.example/one.pdf' }]);
   });
   it.each([null, '', 'sha1=abcd', 'sha256=abcd', `sha256=${'z'.repeat(64)}`])('fails closed for invalid signature %s', signature => {
     expect(verifyMessengerSignature(Buffer.from('{}'), signature, secret)).toBe(false);

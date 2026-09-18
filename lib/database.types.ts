@@ -2988,6 +2988,49 @@ export type Database = {
           },
         ]
       }
+      channel_contact_identities: {
+        Row: {
+          channel_session_id: string
+          contact_id: string
+          organization_id: string
+          provider_user_id: string
+        }
+        Insert: {
+          channel_session_id: string
+          contact_id: string
+          organization_id: string
+          provider_user_id: string
+        }
+        Update: {
+          channel_session_id?: string
+          contact_id?: string
+          organization_id?: string
+          provider_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_contact_identities_organization_id_channel_session_fkey"
+            columns: ["organization_id", "channel_session_id"]
+            isOneToOne: false
+            referencedRelation: "channel_sessions"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "channel_contact_identities_organization_id_contact_id_fkey"
+            columns: ["organization_id", "contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "channel_contact_identities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       channel_knobs: {
         Row: {
           allow_sunday: boolean | null
@@ -3244,10 +3287,12 @@ export type Database = {
           consecutive_health_fails: number
           created_at: string
           created_by: string | null
+          credential_revision: number | null
           daily_message_limit: number
           display_name: string | null
           engine: string
           id: string
+          integration_connection_id: string | null
           is_warmup_complete: boolean | null
           last_health_check_at: string | null
           last_status_change_at: string
@@ -3258,6 +3303,7 @@ export type Database = {
           organization_id: string
           phone_number: string | null
           provider: string
+          provider_account_id: string | null
           status: string
           status_reason: string | null
           updated_at: string
@@ -3268,7 +3314,9 @@ export type Database = {
           warmup_completed_at: string | null
           warmup_started_at: string | null
           webhook_path_token: string
+          webhook_received_at: string | null
           webhook_secret_encrypted: string
+          webhook_verified_at: string | null
           zernio_account_id: string | null
           zernio_token_encrypted: string | null
         }
@@ -3277,10 +3325,12 @@ export type Database = {
           consecutive_health_fails?: number
           created_at?: string
           created_by?: string | null
+          credential_revision?: number | null
           daily_message_limit?: number
           display_name?: string | null
           engine?: string
           id?: string
+          integration_connection_id?: string | null
           is_warmup_complete?: boolean | null
           last_health_check_at?: string | null
           last_status_change_at?: string
@@ -3291,6 +3341,7 @@ export type Database = {
           organization_id: string
           phone_number?: string | null
           provider?: string
+          provider_account_id?: string | null
           status?: string
           status_reason?: string | null
           updated_at?: string
@@ -3301,7 +3352,9 @@ export type Database = {
           warmup_completed_at?: string | null
           warmup_started_at?: string | null
           webhook_path_token?: string
+          webhook_received_at?: string | null
           webhook_secret_encrypted: string
+          webhook_verified_at?: string | null
           zernio_account_id?: string | null
           zernio_token_encrypted?: string | null
         }
@@ -3310,10 +3363,12 @@ export type Database = {
           consecutive_health_fails?: number
           created_at?: string
           created_by?: string | null
+          credential_revision?: number | null
           daily_message_limit?: number
           display_name?: string | null
           engine?: string
           id?: string
+          integration_connection_id?: string | null
           is_warmup_complete?: boolean | null
           last_health_check_at?: string | null
           last_status_change_at?: string
@@ -3324,6 +3379,7 @@ export type Database = {
           organization_id?: string
           phone_number?: string | null
           provider?: string
+          provider_account_id?: string | null
           status?: string
           status_reason?: string | null
           updated_at?: string
@@ -3334,11 +3390,20 @@ export type Database = {
           warmup_completed_at?: string | null
           warmup_started_at?: string | null
           webhook_path_token?: string
+          webhook_received_at?: string | null
           webhook_secret_encrypted?: string
+          webhook_verified_at?: string | null
           zernio_account_id?: string | null
           zernio_token_encrypted?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "channel_integration_owner"
+            columns: ["organization_id", "integration_connection_id"]
+            isOneToOne: false
+            referencedRelation: "integration_connections"
+            referencedColumns: ["organization_id", "id"]
+          },
           {
             foreignKeyName: "channel_sessions_organization_id_fkey"
             columns: ["organization_id"]
@@ -5281,6 +5346,42 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "idempotency_keys_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbound_dispatch_receipts: {
+        Row: {
+          created_at: string
+          event_id: string
+          message_id: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          message_id: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          message_id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbound_dispatch_receipts_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: true
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbound_dispatch_receipts_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -7831,6 +7932,329 @@ export type Database = {
           },
         ]
       }
+      store_checkout_proposals: {
+        Row: {
+          cart: Json
+          confirmation: string
+          contact_id: string
+          conversation_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          organization_id: string
+          quote: Json
+          source_message_id: string
+        }
+        Insert: {
+          cart: Json
+          confirmation: string
+          contact_id: string
+          conversation_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          organization_id: string
+          quote: Json
+          source_message_id: string
+        }
+        Update: {
+          cart?: Json
+          confirmation?: string
+          contact_id?: string
+          conversation_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          organization_id?: string
+          quote?: Json
+          source_message_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_checkout_proposals_organization_id_contact_id_fkey"
+            columns: ["organization_id", "contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "store_checkout_proposals_organization_id_conversation_id_fkey"
+            columns: ["organization_id", "conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "store_checkout_proposals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_checkout_proposals_organization_id_source_message_id_fkey"
+            columns: ["organization_id", "source_message_id"]
+            isOneToOne: true
+            referencedRelation: "messages"
+            referencedColumns: ["organization_id", "id"]
+          },
+        ]
+      }
+      store_order_items: {
+        Row: {
+          order_id: string
+          organization_id: string
+          quantity: number
+          sku: string
+        }
+        Insert: {
+          order_id: string
+          organization_id: string
+          quantity: number
+          sku: string
+        }
+        Update: {
+          order_id?: string
+          organization_id?: string
+          quantity?: number
+          sku?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_order_items_organization_id_order_id_fkey"
+            columns: ["organization_id", "order_id"]
+            isOneToOne: false
+            referencedRelation: "store_orders"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "store_order_items_organization_id_sku_fkey"
+            columns: ["organization_id", "sku"]
+            isOneToOne: false
+            referencedRelation: "store_products"
+            referencedColumns: ["organization_id", "sku"]
+          },
+        ]
+      }
+      store_orders: {
+        Row: {
+          connection_id: string
+          connection_revision: number
+          contact_id: string
+          created_at: string
+          currency: string
+          expires_at: string
+          id: string
+          organization_id: string
+          payment_session_id: string | null
+          payment_url: string | null
+          quote: Json
+          request_fingerprint: string
+          request_key: string
+          status: string
+          stock_state: string
+          total_cents: number
+          updated_at: string
+        }
+        Insert: {
+          connection_id: string
+          connection_revision: number
+          contact_id: string
+          created_at?: string
+          currency: string
+          expires_at: string
+          id?: string
+          organization_id: string
+          payment_session_id?: string | null
+          payment_url?: string | null
+          quote: Json
+          request_fingerprint: string
+          request_key: string
+          status: string
+          stock_state?: string
+          total_cents: number
+          updated_at?: string
+        }
+        Update: {
+          connection_id?: string
+          connection_revision?: number
+          contact_id?: string
+          created_at?: string
+          currency?: string
+          expires_at?: string
+          id?: string
+          organization_id?: string
+          payment_session_id?: string | null
+          payment_url?: string | null
+          quote?: Json
+          request_fingerprint?: string
+          request_key?: string
+          status?: string
+          stock_state?: string
+          total_cents?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_orders_organization_id_connection_id_fkey"
+            columns: ["organization_id", "connection_id"]
+            isOneToOne: false
+            referencedRelation: "integration_connections"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "store_orders_organization_id_contact_id_fkey"
+            columns: ["organization_id", "contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "store_orders_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_payment_events: {
+        Row: {
+          connection_id: string
+          created_at: string
+          event_id: string
+          fingerprint: string
+          order_id: string
+          organization_id: string
+          outcome: string
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string
+          event_id: string
+          fingerprint: string
+          order_id: string
+          organization_id: string
+          outcome: string
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string
+          event_id?: string
+          fingerprint?: string
+          order_id?: string
+          organization_id?: string
+          outcome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_payment_events_organization_id_connection_id_fkey"
+            columns: ["organization_id", "connection_id"]
+            isOneToOne: false
+            referencedRelation: "integration_connections"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "store_payment_events_organization_id_order_id_fkey"
+            columns: ["organization_id", "order_id"]
+            isOneToOne: false
+            referencedRelation: "store_orders"
+            referencedColumns: ["organization_id", "id"]
+          },
+        ]
+      }
+      store_products: {
+        Row: {
+          active: boolean
+          organization_id: string
+          product: Json
+          revision: number
+          sku: string
+          stock_on_hand: number | null
+          stock_reserved: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          organization_id: string
+          product: Json
+          revision?: number
+          sku: string
+          stock_on_hand?: number | null
+          stock_reserved?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          organization_id?: string
+          product?: Json
+          revision?: number
+          sku?: string
+          stock_on_hand?: number | null
+          stock_reserved?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_products_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_settings: {
+        Row: {
+          active: boolean
+          automated_checkout: boolean
+          config: Json
+          organization_id: string
+          payment_connection_id: string | null
+          prices_include_all_taxes: boolean
+          reservation_minutes: number
+          revision: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          automated_checkout?: boolean
+          config: Json
+          organization_id: string
+          payment_connection_id?: string | null
+          prices_include_all_taxes?: boolean
+          reservation_minutes: number
+          revision?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          automated_checkout?: boolean
+          config?: Json
+          organization_id?: string
+          payment_connection_id?: string | null
+          prices_include_all_taxes?: boolean
+          reservation_minutes?: number
+          revision?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_settings_organization_id_payment_connection_id_fkey"
+            columns: ["organization_id", "payment_connection_id"]
+            isOneToOne: false
+            referencedRelation: "integration_connections"
+            referencedColumns: ["organization_id", "id"]
+          },
+        ]
+      }
       system_update_runs: {
         Row: {
           dispatched_at: string
@@ -8976,6 +9400,16 @@ export type Database = {
         Args: { p_from: string; p_org: string; p_owner?: string; p_to: string }
         Returns: Json
       }
+      fn_bind_page_channel: {
+        Args: {
+          p_actor: string
+          p_connection: string
+          p_org: string
+          p_page: string
+          p_revision: number
+        }
+        Returns: string
+      }
       fn_buscar_trechos_das_fontes: {
         Args: {
           p_embedding: string
@@ -9184,6 +9618,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      fn_dispatch_inbound_once: {
+        Args: { p_message: string; p_org: string }
+        Returns: string
+      }
       fn_encrypt_oauth: { Args: { plaintext: string }; Returns: string }
       fn_end_support: {
         Args: { p_actor: string; p_session: string }
@@ -9323,6 +9761,49 @@ export type Database = {
           p_sources: string[]
         }
         Returns: undefined
+      }
+      fn_ingest_page_message: {
+        Args: {
+          p_at: string
+          p_external: string
+          p_org: string
+          p_revision: number
+          p_selection: string
+          p_sender: string
+          p_session: string
+          p_text: string
+        }
+        Returns: Json
+      }
+      fn_ingest_page_message_v2: {
+        Args: {
+          p_at: string
+          p_external: string
+          p_media: Json
+          p_opt_out: boolean
+          p_org: string
+          p_revision: number
+          p_selection: string
+          p_sender: string
+          p_session: string
+          p_text: string
+        }
+        Returns: Json
+      }
+      fn_ingest_page_message_v3: {
+        Args: {
+          p_at: string
+          p_external: string
+          p_media: Json
+          p_opt_out: boolean
+          p_org: string
+          p_revision: number
+          p_selection: string
+          p_sender: string
+          p_session: string
+          p_text: string
+        }
+        Returns: Json
       }
       fn_integration_claim: {
         Args: {
@@ -9475,6 +9956,8 @@ export type Database = {
         Args: { p_limite?: number; p_retencao_dias?: number }
         Returns: number
       }
+      fn_provision_checkout_module: { Args: never; Returns: undefined }
+      fn_provision_checkout_module_base: { Args: never; Returns: undefined }
       fn_publish_ai_agent_version:
         | {
             Args: { p_agent_id: string; p_org_id: string; p_version_id: string }

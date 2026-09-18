@@ -9,6 +9,7 @@ import { PlugsConnected,FileText,Users,CalendarBlank,CreditCard,EnvelopeSimple,R
 import { INTEGRATION_CATALOG,type PublicConnection,type PublicIntegrationRun } from '@/lib/integrations/catalog';
 import { CREDENTIAL_FIELDS } from '@/lib/integrations/credential-fields';
 import { MESSENGER_CONNECTION_PROVIDER } from '@/lib/channels/messenger/public-config';
+import { PageChannelSetup } from './PageChannelSetup';
 type GalleryData={connections:PublicConnection[];runs:PublicIntegrationRun[];can_manage:boolean;google_oauth_configured:boolean};
 type Editing={provider:string;connection?:PublicConnection};
 const icons={webhook:PlugsConnected,table:FileText,workflow:PlugsConnected,contacts:Users,calendar:CalendarBlank,payment:CreditCard,mail:EnvelopeSimple,bot:Robot,message:ChatCircle};
@@ -37,7 +38,7 @@ export function IntegrationsGallery(){
     existing?{operation:'rotate',revision:existing.revision,label,credential}:{provider:editing.provider,label,...(editing.provider!=='google_sheets'?{credential}:{})}) as PublicConnection;
    edit(null);await load();
    if(c.provider==='google_sheets')await oauth(c);else setNotice(c.provider===MESSENGER_CONNECTION_PROVIDER
-    ? 'Page credentials saved securely. Test verifies Page identity only; messaging activation is not available yet.'
+    ? 'Page credentials saved securely. Test the Page identity, then activate the messaging channel and configure its webhook.'
     : 'Credential saved securely. Test the connection before selecting it in a flow. Rotation requires updating blocks to the new revision.');
   }catch(e){setError(e instanceof Error?e.message:'Unable to save connection.');}finally{setBusy(false);}
  }
@@ -57,7 +58,7 @@ export function IntegrationsGallery(){
    {data?.connections.length===0&&<p className="rounded-lg border border-dashed border-border p-6 text-sm text-text-muted">No connections yet. Choose an available app below to get started.</p>}
    <div className="grid gap-4 md:grid-cols-2">{data?.connections.map(c=><article key={c.id} className="min-w-0 rounded-lg border border-border bg-surface p-5">
     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-medium">{c.label}</h3><p className="mt-1 text-xs text-text-muted">{INTEGRATION_CATALOG.find(p=>p.id===c.provider)?.name??'Integration'} · Revision {c.revision}</p></div><span className="shrink-0 rounded-full bg-accent-soft px-2 py-1 text-xs">{c.active?(c.provider===MESSENGER_CONNECTION_PROVIDER?'Credentials verified':'Connected'):c.failure_code==='reconnect_required'?'Disconnected':'Test required'}</span></div>
-    {c.provider===MESSENGER_CONNECTION_PROVIDER&&<p className="mt-3 text-sm text-text-muted">Messaging is not active. Credentials can be saved, tested, rotated or disconnected here; webhook delivery and bot activation are not available yet.</p>}
+    {c.provider===MESSENGER_CONNECTION_PROVIDER&&data.can_manage&&<PageChannelSetup connection={c}/>}
     <p className="mt-3 text-xs text-text-muted">{c.provider==='webhook'?'A successful test means the endpoint accepted synthetic data. Ensure your receiver verifies signatures.':c.provider==='inbound_webhook'?'Test checks signing configuration only. Send a signed event to verify delivery.':'Testing checks account access or synthetic ingestion, not every action permission. Verify action-specific scopes before publishing.'}</p>
     {(c.provider==='stripe'||c.provider==='inbound_webhook')&&<div className="mt-3 text-xs"><Label htmlFor={'callback-'+c.id}>Inbound callback path</Label><Input id={'callback-'+c.id} readOnly value={'/api/v1/webhooks/integrations/'+c.id}/><p className="mt-1 text-text-muted">Use this path on your public CRM HTTPS domain. Events appear in Recent executions. Read verified fields by event ID using a flow integration block.</p></div>}
     {data.can_manage&&<div className="mt-4 flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={busy} onClick={()=>setConfirmation({connection:c,operation:'test'})}>Test</Button>

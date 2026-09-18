@@ -9,6 +9,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import type { Json } from "@/lib/database.types";
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -211,6 +212,9 @@ export interface VoiceCallRow {
 }
 
 export interface ExportPayload {
+  native_channel_identities?: unknown[];
+  native_store_orders?: unknown[];
+  native_store_proposals?: unknown[];
   request_id: string;
   organization_id: string;
   /**
@@ -533,6 +537,32 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Módulo opcional: ausência é diferente de falha; erro real impede export parcial.
+  const native: { native_channel_identities: unknown[]; native_store_orders: unknown[]; native_store_proposals: unknown[] } = {
+    native_channel_identities: [], native_store_orders: [], native_store_proposals: [],
+  };
+  if (contactId) {
+    const sources = [
+      ['native_channel_identities', 'channel_contact_identities', () => admin.from("channel_contact_identities").select('channel_session_id,provider_user_id')],
+      ['native_store_orders', 'store_orders', () => (admin as SupabaseClient).from("store_orders").select('id,status,quote,total_cents,currency,created_at')],
+      ['native_store_proposals', 'store_checkout_proposals', () => (admin as SupabaseClient).from("store_checkout_proposals").select('id,cart,quote,created_at,expires_at')],
+    ] as const;
+    for (const [key, table, query] of sources) {
+      let offset = 0;
+      for (;;) {
+        const { data, error } = await query().eq('organization_id', organizationId).eq('contact_id', contactId)
+          .order(table === 'channel_contact_identities' ? 'channel_session_id' : 'id').range(offset, offset + 499);
+        if (error) {
+          if (table !== 'channel_contact_identities' && ['42P01', 'PGRST205'].includes(error.code)) break;
+          throw new Error('native_privacy_export_unavailable');
+        }
+        native[key].push(...(data ?? []));
+        if (!data || data.length < 500) break;
+        offset += 500;
+      }
+    }
+  }
+
   // Activities — direct contact_id on crm_lead_activities.
   let activities: ActivityRow[] = [];
   if (contactId) {
@@ -807,6 +837,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     meeting_deliveries,
     appointment_notices,
     voice_calls,
+    ...native,
   };
 }
 

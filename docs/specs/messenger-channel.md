@@ -1,10 +1,19 @@
 # Messenger channel — implementation checkpoint
 
-Status: **credential setup implemented locally; messaging runtime not activated or released**.
-The integrations gallery supports credential preparation, testing, rotation and
-disconnection. It explicitly says messaging activation is unavailable and labels
-a successful identity test “Credentials verified,” never “Connected.” No send
-action is exposed in the builder. This does not make Messenger messaging usable.
+Status: **native binding, ingress and activation UI implemented locally; not released**.
+The integrations gallery supports credential preparation, testing, rotation,
+disconnection and explicit activation. Page identity verification remains separate
+from webhook verification and signed-message receipt. Production is unchanged.
+
+2026-09-18 increment: migration 0279 adds organization-owned Page/session binding,
+server-only Page-scoped contact identities and atomic deduplicated ingestion.
+Rotation suspends the channel. Native capabilities, recipient resolution, guarded
+transport and health checks are registered. Admin setup exposes the callback URL
+without returning stored secrets. Five database tests pass, including concurrent
+ingestion and cross-organization rejection; baseline INSTALL and UPDATE pass.
+Incoming media persistence and durable dispatch recovery are implemented in the
+increment below. Authenticated end-to-end testing and a controlled real-Page pilot
+remain release requirements.
 
 ## Confirmed by code
 
@@ -17,7 +26,8 @@ action is exposed in the builder. This does not make Messenger messaging usable.
 - Echoes and delivery/read events do not become customer messages. Stable message
   IDs are mandatory for later deduplication; postbacks without IDs are not accepted.
 - Quick-reply and postback payloads remain selection identities. Their labels are
-  not substituted for those identities. Attachment URLs are not returned or fetched.
+  not substituted for those identities. Supported attachment URLs are validated,
+  persisted through the private media worker and never treated as instructions.
 - `outbound.ts` translates text and image/video/audio/document attachments into
   RESPONSE payloads. It refuses missing/mismatched conversation identities,
   unsupported interactive/template messages, unsafe URLs, and captions that would
@@ -44,26 +54,19 @@ action is exposed in the builder. This does not make Messenger messaging usable.
 - `IntegrationsGallery` renders masked token, app-secret and verification-token
   fields. Secrets are cleared after saving and never loaded back into the form.
 - The scoped resolver checks provider, active state, Page identity and the current
-  revision again after decrypting. Native channel binding remains unimplemented;
-  callers must not take a connection ID from untrusted customer content.
+  revision again after decrypting. Native channel binding uses the actor-checked
+  database function; callers never take a connection ID from customer content.
+- Health checks may recheck a failed binding, but a valid Page token alone leaves
+  the channel starting until a signed inbound message has actually been received.
 
-## Required before activation
+## Remaining release gates
 
-1. Bind the existing organization-owned encrypted connection to a native channel
-   with database-enforced ownership and disconnect/rotation propagation.
-2. Native channel registration, capabilities, Page session reference and scoped
-   conversation recipient propagation through every canonical send path.
-3. Raw-body webhook route with bounded reads, trusted connection resolution,
-   atomic deduplicated ingestion and canonical post-entry effects.
-4. Register the channel capabilities and verify the window guard on actual native
-   channel conversations, including the human-send path and publication checks.
-5. Wire the transport to a database-backed credential resolver, revision checks and
-   connection testing; persist definite rejection versus uncertain delivery visibly.
-6. Add activation and webhook-receipt states to the credential setup UI. Provider
-   approval and messaging permissions still need checks beyond Page identity.
-7. Database isolation tests, authenticated browser tests, and a controlled Page
-   pilot before the gallery is enabled. Incoming media ingestion remains separate
-   from basic message parsing and must not fetch arbitrary webhook URLs.
+1. Durable recovery between atomic message insertion and post-entry dispatch.
+2. Safe incoming-media persistence and privacy export/redaction for Page identities.
+3. Verify actual native conversations through human send, bot dispatch, window
+   policy and operator-visible definite/uncertain delivery outcomes.
+4. Authenticated browser testing and a controlled Page pilot. Provider approval
+   and messaging permissions still need checks beyond Page identity.
 
 ## Evidence
 
@@ -95,3 +98,20 @@ rotation/retest. The architecture map is `integration-execution.architecture.jso
 Do not enable messaging until ingress → canonical dispatch → guarded transport →
 persisted outcome and operator-visible failures all have real callers. There are
 no automated customer sends, so no new follow-up or human-handoff behavior yet.
+
+2026-09-18 follow-up: four native adapter health tests pass alongside fifteen
+transport tests. This proves mocked status handling, not a live Page connection.
+
+Recovery increment: signed ingress commits messages, media-persistence work and
+post-ingress work in the same transaction. A protected dispatch receipt prevents
+duplicate agent turns even when media workers replace message metadata. Opt-out
+is committed before workers can respond. Supported image/video/audio/file URLs
+use HTTPS, pinned public DNS, no redirects or tenant bearer headers, a 50MB stream
+limit and a MIME allowlist. Existing private-storage and derivation workers handle
+the bytes. Raw attachment contents are never invented by the bot.
+
+Anonymization removes clear Page identity and preserves an organization/session-
+specific suppression hash, so delivery retries do not recreate the customer.
+Identity exports remain organization-scoped. Focused database tests cover replay,
+privacy suppression, tenant boundaries, rotation and opt-out; a real Page pilot
+and the complete release gates are still required before a live-success claim.

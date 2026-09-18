@@ -68,7 +68,7 @@ export async function installStoreDraft(pool: Pick<pg.Pool, 'connect'>, organiza
       values($1,$2,'Store sales assistant','Draft store template. Review products, policies and model before publishing.',$3,$4,false,false,'mcp_agent',$5)`,
     [receipt.agent_id, organizationId, `${input.provider}/${input.model}`, prompt, actorId]);
     await db.query(`insert into public.ai_agent_versions(id,organization_id,agent_id,version_number,system_prompt,provider,model,credential_id,tool_ids,channel_session_id,handoff_keywords,handoff_tool_enabled,status,created_by,pipeline_ids)
-      values($1,$2,$3,1,$4,$5,$6,$7,array['crm_search_products'],$8,array['human','person','customer service'],true,'draft',$9,array[$10::uuid])`,
+      values($1,$2,$3,1,$4,$5,$6,$7,array['crm_search_store_products','crm_quote_store_checkout','crm_confirm_store_checkout','crm_store_order_status'],$8,array['human','person','customer service'],true,'draft',$9,array[$10::uuid])`,
     [receipt.version_id, organizationId, receipt.agent_id, prompt, input.provider, input.model, input.credential_id, input.channel_session_id, actorId, receipt.pipeline_id]);
     await db.query(`insert into public.followup_flow_pointers(id,organization_id,name,status,draft_graph,handoff_policy,trigger_config)
       values($1,$2,'Store enquiry','draft',$3::jsonb,'pause','{"kind":"manual"}'::jsonb)`, [receipt.flow_id, organizationId, JSON.stringify(createStoreEnquiryFlow())]);

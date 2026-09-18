@@ -74,7 +74,7 @@ export function StoreTemplateInstaller() {
     <Dialog open={open} onOpenChange={next => { if (!busy) setOpen(next); }}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader><DialogTitle>Set up your store draft</DialogTitle>
-          <DialogDescription>Create a Sales pipeline, an inactive sales agent and a draft enquiry flow. Existing resources are never overwritten. Nothing is published or sent.</DialogDescription>
+          <DialogDescription>Create a Sales funnel, an inactive sales agent and a draft enquiry flow. Existing resources are never overwritten. Nothing is published or sent.</DialogDescription>
         </DialogHeader>
         {error && <p role="alert" className="rounded-md border border-error-300 p-3 text-sm">{error}</p>}
         {busy && !setup && <p role="status">Loading organization settings…</p>}
@@ -84,7 +84,8 @@ export function StoreTemplateInstaller() {
           <div className="flex flex-wrap gap-4 underline">
             <Link href={`/app/ai/agents/${receipt.agent_id}`}>Review sales agent</Link>
             <Link href={`/app/ai/followups/${receipt.flow_id}`}>Open enquiry flow</Link>
-            <Link href="/app/settings/tenant/pipelines">Review Sales pipeline</Link>
+            <Link href="/app/settings/tenant/pipelines">Review Sales funnel</Link>
+            <Link href="/app/store">Configure store catalogue and checkout</Link>
           </div>
           <p className="text-sm text-text-muted">Add real products in your catalogue and test the bot before publication. This draft does not create orders, reserve stock, charge payments or start cart reminders.</p>
         </div> : setup && <form onSubmit={install} className="space-y-6">
@@ -92,12 +93,12 @@ export function StoreTemplateInstaller() {
             : <p role="alert">Set your organization country, currency and time zone before installation.</p>}
           <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
             <legend className="mb-3 font-medium">1. Agent and catalogue</legend>
-            <label className="space-y-1 text-sm">Messaging channel<select className={selectClass} required value={channel} onChange={e => setChannel(e.target.value)}><option value="">Choose a channel</option>{setup.channels.map((c, i) => <option key={c.id} value={c.id}>{c.display_name || `Messaging channel ${i + 1}`}</option>)}</select></label>
-            <label className="space-y-1 text-sm">AI provider<select className={selectClass} value={provider} onChange={e => { setProvider(e.target.value); setCredential(''); setModel(''); }}>{PROVEDORES.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}</select></label>
-            <label className="space-y-1 text-sm">Model ID<Input required value={model} maxLength={120} onChange={e => setModel(e.target.value)} placeholder="Use a model supported by your provider" /></label>
-            <label className="space-y-1 text-sm">AI credential<select className={selectClass} value={credential} onChange={e => setCredential(e.target.value)}><option value="">Installation key (verified before publication)</option>{setup.credentials.filter(c => c.provider === provider).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
-            <label className="space-y-1 text-sm">Product categories<Input value={categories} onChange={e => setCategories(e.target.value)} placeholder="Electronics, home items, furniture, groceries" /></label>
-            <label className="space-y-1 text-sm">Additional currencies<Input value={currencies} onChange={e => setCurrencies(e.target.value)} placeholder="Comma-separated currency codes" /></label>
+            <label className="block space-y-1 text-sm">Messaging channel<select className={selectClass} required value={channel} onChange={e => setChannel(e.target.value)}><option value="">Choose a channel</option>{setup.channels.map((c, i) => <option key={c.id} value={c.id}>{c.display_name || `Messaging channel ${i + 1}`}</option>)}</select></label>
+            <label className="block space-y-1 text-sm">AI provider<select className={selectClass} value={provider} onChange={e => { setProvider(e.target.value); setCredential(''); setModel(''); }}>{PROVEDORES.map(p => <option key={p.id} value={p.id}>{p.rotulo}</option>)}</select></label>
+            <label className="block space-y-1 text-sm">Model ID<Input required value={model} maxLength={120} onChange={e => setModel(e.target.value)} placeholder="Use a model supported by your provider" /></label>
+            <label className="block space-y-1 text-sm">AI credential<select className={selectClass} value={credential} onChange={e => setCredential(e.target.value)}><option value="">Installation key (verified before publication)</option>{setup.credentials.filter(c => c.provider === provider).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
+            <label className="block space-y-1 text-sm">Product categories<Input value={categories} onChange={e => setCategories(e.target.value)} placeholder="Electronics, home items, furniture, groceries" /></label>
+            <label className="block space-y-1 text-sm">Additional currencies<Input value={currencies} onChange={e => setCurrencies(e.target.value)} placeholder="Comma-separated currency codes" /></label>
             <p className="text-xs text-text-muted sm:col-span-2">Categories and currencies do not create products or convert prices. Add actual catalogue prices and stock separately.</p>
           </fieldset>
           <fieldset disabled={busy} className="space-y-3">

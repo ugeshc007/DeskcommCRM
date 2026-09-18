@@ -8,6 +8,8 @@ import { apiCredentialSchemas } from '@/lib/integrations/provider-credentials';
 import { createSupabaseIntegrationStore } from '@/lib/integrations/supabase-store';
 import { inboundEventSchema,recordInboundEvent,verifyEventSignature } from '@/lib/integrations/inbound';
 import { audit } from '@/lib/audit';
+import { applyCheckoutPaymentEvent, checkoutEventSchema } from '@/lib/ecommerce/payment-events';
+import { getRequestPool } from '@/lib/agent-engine/db/request-pool';
 export const runtime='nodejs';
 
 async function boundedBody(req:Request):Promise<string>{
@@ -33,6 +35,12 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
   let event:z.infer<typeof inboundEventSchema>;
   if(stripe){
    const parsed=JSON.parse(raw);const type=z.object({type:z.string()}).parse(parsed).type;
+   // Checkout natif: la signature est déjà vérifiée, le tenant vient du coffre.
+   const native = checkoutEventSchema.safeParse(parsed);
+   if (native.success) {
+    const outcome = await applyCheckoutPaymentEvent(getRequestPool(), { organizationId: org, connectionId: id, revision: connection.revision }, native.data);
+    return ok(outcome);
+   }
    if(!['checkout.session.completed','checkout.session.async_payment_succeeded','checkout.session.async_payment_failed'].includes(type))return ok({outcome:'ignored'});
    const verified=stripeEvent.parse(parsed);const session=verified.data.object;
    // Só links criados nesta conexão/organização podem confirmar pagamentos aqui.

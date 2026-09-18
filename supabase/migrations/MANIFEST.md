@@ -307,3 +307,9 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20260912160000` | `0241_saas_provider_events` | Recibo global mínimo + RPC service-only aplicam eventos normalizados por referência externa confiável; duplicados, desconhecidos e fora de ordem não regridem a assinatura. |
 | `20260914113000` | `0242_english_e_usd_defaults` | Novas organizações começam em inglês, UTC e USD; onboarding escolhe país, fuso e moeda sem alterar tenants existentes. |
 | `20260914170000` | `0243_meta_app_secret_pela_tela` | App Secret do webhook oficial em singleton server-only, cifrado e configurável na aba Conexões apenas pelo administrador da plataforma; banco primeiro e ambiente como rollback. |
+| `20260918140000` | `0279_native_page_channel` | Identidade de Page por organização, vínculo de credencial revisionado, ingestão atômica/deduplicada e suspensão ao rotacionar. RPCs service-only; não ativa bots. |
+| `20260918150000` | `0280_checkout_module_provisioner` | Provisionador fixo service-only do módulo opcional de loja. Entregar a função não cria tabelas nem ativa organizações; reserva e pagamentos usam registros escopados. |
+| `20260918170000` | `0281_native_inbound_recovery` | Mensagem, mídia e pós-entrada duráveis no mesmo commit; despacho idempotente após reinício, sem repetir resposta. |
+| `20260918180000` | `0282_bot_checkout_provisioner` | Extensão opt-in do provisionador: propostas por mensagem, confirmação vinculada ao cliente e ativação explícita do checkout automático. |
+| `20260918190000` | `0283_native_channel_store_privacy` | Redige identidade de canal e dados opcionais do checkout; tombstone impede recriar o contato apagado por reentrega. |
+| `20260918200000` | `0284_inbound_dispatch_receipts` | Recibo de despacho independente de metadata mutável, preservando deduplicação durante persistência de mídia. |

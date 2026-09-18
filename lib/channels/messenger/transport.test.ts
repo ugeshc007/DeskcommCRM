@@ -38,6 +38,12 @@ describe('Messenger scoped transport', () => {
       .rejects.toMatchObject({ outcome: 'unknown', message: 'messenger_delivery_uncertain' });
     expect(http).toHaveBeenCalledTimes(1);
   });
+  it('resolves fresh credentials after the final permission guard', async () => {
+    let connected = true;
+    await expect(sendMessengerEnvelope({ ...envelope, beforeSend: async () => { connected = false; } }, async () => connected ? connection : null))
+      .rejects.toMatchObject({ outcome: 'rejected', code: 'messenger_connection_unavailable' });
+    expect(http).not.toHaveBeenCalled();
+  });
   it('classifies a definitive remote rejection without exposing its payload', async () => {
     http.mockResolvedValue({ status: 403, data: { error: { message: 'sensitive remote token' } } });
     await expect(sendMessengerEnvelope(envelope, async () => connection))

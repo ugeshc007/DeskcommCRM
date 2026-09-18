@@ -79,6 +79,8 @@ export const PUBLIC_PATHS: RegExp[] = [
   // dois nomes de propósito: `/^\/legal/` deixaria qualquer sub-path futuro
   // nascer público de carona.
   /^\/legal\/(terms|privacy)$/,
+  // Retorno estático do checkout: não lê pedido, não aceita ação nem confirma pagamento.
+  /^\/checkout\/return$/,
 ];
 
 export function isPublicPath(pathname: string): boolean {

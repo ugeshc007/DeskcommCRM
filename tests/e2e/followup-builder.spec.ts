@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
+import { createClient } from '@supabase/supabase-js';
 
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
@@ -42,6 +43,44 @@ function loadCreds(): Creds {
 }
 
 let creds = loadCreds();
+
+test('Native store catalogue persists with tenant authorization and mobile layout', async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname)) throw new Error('Store fixture requires local Supabase');
+  const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  const provision = await admin.rpc('fn_provision_checkout_module');
+  expect(provision.error).toBeNull();
+  expect(creds.admin_totp).toBeDefined();
+  await loginWithTotp(page, creds.users.admin!.email, creds.admin_totp!.secret);
+  await page.goto('/app/store');
+  await expect(page.getByRole('heading', { name: '2. Product catalogue' })).toBeVisible();
+  const sku = 'E2E-' + Date.now();
+  let saved: { revision: number; product: Record<string, unknown> } | undefined;
+  try {
+    await page.locator('#store-product-sku').fill(sku);
+    await page.locator('#store-product-name').fill('Synthetic catalogue item');
+    await page.locator('#store-product-category').fill('Test items');
+    await page.getByLabel('Price in minor units', { exact: true }).fill('1250');
+    await page.getByLabel('Stock on hand (blank means unknown)').fill('5');
+    await page.getByRole('button', { name: 'Add product', exact: true }).click();
+    await expect(page.getByText('Product saved.', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('cell', { name: new RegExp(sku) })).toBeVisible();
+    const result = await page.request.get('/api/v1/ecommerce-store');
+    expect(result.status()).toBe(200);
+    saved = (await result.json()).data.products.find((p: { sku: string }) => p.sku === sku);
+    expect(saved?.product).toMatchObject({ sku, price_cents: 1250, stock: 5 });
+    await page.screenshot({ path: 'e2e-artifacts/native-store-desktop.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: 'e2e-artifacts/native-store-mobile.png', fullPage: true });
+  } finally {
+    if (saved) {
+      const archived = await page.request.post('/api/v1/ecommerce-store', { data: { operation: 'product', revision: saved.revision, active: false, product: saved.product } });
+      expect(archived.status()).toBe(200);
+    }
+  }
+});
 
 // ── Precondição de identidade ────────────────────────────────────────────────
 // Esta spec dirige o produto como ADMIN DE TENANT (`creds.users.admin`), o

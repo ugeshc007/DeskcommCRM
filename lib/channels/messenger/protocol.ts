@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { assertPageMediaUrl } from './media';
 
 // PSIDs são endereços da Página, não telefones nem identidades globais.
 const pageScopedId = z.string().regex(/^[0-9]+$/);
@@ -12,7 +13,7 @@ const eventSchema = z.object({
     text: z.string().optional(),
     is_echo: z.boolean().optional(),
     quick_reply: z.object({ payload: z.string().min(1) }).optional(),
-    attachments: z.array(z.object({ type: z.string() })).optional(),
+    attachments: z.array(z.object({ type: z.string(), payload: z.object({ url: z.string().max(8000).optional() }).optional() })).max(10).optional(),
   }).optional(),
   postback: z.object({
     mid: z.string().min(1).optional(),
@@ -36,6 +37,7 @@ export type MessengerInbound = {
   text: string | null;
   selection: string | null;
   attachmentTypes: string[];
+  attachments: { kind: 'image' | 'video' | 'audio' | 'document'; url: string }[];
 };
 
 /** A assinatura cobre os bytes originais, antes de qualquer parse JSON. */
@@ -75,8 +77,13 @@ export function parseMessengerWebhook(raw: Uint8Array, signature: string | null,
         timestamp: event.timestamp,
         text: event.message?.text ?? event.postback?.title ?? null,
         selection: event.message?.quick_reply?.payload ?? event.postback?.payload ?? null,
-        // URLs arbitrárias não atravessam este seam nem disparam downloads.
+        // O download só ocorre depois, no worker e com DNS fixado.
         attachmentTypes: event.message?.attachments?.map(attachment => attachment.type) ?? [],
+        attachments: (event.message?.attachments ?? []).flatMap(a => {
+          if (!a.payload?.url || !['image', 'video', 'audio', 'file'].includes(a.type)) return [];
+          assertPageMediaUrl(a.payload.url);
+          return [{ kind: (a.type === 'file' ? 'document' : a.type) as 'image' | 'video' | 'audio' | 'document', url: a.payload.url }];
+        }),
       });
     }
   }

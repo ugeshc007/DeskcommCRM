@@ -10,6 +10,6 @@ export const MESSENGER_CREDENTIAL_FIELDS = [
 export const MESSENGER_CONNECTION_CARD = {
   id: MESSENGER_CONNECTION_PROVIDER, name: 'Facebook Messenger', icon: 'message', phase: 9,
   auth: 'api_key', actions: [],
-  description: 'Securely prepare your organization’s Facebook Page credentials. Messaging activation is not available yet.',
+  description: 'Connect your organization’s Facebook Page to receive customer messages in Inbox and reply during the messaging window.',
   instructions: 'Use your own Meta app and Page access token. Save the Page ID, app secret, verification token and Graph API version. Test checks that the token belongs to this Page; it does not prove messaging permissions or webhook delivery. Keep a copy of your verification token securely: saved secrets are never returned. This setup does not activate a bot or send messages.',
 } as const;

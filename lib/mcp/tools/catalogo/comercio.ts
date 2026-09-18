@@ -7,6 +7,21 @@
 import { declararTools } from "./tipos";
 
 export const TOOLS_COMERCIO = declararTools([
+  { name: 'crm_quote_store_checkout', category: 'write', rotulo: 'Prepare store quote',
+    explicacao: 'Calculate catalogue prices and delivery charges for customer confirmation before reserving any stock.',
+    oQueToca: 'Store quotes', risco: 'atencao', pacotes: ['vender'] },
+  { name: 'crm_confirm_store_checkout', category: 'write', rotulo: 'Confirm store checkout',
+    explicacao: 'Verify the customer confirmation, reserve stock once and prepare a secure payment link for that order.',
+    oQueToca: 'Stock and orders', risco: 'critico', pacotes: ['vender'] },
+  { name: 'crm_store_order_status', category: 'read', rotulo: 'Check store payment status',
+    explicacao: 'Read the current customer’s verified order status without trusting screenshots or claims of payment.',
+    oQueToca: 'Store orders', risco: 'seguro', pacotes: ['vender', 'atender'] },
+  {
+    name: 'crm_search_store_products', category: 'read',
+    rotulo: 'Search store products',
+    explicacao: 'Find this organization’s store products, exact prices and stock remaining after pending orders.',
+    oQueToca: 'Store catalogue', risco: 'seguro', pacotes: ['vender', 'atender'],
+  },
   {
     name: "crm_list_contact_orders",
     category: "read",

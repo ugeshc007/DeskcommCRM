@@ -9386,6 +9386,12 @@ alter table public.channel_sessions
   add column if not exists wacalls_jid text,
   add column if not exists wacalls_paired_at timestamptz;
 
+-- Colunas de identidade do canal nativo precisam anteceder o CHECK no UPDATE.
+alter table public.channel_sessions
+  add column if not exists provider_account_id text,
+  add column if not exists integration_connection_id uuid,
+  add column if not exists credential_revision integer;
+
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
@@ -9393,7 +9399,7 @@ alter table public.channel_sessions
   add constraint channel_sessions_provider_check
   -- 'wacalls' (migration 0233, chamada de voz) somado aqui — UM bloco só por
   -- constraint, doutrina de baseline (não duplicar drop+add por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text]));
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'messenger'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9403,7 +9409,8 @@ alter table public.channel_sessions
     (provider = 'waha'       and waha_session_name    is not null) or
     (provider = 'meta_cloud' and meta_phone_number_id is not null) or
     (provider = 'zernio'     and zernio_account_id    is not null) or
-    (provider = 'wacalls'    and wacalls_session_id    is not null)
+    (provider = 'wacalls'    and wacalls_session_id    is not null) or
+    (provider = 'messenger' and provider_account_id is not null and provider_account_id ~ '^[0-9]{1,64}$' and integration_connection_id is not null and credential_revision is not null and credential_revision > 0)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -24615,3 +24622,370 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+
+-- 0279: canal nativo com identidade e revisão isoladas por organização.
+-- Identidade e autoridade de canal são núcleo. PSID nunca vira telefone.
+alter table public.channel_sessions add column if not exists provider_account_id text;
+alter table public.channel_sessions add column if not exists integration_connection_id uuid;
+alter table public.channel_sessions add column if not exists credential_revision integer;
+alter table public.channel_sessions add column if not exists webhook_verified_at timestamptz;
+alter table public.channel_sessions add column if not exists webhook_received_at timestamptz;
+-- Provider CHECK consolidado no bloco anterior para UPDATE seguro.
+alter table public.conversations drop constraint if exists conversations_channel_check;
+alter table public.conversations add constraint conversations_channel_check check(channel in ('whatsapp','messenger'));
+create unique index if not exists channel_sessions_org_id_identity on public.channel_sessions(organization_id,id);
+create unique index if not exists contacts_org_id_identity on public.contacts(organization_id,id);
+create unique index if not exists native_page_exclusive on public.channel_sessions(provider,provider_account_id) where provider='messenger';
+create unique index if not exists native_connection_exclusive on public.channel_sessions(integration_connection_id) where integration_connection_id is not null;
+do $$ begin
+ if not exists(select 1 from pg_constraint where conname='channel_integration_owner') then
+  alter table public.channel_sessions add constraint channel_integration_owner foreign key(organization_id,integration_connection_id) references public.integration_connections(organization_id,id);
+ end if;
+end $$;
+
+create table if not exists public.channel_contact_identities(
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ channel_session_id uuid not null,
+ provider_user_id text not null check(length(provider_user_id) between 1 and 128),
+ contact_id uuid not null,
+ primary key(organization_id,channel_session_id,provider_user_id),
+ foreign key(organization_id,channel_session_id) references public.channel_sessions(organization_id,id),
+ foreign key(organization_id,contact_id) references public.contacts(organization_id,id)
+);
+alter table public.channel_contact_identities enable row level security;
+revoke all on public.channel_contact_identities from public,anon,authenticated,service_role;
+grant select on public.channel_contact_identities to service_role;
+
+create or replace function public.fn_guard_native_channel_binding() returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ if current_setting('role',true) in ('anon','authenticated') and
+  (new.provider='messenger' or (tg_op='UPDATE' and old.provider='messenger')) then
+  raise exception 'native_channel_server_only' using errcode='42501';
+ end if;
+ return new;
+end $$;
+revoke all on function public.fn_guard_native_channel_binding() from public,anon,authenticated;
+drop trigger if exists guard_native_channel_binding on public.channel_sessions;
+create trigger guard_native_channel_binding before insert or update on public.channel_sessions for each row execute function public.fn_guard_native_channel_binding();
+
+create or replace function public.fn_bind_page_channel(p_org uuid,p_actor uuid,p_connection uuid,p_revision integer,p_page text)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare c public.integration_connections; s public.channel_sessions; result uuid;
+begin
+ if not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_actor and role='admin' and accepted_at is not null and revoked_at is null)
+ then raise exception 'channel_forbidden' using errcode='42501'; end if;
+ select * into c from public.integration_connections where organization_id=p_org and id=p_connection for update;
+ if not found or c.provider<>'messenger' or not c.active or c.revision<>p_revision or p_page is null or p_page !~ '^[0-9]{1,64}$'
+ then raise exception 'channel_connection_unavailable' using errcode='40001'; end if;
+ select * into s from public.channel_sessions where integration_connection_id=p_connection for update;
+ if found then
+  if s.organization_id<>p_org or s.provider_account_id<>p_page then raise exception 'channel_identity_conflict' using errcode='23505'; end if;
+  if s.credential_revision=p_revision and s.archived_at is null then return s.id; end if;
+  update public.channel_sessions set credential_revision=p_revision,status='STARTING',archived_at=null,webhook_verified_at=null,webhook_received_at=null where organization_id=p_org and id=s.id;
+  return s.id;
+ end if;
+ insert into public.channel_sessions(organization_id,provider,provider_account_id,integration_connection_id,credential_revision,display_name,status,webhook_secret_encrypted,created_by,metadata)
+ values(p_org,'messenger',p_page,p_connection,p_revision,c.label,'STARTING','\x'::bytea,p_actor,'{"ai_gate":"allowlist"}'::jsonb) returning id into result;
+ return result;
+end $$;
+revoke all on function public.fn_bind_page_channel(uuid,uuid,uuid,integer,text) from public,anon,authenticated;
+grant execute on function public.fn_bind_page_channel(uuid,uuid,uuid,integer,text) to service_role;
+
+-- Toda rotação/desconexão suspende a sessão; reativar exige o administrador.
+create or replace function public.fn_invalidate_connection_channel() returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ if new.revision is distinct from old.revision or not new.active then
+  update public.channel_sessions set status='STOPPED',status_reason='Connection changed; activate and verify again',webhook_verified_at=null
+   where organization_id=new.organization_id and integration_connection_id=new.id;
+ end if;
+ return new;
+end $$;
+revoke all on function public.fn_invalidate_connection_channel() from public,anon,authenticated;
+drop trigger if exists invalidate_connection_channel on public.integration_connections;
+create trigger invalidate_connection_channel after update on public.integration_connections for each row execute function public.fn_invalidate_connection_channel();
+
+-- Uma transação guarda identidade, conversa e mensagem; advisory lock evita duplicar
+-- contato na primeira entrega concorrente. Reentrega não move a janela nem o unread.
+create or replace function public.fn_ingest_page_message(p_org uuid,p_session uuid,p_revision integer,p_sender text,p_external text,p_at timestamptz,p_text text,p_selection text)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare s public.channel_sessions; contact uuid; conversation uuid; message uuid; duplicate boolean:=false;
+begin
+ -- Mesmo ordenamento de bind/rotate: conexão antes da sessão. Evita upgrade
+ -- SHARE->UPDATE concorrente e inversão com o trigger de rotação.
+ perform 1 from public.integration_connections ic
+ where ic.organization_id=p_org and ic.id=(select integration_connection_id from public.channel_sessions where organization_id=p_org and id=p_session)
+ for share;
+ select cs.* into s from public.channel_sessions cs join public.integration_connections ic on ic.organization_id=cs.organization_id and ic.id=cs.integration_connection_id
+ where cs.organization_id=p_org and cs.id=p_session and cs.provider='messenger' and cs.archived_at is null and cs.credential_revision=p_revision
+ and ic.revision=p_revision and ic.active for update of cs;
+ if not found then raise exception 'channel_unavailable' using errcode='42501'; end if;
+ if p_sender is null or p_sender !~ '^[0-9]{1,64}$' or p_sender=s.provider_account_id or p_external is null or length(p_external) not between 1 and 512
+ or p_at is null or p_at>now()+interval '5 minutes' or length(coalesce(p_text,''))>20000 or length(coalesce(p_selection,''))>2000 then
+  raise exception 'invalid_message' using errcode='22023'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(p_org::text||p_session::text||p_sender,0));
+ select contact_id into contact from public.channel_contact_identities where organization_id=p_org and channel_session_id=p_session and provider_user_id=p_sender;
+ if not found then
+  insert into public.contacts(organization_id,display_name,source) values(p_org,'Messenger customer','messenger') returning id into contact;
+  insert into public.channel_contact_identities values(p_org,p_session,p_sender,contact);
+ end if;
+ select id into conversation from public.conversations where organization_id=p_org and channel_session_id=p_session and contact_id=contact and provider_conversation_id=p_sender order by created_at desc limit 1;
+ if not found then
+  insert into public.conversations(organization_id,contact_id,channel_session_id,channel,provider_conversation_id,status)
+  values(p_org,contact,p_session,'messenger',p_sender,'open') returning id into conversation;
+ end if;
+ select id into message from public.messages where organization_id=p_org and external_id='page:'||s.provider_account_id||':'||p_external;
+ if found then
+  if not exists(select 1 from public.messages where organization_id=p_org and id=message and conversation_id=conversation) then raise exception 'message_identity_conflict' using errcode='23505'; end if;
+  duplicate:=true;
+ else
+  insert into public.messages(organization_id,conversation_id,channel_session_id,contact_id,external_id,type,direction,status,body,sent_at,metadata)
+  values(p_org,conversation,p_session,contact,'page:'||s.provider_account_id||':'||p_external,'text','inbound','received',p_text,p_at,
+   jsonb_build_object('selection',p_selection,'provider_message_id',p_external)) returning id into message;
+  update public.conversations set last_inbound_at=greatest(last_inbound_at,p_at),last_message_at=greatest(last_message_at,p_at),
+   last_message_preview=case when last_message_at is null or last_message_at<=p_at then left(p_text,200) else last_message_preview end,
+   unread_count_for_assignee=unread_count_for_assignee+1 where organization_id=p_org and id=conversation;
+ end if;
+ update public.channel_sessions set webhook_received_at=now(),status='WORKING',status_reason=null where organization_id=p_org and id=p_session;
+ return jsonb_build_object('contact_id',contact,'conversation_id',conversation,'message_id',message,'duplicate',duplicate);
+end $$;
+revoke all on function public.fn_ingest_page_message(uuid,uuid,integer,text,text,timestamptz,text,text) from public,anon,authenticated;
+grant execute on function public.fn_ingest_page_message(uuid,uuid,integer,text,text,timestamptz,text,text) to service_role;
+
+-- Módulo opcional: entregar a função não cria tabelas de loja para todos.
+-- Instalação da instância é separada da ativação por organização.
+create or replace function public.fn_provision_checkout_module()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform pg_advisory_xact_lock(hashtextextended('checkout-module-provisioner-v1',0));
+ create table if not exists public.store_settings (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  active boolean not null default false,
+  revision integer not null default 1 check(revision>0),
+  config jsonb not null check(jsonb_typeof(config)='object' and octet_length(config::text)<=65536),
+  prices_include_all_taxes boolean not null default false,
+  payment_connection_id uuid,
+  reservation_minutes integer not null check(reservation_minutes between 30 and 1440),
+  updated_at timestamptz not null default now(),
+  foreign key(organization_id,payment_connection_id) references public.integration_connections(organization_id,id)
+ );
+ create table if not exists public.store_products (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  sku text not null check(length(sku) between 1 and 100),
+  revision integer not null default 1 check(revision>0),
+  active boolean not null default true,
+  product jsonb not null check(jsonb_typeof(product)='object' and octet_length(product::text)<=65536),
+  stock_on_hand integer check(stock_on_hand>=0),
+  stock_reserved integer not null default 0 check(stock_reserved>=0),
+  updated_at timestamptz not null default now(),
+  primary key(organization_id,sku),
+  check((stock_on_hand is null and stock_reserved=0) or stock_on_hand>=stock_reserved)
+ );
+ create table if not exists public.store_orders (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id),
+  contact_id uuid not null,
+  request_key text not null check(length(request_key) between 1 and 200),
+  request_fingerprint text not null check(request_fingerprint ~ '^[a-f0-9]{64}$'),
+  quote jsonb not null check(jsonb_typeof(quote)='object' and octet_length(quote::text)<=65536),
+  total_cents bigint not null check(total_cents between 0 and 9007199254740991),
+  currency text not null check(currency ~ '^[A-Z]{3}$'),
+  status text not null check(status in ('reserved','awaiting_payment','payment_review','paid','cancelled','expired')),
+  stock_state text not null default 'reserved' check(stock_state in ('reserved','consumed','released')),
+  connection_id uuid not null,
+  connection_revision integer not null check(connection_revision>0),
+  payment_session_id text,
+  payment_url text,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(organization_id,id),
+  unique(organization_id,request_key),
+  unique(connection_id,payment_session_id),
+  foreign key(organization_id,contact_id) references public.contacts(organization_id,id),
+  foreign key(organization_id,connection_id) references public.integration_connections(organization_id,id)
+ );
+ create table if not exists public.store_order_items (
+  organization_id uuid not null,
+  order_id uuid not null,
+  sku text not null,
+  quantity integer not null check(quantity>0),
+  primary key(organization_id,order_id,sku),
+  foreign key(organization_id,order_id) references public.store_orders(organization_id,id),
+  foreign key(organization_id,sku) references public.store_products(organization_id,sku)
+ );
+ create table if not exists public.store_payment_events (
+  organization_id uuid not null,
+  connection_id uuid not null,
+  event_id text not null check(length(event_id) between 1 and 100),
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  order_id uuid not null,
+  outcome text not null check(outcome in ('paid','expired','review','ignored')),
+  created_at timestamptz not null default now(),
+  primary key(organization_id,connection_id,event_id),
+  foreign key(organization_id,connection_id) references public.integration_connections(organization_id,id),
+  foreign key(organization_id,order_id) references public.store_orders(organization_id,id)
+ );
+ alter table public.store_settings enable row level security;
+ alter table public.store_products enable row level security;
+ alter table public.store_orders enable row level security;
+ alter table public.store_order_items enable row level security;
+ alter table public.store_payment_events enable row level security;
+ -- Escritas exclusivamente pela transação servidor com ator e org revalidados.
+ revoke all on public.store_settings,public.store_products,public.store_orders,public.store_order_items,public.store_payment_events from public,anon,authenticated,service_role;
+ grant select on public.store_settings,public.store_products,public.store_orders,public.store_order_items,public.store_payment_events to service_role;
+ -- O cache REST só vê as tabelas depois do commit da instalação.
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_checkout_module() from public,anon,authenticated;
+grant execute on function public.fn_provision_checkout_module() to service_role;
+
+-- ---- Native inbound recovery (migration 0281) ----
+-- Recibo + mídia + trabalho durável no mesmo commit. Não executa HTTP no banco.
+create or replace function public.fn_ingest_page_message_v2(p_org uuid,p_session uuid,p_revision integer,p_sender text,p_external text,p_at timestamptz,p_text text,p_selection text,p_media jsonb,p_opt_out boolean)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare r jsonb; mid uuid; cid uuid;
+begin
+ if p_media is not null and (p_media->>'kind' not in ('image','video','audio','document') or p_media->>'url' is null or length(p_media->>'url')>8000 or p_media->>'url' !~ '^https://') then raise exception 'invalid_media'; end if;
+ r:=public.fn_ingest_page_message(p_org,p_session,p_revision,p_sender,p_external,p_at,p_text,p_selection);
+ mid:=(r->>'message_id')::uuid; cid:=(r->>'contact_id')::uuid;
+ if coalesce((r->>'duplicate')::boolean,false) then return r; end if;
+ if exists(select 1 from public.contacts where organization_id=p_org and id=cid and is_anonymized) then raise exception 'contact_unavailable'; end if;
+ if p_opt_out then
+  update public.contacts set is_blocked=true,blocked_reason='stop_keyword',blocked_at=now() where organization_id=p_org and id=cid;
+ end if;
+ if p_media is not null then
+  update public.messages set type=p_media->>'kind',media_url=p_media->>'url',metadata=metadata||'{"media_status":"pending"}'::jsonb
+   where organization_id=p_org and id=mid;
+  perform public.emit_event('media.persist_requested','message',mid,jsonb_build_object('message_id',mid),'{}',p_org);
+ end if;
+ perform public.emit_event('channel.inbound_postprocess','message',mid,jsonb_build_object('message_id',mid),'{}',p_org);
+ return r;
+end $$;
+revoke all on function public.fn_ingest_page_message_v2(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) from public,anon,authenticated;
+grant execute on function public.fn_ingest_page_message_v2(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) to service_role;
+
+-- Um evento de despacho por mensagem, mesmo se o worker morrer após o commit.
+create or replace function public.fn_dispatch_inbound_once(p_org uuid,p_message uuid)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare m public.messages; eid uuid;
+begin
+ select * into m from public.messages where organization_id=p_org and id=p_message and direction='inbound' for update;
+ if not found then raise exception 'message_unavailable'; end if;
+ if m.metadata ? 'native_dispatch_event_id' then return (m.metadata->>'native_dispatch_event_id')::uuid; end if;
+ if not exists(select 1 from public.contacts where organization_id=p_org and id=m.contact_id and not is_anonymized and not is_blocked) then return null; end if;
+ eid:=public.emit_event('ai_agent.dispatch_requested','message',m.id,jsonb_build_object('organization_id',p_org,'conversation_id',m.conversation_id,'contact_id',m.contact_id,'channel_session_id',m.channel_session_id,'inbound_message_id',m.id),'{"source":"durable_inbound"}',p_org);
+ update public.messages set metadata=coalesce(metadata,'{}')||jsonb_build_object('native_dispatch_event_id',eid) where organization_id=p_org and id=m.id;
+ return eid;
+end $$;
+revoke all on function public.fn_dispatch_inbound_once(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_dispatch_inbound_once(uuid,uuid) to service_role;
+
+-- Extensão opt-in: o baseline instala funções, não tabelas de um nicho.
+do $rename$ begin
+ if to_regprocedure('public.fn_provision_checkout_module_base()') is null then
+  alter function public.fn_provision_checkout_module() rename to fn_provision_checkout_module_base;
+ end if;
+end $rename$;
+revoke all on function public.fn_provision_checkout_module_base() from public,anon,authenticated,service_role;
+create or replace function public.fn_provision_checkout_module() returns void
+language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_checkout_module_base();
+ alter table public.store_settings add column if not exists automated_checkout boolean not null default false;
+ create unique index if not exists conversations_store_org_identity on public.conversations(organization_id,id);
+ create unique index if not exists messages_store_org_identity on public.messages(organization_id,id);
+ create table if not exists public.store_checkout_proposals (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id),
+  contact_id uuid not null,
+  conversation_id uuid not null,
+  source_message_id uuid not null,
+  cart jsonb not null,
+  quote jsonb not null,
+  confirmation text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  unique(organization_id,id),
+  unique(organization_id,source_message_id),
+  foreign key(organization_id,contact_id) references public.contacts(organization_id,id),
+  foreign key(organization_id,conversation_id) references public.conversations(organization_id,id),
+  foreign key(organization_id,source_message_id) references public.messages(organization_id,id)
+ );
+ alter table public.store_checkout_proposals enable row level security;
+ revoke all on public.store_checkout_proposals from public,anon,authenticated,service_role;
+ grant select on public.store_checkout_proposals to service_role;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_checkout_module() from public,anon,authenticated;
+grant execute on function public.fn_provision_checkout_module() to service_role;
+-- Atualiza somente instalações que já ativaram o módulo opcional.
+do $installed$ begin
+ if to_regclass('public.store_settings') is not null then perform public.fn_provision_checkout_module(); end if;
+end $installed$;
+
+-- Tombstone pseudônimo impede recriar automaticamente um contato apagado.
+create or replace function public.fn_redact_native_channel_store() returns trigger
+language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ update public.channel_contact_identities set provider_user_id='redacted:'||encode(sha256(convert_to(organization_id::text||channel_session_id::text||provider_user_id,'UTF8')),'hex')
+  where organization_id=new.organization_id and contact_id=new.id and provider_user_id not like 'redacted:%';
+ update public.conversations set provider_conversation_id=null where organization_id=new.organization_id and contact_id=new.id and channel='messenger';
+ if to_regclass('public.store_checkout_proposals') is not null then
+  delete from public.store_checkout_proposals where organization_id=new.organization_id and contact_id=new.id;
+ end if;
+ if to_regclass('public.store_orders') is not null then
+  update public.store_orders set quote='{}',payment_url=null,updated_at=now()
+   where organization_id=new.organization_id and contact_id=new.id;
+ end if;
+ return new;
+end $$;
+revoke all on function public.fn_redact_native_channel_store() from public,anon,authenticated;
+drop trigger if exists redact_native_channel_store on public.contacts;
+create trigger redact_native_channel_store after update of is_anonymized on public.contacts
+for each row when(new.is_anonymized is true) execute function public.fn_redact_native_channel_store();
+
+create or replace function public.fn_ingest_page_message_v3(p_org uuid,p_session uuid,p_revision integer,p_sender text,p_external text,p_at timestamptz,p_text text,p_selection text,p_media jsonb,p_opt_out boolean)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare redacted boolean;
+begin
+ select c.is_anonymized into redacted from public.channel_contact_identities i join public.contacts c on c.organization_id=i.organization_id and c.id=i.contact_id
+  where i.organization_id=p_org and i.channel_session_id=p_session
+    and i.provider_user_id in(p_sender,'redacted:'||encode(sha256(convert_to(p_org::text||p_session::text||p_sender,'UTF8')),'hex'))
+  for share of c;
+ if coalesce(redacted,false) then return '{"ignored":true}'::jsonb; end if;
+ return public.fn_ingest_page_message_v2(p_org,p_session,p_revision,p_sender,p_external,p_at,p_text,p_selection,p_media,p_opt_out);
+end $$;
+revoke all on function public.fn_ingest_page_message_v3(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) from public,anon,authenticated;
+grant execute on function public.fn_ingest_page_message_v3(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) to service_role;
+
+-- Metadata da mensagem também é atualizada pelo worker de mídia. Recibo de
+-- despacho separado: nenhum merge de metadata pode apagar a deduplicação.
+create table if not exists public.inbound_dispatch_receipts (
+ organization_id uuid not null references public.organizations(id),
+ message_id uuid primary key references public.messages(id) on delete cascade,
+ event_id uuid not null,
+ created_at timestamptz not null default now()
+);
+alter table public.inbound_dispatch_receipts enable row level security;
+revoke all on public.inbound_dispatch_receipts from public,anon,authenticated,service_role;
+grant select on public.inbound_dispatch_receipts to service_role;
+create or replace function public.fn_dispatch_inbound_once(p_org uuid,p_message uuid)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare m public.messages; eid uuid;
+begin
+ select * into m from public.messages where organization_id=p_org and id=p_message and direction='inbound' for update;
+ if not found then raise exception 'message_unavailable'; end if;
+ select event_id into eid from public.inbound_dispatch_receipts where organization_id=p_org and message_id=p_message;
+ if found then return eid; end if;
+ if not exists(select 1 from public.contacts where organization_id=p_org and id=m.contact_id and not is_anonymized and not is_blocked) then return null; end if;
+ -- Compatibilidade com recibos emitidos pela versão anterior.
+ select id into eid from public.event_log where organization_id=p_org and entity_id=p_message
+  and event_type='ai_agent.dispatch_requested' and metadata->>'source'='durable_inbound' order by created_at limit 1;
+ if not found then
+  eid:=public.emit_event('ai_agent.dispatch_requested','message',m.id,jsonb_build_object('organization_id',p_org,'conversation_id',m.conversation_id,'contact_id',m.contact_id,'channel_session_id',m.channel_session_id,'inbound_message_id',m.id),'{"source":"durable_inbound"}',p_org);
+ end if;
+ insert into public.inbound_dispatch_receipts(organization_id,message_id,event_id) values(p_org,p_message,eid);
+ return eid;
+end $$;
+revoke all on function public.fn_dispatch_inbound_once(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_dispatch_inbound_once(uuid,uuid) to service_role;

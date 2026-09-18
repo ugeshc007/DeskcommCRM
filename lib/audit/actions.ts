@@ -503,6 +503,12 @@ export const AUDIT_ACTIONS = [
   "integration.oauth_started",
   "integration.event_received",
   "ecommerce.template_installed",
+  "store.module_installed",
+  "store.configuration_updated",
+  "store.order_reserved",
+  "store.payment_prepared",
+  "store.payment_recovered",
+  "store.payment_event",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -12,7 +12,7 @@ export type { ChannelProvider, ChannelCapabilities, ProviderDeMensagem };
 
 /** Restrição de formato: transporte sem implementação recusa, não degrada. */
 export function supportsInteractiveChoices(provider: string | null | undefined): boolean {
-  const supported: Record<ProviderDeMensagem, boolean> = { waha: false, meta_cloud: true, zernio: false };
+  const supported: Record<ProviderDeMensagem, boolean> = { waha: false, meta_cloud: true, zernio: false, messenger: false };
   return Object.hasOwn(supported, provider ?? '') && supported[provider as ProviderDeMensagem] === true;
 }
 
@@ -24,6 +24,10 @@ export function supportsInteractiveChoices(provider: string | null | undefined):
  * `capabilitiesOf` segue falhando fechado para quem não está aqui.
  */
 export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilities> = {
+  messenger: {
+    freeformOutsideWindow: false, requiresTemplates: false, canManageTemplates: false,
+    banRisk: false, minIntervalMs: null, voiceNote: "server-convert", groups: "none", costPerMessage: false,
+  },
   // Auto-restrição: falo quando quiser, mas o WhatsApp me bane se eu abusar.
   waha: {
     freeformOutsideWindow: true,
@@ -122,6 +126,7 @@ export const CHANNEL_PROVIDER_WACALLS: ChannelProvider = "wacalls";
  * precisa ser DECIDIDO aqui, não esquecido.
  */
 export const PROVIDERS_DE_MENSAGEM = [
+  "messenger",
   "waha",
   "meta_cloud",
   "zernio",

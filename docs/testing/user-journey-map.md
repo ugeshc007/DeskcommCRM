@@ -1985,6 +1985,33 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 
 ## Comunidade 360 — aceite integrado de 2026-09-06
 
+### Field Sales development journey — 2026-09-19
+
+- [P0] `field-sales.spec.ts`: synthetic organization/admin, English Field Sales workspace,
+  inherited AE/Asia-Dubai region, weekly project assignment saved through the frontend,
+  activity tab with no off-duty location, and narrow-screen overflow check. Local production
+  build plus real local Supabase; no API mocks, employee GPS or external map tiles.
+- First runs found a mislabeled native dropdown and missing organization lifecycle foreign
+  keys in the optional module. Labels now have explicit association; migration 0315 preserves
+  organization cleanup while blocking individual employee history deletion. Journey rerun
+  passed; responsive card-width hardening also passed on the latest production build.
+- Screenshots: `.superpowers/evidence/field-sales-20260919/`.
+  Artifact data is synthetic. This is not proof of real GPS, offline Android drain or a pilot.
+
+### Field Sales simplified mobile and Live view — 2026-09-20
+
+- [P0] Android fresh connection remains device-key based. Connected home shows only today's real
+  assignment selector and Punch In/Out, with notification/profile icons and server-first sign-out.
+- [P0] Punch-in submits the chosen project/schedule/date; a foreign, canceled or nonexistent
+  occurrence must be rejected without opening a session.
+- [P0] Live view lists only explicitly scoped employees. Selecting a marker or employee loads that
+  person's route for the selected organization-local date; separate sessions are not bridged.
+- [P0] Sign-out while working or with queued attendance/GPS is rejected. Successful sign-out
+  revokes only the current device before encrypted local state is removed.
+- Current evidence: Android debug and test APK compile, unit tests and lint pass; focused contracts
+  and baseline final-security-guard tests pass. Database/E2E and fresh real-device visual proof are
+  still required before release.
+
 ### Managed SaaS control plane
 
 - [P0] Platform owner creates a tenant, records a manual subscription, and sees the revision.

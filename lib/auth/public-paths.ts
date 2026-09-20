@@ -13,6 +13,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/500$/,
   /^\/503$/,
   /^\/api\/v1\/health$/,
+  // Employee-scoped, expiring hash-only device bearer; current membership is
+  // revalidated inside the handler. Never exposes management operations.
+  /^\/api\/v1\/field-sales\/mobile$/,
   /^\/api\/v1\/webhooks\//,
   /^\/api\/v1\/cron\//,
   // Heartbeat do agente do host (bearer INTERNAL_SECRET/INTERNAL_CRON_SECRET,

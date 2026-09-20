@@ -148,3 +148,11 @@ backups/
 /*-regression-results.json
 /structural-fixed-results.json
 /full-eslint-results.json
+
+# Android generated files, local SDK paths and signing material.
+mobile/android/.gradle/
+mobile/android/**/build/
+mobile/android/local.properties
+mobile/android/*.jks
+mobile/android/*.keystore
+mobile/android/keystore.properties

@@ -6978,4 +6978,8 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "É o padrão da empresa. Cada negócio pode usar uma moeda diferente.":
     "This is the company default. Each deal can use a different currency.",
   "Valor do negócio": "Deal value",
+  "Field Sales": "Field Sales",
+  "Schedule project visits and coordinate on-duty field teams.":
+    "Schedule project visits and coordinate on-duty field teams.",
+  "Inherited from CRM organization settings": "Inherited from CRM organization settings",
 };

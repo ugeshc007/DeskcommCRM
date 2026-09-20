@@ -313,3 +313,11 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20260918180000` | `0282_bot_checkout_provisioner` | Extensão opt-in do provisionador: propostas por mensagem, confirmação vinculada ao cliente e ativação explícita do checkout automático. |
 | `20260918190000` | `0283_native_channel_store_privacy` | Redige identidade de canal e dados opcionais do checkout; tombstone impede recriar o contato apagado por reentrega. |
 | `20260918200000` | `0284_inbound_dispatch_receipts` | Recibo de despacho independente de metadata mutável, preservando deduplicação durante persistência de mídia. |
+| `20260918223000` | `0311_field_sales_module` | Optional field-sales provisioner: isolated projects, weekly schedules, attendance and location records. No tables or tracking activated until explicit installation; server-only access. |
+| `20260918230000` | `0312_field_sales_devices` | Employee-scoped Android credentials: hash-only, expiring and revocable. Optional provisioning; no automatic enrollment. |
+| `20260918233000` | `0313_field_sales_retention` | Bounded service-only raw GPS retention, per-organization policy and transactionally audited counts; no-op when optional module is absent. |
+| `20260919001000` | `0314_field_sales_operations` | Optional visits, append-only operation receipts, reviewed attendance corrections and self-hosted map configuration; server-scoped access only. |
+| `20260919010000` | `0315_field_sales_lifecycle` | Optional lifecycle upgrade: organization-owned cascading cleanup while retaining individual employee/history foreign-key protection. |
+| `20260919020000` | `0316_field_sales_followups` | Optional next-action completion records and due-action index; preserves text and dates, keeps reminders employee/manager scoped. |
+| `20260919030000` | `0317_field_sales_photos` | Optional private, bounded visit photos with ownership/cascade lifecycle; no public object links. |
+| `20260920090000` | `0318_field_sales_session_projects` | New mobile work sessions must persist the selected assigned project occurrence; legacy sessions remain readable. Adds organization-scoped project/schedule FKs and the employee/date route index through the optional provisioner. |

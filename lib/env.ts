@@ -60,6 +60,8 @@ const diasDeRetencao = (nome: string, padrao: number) =>
     });
 
 const schema = z.object({
+  // Optional, read-only XYZ raster tiles. No provider requests or automatic downloads.
+  FIELD_MAP_TILES_DIR: z.string().optional(),
   // Node
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 

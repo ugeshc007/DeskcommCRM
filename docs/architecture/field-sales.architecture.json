@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Field Sales development module", "subtitle": "Optional module; employee-initiated tracking; release verification pending", "output": "field-sales.html", "quality_profile": "standard" },
+  "lanes": [{ "id": "ui", "label": "Explicit human controls" }, { "id": "runtime", "label": "Scoped runtime" }, { "id": "data", "label": "Private durable state" }],
+  "mainPath": ["crm", "mobile", "authority", "records"],
+  "nodes": [
+    { "id": "crm", "lane": "ui", "col": 0, "type": "service", "label": "Field Sales workspace", "sublabel": "Projects, recurring calendar, policy and own device keys" },
+    { "id": "mobile", "lane": "ui", "col": 1, "type": "service", "label": "Android work app", "sublabel": "Explicit punch-in; visible foreground GPS; local stop at punch-out" },
+    { "id": "queue", "lane": "data", "col": 1, "type": "database", "label": "Keystore-encrypted queue", "sublabel": "Stable IDs; network-only retry; account-bound reconnect" },
+    { "id": "authority", "lane": "runtime", "col": 2, "type": "service", "label": "Current membership and device locks", "sublabel": "Organization + employee from authentication; raw authenticated SQL access denied" },
+    { "id": "records", "lane": "data", "col": 3, "type": "database", "label": "Optional field tables", "sublabel": "Work intervals, scoped schedules and GPS; default disabled" },
+    { "id": "retention", "lane": "runtime", "col": 4, "type": "service", "label": "Existing daily retention cron", "sublabel": "Per-organization expiry; bounded deletes; no coordinates in audit" },
+    { "id": "operations", "lane": "ui", "col": 3, "type": "service", "label": "Map, visits and approvals", "sublabel": "Authorized positions; routes; due follow-ups with preserved completion history; independent corrections" },
+    { "id": "audit", "lane": "ui", "col": 4, "type": "service", "label": "Existing audit view / device sync errors", "sublabel": "Audited mutations; rejection receipts visible without expired coordinates" },
+    { "id": "reports", "lane": "ui", "col": 4, "type": "service", "label": "Daily CSV export", "sublabel": "Scoped attendance and visits; excludes GPS and notes; formula-safe cells" },
+    { "id": "tiles", "lane": "runtime", "col": 4, "type": "service", "label": "Local map assets", "sublabel": "Read-only raster or PMTiles dataset; authenticated bounded reads; no external fallback" }
+  ],
+  "edges": [
+    { "id": "crm-auth", "from": "crm", "to": "authority", "label": "Current role and explicit manager scope" },
+    { "id": "auth-data", "from": "authority", "to": "records", "label": "Scoped transaction and idempotency" },
+    { "id": "records-operations", "from": "records", "to": "operations", "label": "Scoped reads; original records and approved corrections shown separately" },
+    { "id": "operations-authority", "from": "operations", "to": "authority", "label": "Audited route access; independent approval; explicit manager visibility" },
+    { "id": "data-mobile", "from": "records", "to": "mobile", "label": "Only employee assignments and organization policy" },
+    { "id": "mobile-queue", "from": "mobile", "to": "queue", "label": "Capture during work only" },
+    { "id": "queue-auth", "from": "queue", "to": "authority", "label": "Bearer device key; revalidate revocation inside transaction" },
+    { "id": "data-retention", "from": "records", "to": "retention", "label": "Expired raw GPS by trusted organization policy" },
+    { "id": "retention-audit", "from": "retention", "to": "audit", "label": "Deletion counts in same transaction" },
+    { "id": "auth-audit", "from": "authority", "to": "audit", "label": "Mutation metadata without coordinates" },
+    { "id": "audit-mobile", "from": "audit", "to": "mobile", "label": "Human resolves permissions, connection or pending sync" },
+    { "id": "records-reports", "from": "records", "to": "reports", "label": "Existing operation scope; organization calendar day" },
+    { "id": "reports-audit", "from": "reports", "to": "audit", "label": "Export audit without report contents" },
+    { "id": "crm-tiles", "from": "crm", "to": "tiles", "label": "Administrator configures local dataset path and attribution" },
+    { "id": "tiles-operations", "from": "tiles", "to": "operations", "label": "Bounded tiles/archive ranges or visible missing-coverage error" }
+  ]
+}

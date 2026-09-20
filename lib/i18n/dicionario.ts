@@ -8674,6 +8674,13 @@ const DICIONARIO_BASE: Traducoes = {
     es: "Es el valor predeterminado de la empresa. Cada negocio puede usar una moneda diferente.",
   },
   "Valor do negócio": { es: "Valor del negocio" },
+  "Field Sales": { es: "Ventas de campo" },
+  "Schedule project visits and coordinate on-duty field teams.": {
+    es: "Programa visitas a proyectos y coordina los equipos de campo en servicio.",
+  },
+  "Inherited from CRM organization settings": {
+    es: "Heredado de la configuración de la organización en el CRM",
+  },
 };
 
 export const DICIONARIO: Traducoes = Object.fromEntries([

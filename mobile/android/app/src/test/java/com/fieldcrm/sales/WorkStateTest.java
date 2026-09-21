@@ -11,6 +11,7 @@ public class WorkStateTest {
     }
     @Test public void breaksContinueButPunchOutStops() {
         String status = WorkState.transition("off_duty", "punch_in"); assertTrue(WorkState.collecting(status));
+        status = WorkState.transition(status, "select_project"); assertTrue(WorkState.collecting(status));
         status = WorkState.transition(status, "break_start"); assertTrue(WorkState.collecting(status));
         status = WorkState.transition(status, "punch_out"); assertFalse(WorkState.collecting(status));
     }

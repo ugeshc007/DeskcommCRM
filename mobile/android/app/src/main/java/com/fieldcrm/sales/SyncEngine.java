@@ -197,7 +197,11 @@ public final class SyncEngine {
                 state = SecureState.read(context);
                 String zone = state.optString("timezone", "UTC");
                 LocalDate today = LocalDate.now(ZoneId.of(zone));
-                JSONObject snapshot = request(state, "GET", "?from=" + today + "&through=" + today.plusDays(6), null);
+                String shiftDate = state.optString("active_local_date", "");
+                LocalDate from = shiftDate.isEmpty() ? today : LocalDate.parse(shiftDate);
+                if (from.isAfter(today)) from = today;
+                if (from.isBefore(today.minusDays(1))) from = today.minusDays(1);
+                JSONObject snapshot = request(state, "GET", "?from=" + from + "&through=" + today.plusDays(6), null);
                 final String pendingCompletionMessage = completionProblem;
                 SecureState.mutate(context, current -> {
                     current.put("snapshot", snapshot); current.put("last_sync", java.time.Instant.now().toString()); current.put("sync_error", pendingCompletionMessage);
@@ -208,9 +212,16 @@ public final class SyncEngine {
                     if (sessions != null) for (int index = 0; index < sessions.length(); index++) {
                         JSONObject session = sessions.getJSONObject(index);
                         if (!session.isNull("punched_out_at")) continue;
+                        long serverStart = java.time.Instant.parse(session.getString("punched_in_at")).toEpochMilli();
+                        boolean sameSession = session.getString("id").equals(current.optString("session_id"));
+                        if ((!sameSession || current.optLong("session_start_ms") <= 0) && current.getJSONArray("events").length() == 0) {
+                            current.put("session_start_ms", serverStart).put("event_sequence", session.getInt("last_sequence"));
+                        }
                         current.put("session_id", session.getString("id")).put("status", session.optString("status", "working"))
-                            .put("active_project_id", session.optString("project_id")).put("active_schedule_id", session.optString("schedule_id"))
-                            .put("active_local_date", session.optString("local_date")).put("active_project_name", session.optString("project_name", "Assigned project"))
+                            .put("active_project_id", session.isNull("project_id") ? "" : session.getString("project_id"))
+                            .put("active_schedule_id", session.isNull("schedule_id") ? "" : session.getString("schedule_id"))
+                            .put("active_local_date", session.optString("local_date"))
+                            .put("active_project_name", session.isNull("project_name") ? "Choose a project below" : session.getString("project_name"))
                             .put("active_site_name", session.optString("site_name", ""));
                         break;
                     }

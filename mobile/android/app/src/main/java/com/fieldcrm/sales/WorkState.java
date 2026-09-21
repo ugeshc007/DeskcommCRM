@@ -5,6 +5,7 @@ public final class WorkState {
     private WorkState() {}
     public static String transition(String status, String action) {
         if (status.equals("off_duty") && action.equals("punch_in")) return "working";
+        if (collecting(status) && action.equals("select_project")) return status;
         if (status.equals("working") && action.equals("break_start")) return "on_break";
         if (status.equals("on_break") && action.equals("break_end")) return "working";
         if (!status.equals("off_duty") && action.equals("punch_out")) return "off_duty";

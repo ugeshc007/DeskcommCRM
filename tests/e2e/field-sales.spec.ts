@@ -18,7 +18,7 @@ test.beforeAll(async () => {
   for (const value of [api, db]) if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(value).hostname)) throw new Error('Field UI tests require a disposable local backend');
   pool = new pg.Pool({ connectionString: db });
   admin = createClient(api, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
-  await pool.query('select fn_provision_field_sales_session_projects()');
+  await pool.query('select fn_provision_field_sales_flexible_shifts()');
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: 'Synthetic field administrator' } });
   if (created.error || !created.data.user) throw new Error('Synthetic field account creation failed');
   actor = created.data.user.id;
@@ -62,8 +62,9 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Project', { exact: true }).selectOption(project);
   await dialog.getByLabel('Salesperson', { exact: true }).selectOption(employee);
-  await dialog.getByLabel('Start time', { exact: true }).fill('09:00');
-  await dialog.getByLabel('End time', { exact: true }).fill('11:00');
+  await dialog.getByLabel('Start date (optional)', { exact: true }).fill('2027-01-04');
+  await dialog.getByLabel('Start time (optional)', { exact: true }).fill('09:00');
+  await dialog.getByLabel('End time (optional)', { exact: true }).fill('11:00');
   await dialog.getByLabel('Mon', { exact: true }).check();
   await dialog.getByRole('button', { name: 'Save assignment', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -117,4 +118,21 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByRole('heading', { name: 'Attendance and route history' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('activity-mobile.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Calendar', exact: true }).click();
+  await page.getByRole('button', { name: 'Assign project', exact: true }).click();
+  const untimed = page.getByRole('dialog');
+  await untimed.getByLabel('Project', { exact: true }).selectOption(project);
+  await untimed.getByLabel('Salesperson', { exact: true }).selectOption(employee);
+  await expect(untimed.getByLabel('Start date (optional)', { exact: true })).toHaveValue('');
+  await expect(untimed.getByLabel('Start time (optional)', { exact: true })).toHaveValue('');
+  await untimed.getByLabel('Mon', { exact: true }).check();
+  await untimed.getByLabel('Sat', { exact: true }).check();
+  await page.screenshot({ path: testInfo.outputPath('untimed-weekly-assignment-mobile.png'), fullPage: true });
+  await untimed.getByRole('button', { name: 'Save assignment', exact: true }).click();
+  await expect(untimed).toBeHidden();
+  const stored = (await pool.query('select rule from field_sales_schedules where organization_id=$1 order by created_at desc limit 1', [org])).rows[0].rule;
+  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Dubai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const part = (type: string) => parts.find(value => value.type === type)?.value;
+  expect(stored).toMatchObject({ start_date: `${part('year')}-${part('month')}-${part('day')}`,
+    start_time: null, end_time: null, repeat: 'weekly', weekdays: [1, 6] });
 });

@@ -2,6 +2,22 @@
 
 Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migration 0320 and the matching app image; verify the installed schema and health version before claiming it is available. Evidence, not phase names, determines completion.
 
+## Flexible shift revision — 2026-09-21
+
+- A weekly project assignment may omit both start and end time. An omitted start date means
+  today's date in the organization's configured timezone; selected weekdays determine visibility.
+  The schedule does not prescribe an employee's working hours.
+- A paired employee punches in before choosing a project. This starts the visible foreground GPS
+  service and elapsed work time. Today's scheduled projects are shown first; another active
+  project in the same organization can be chosen and the override is audited. Project selection
+  can be changed while the work session remains open.
+- Punch-out stops GPS immediately. Both the Android app and a server cron close a forgotten
+  session at exactly 14 hours. Late GPS is rejected, while events captured before the cutoff
+  can replay after an offline period. The pairing code still expires after five minutes; the
+  redeemed device credential now lasts until explicit sign-out or administrator revocation.
+- Migration 0381 and the corresponding app and scheduler images must be deployed together.
+  This section describes the contract, not proof of a completed CT102 rollout.
+
 ## Pairing revision — 2026-09-21
 
 - The Android APK has the CRM HTTPS origin compiled in. Its fresh connection screen asks only

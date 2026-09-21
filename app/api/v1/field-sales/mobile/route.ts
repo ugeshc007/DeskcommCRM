@@ -43,7 +43,8 @@ async function handle(req: Request, write: boolean) {
     const calendar = await readFieldCalendar(pool, auth.org, auth.actor, query.get('from') ?? '', query.get('through') ?? '');
     // Even when a manager enrolls themselves, this credential exposes only their own work.
     const occurrences = calendar.occurrences.filter(o => o.employee_id === auth.actor);
-    const projectIds = new Set(occurrences.map(o => o.project_id));
+    const projects = await fieldTransaction(pool, auth.org, auth.actor, async db => (await db.query(`select id,name,site_name
+      from public.field_sales_projects where organization_id=$1 and active order by name limit 500`, [auth.org])).rows);
     const sessions = await fieldTransaction(pool, auth.org, auth.actor, async db => (await db.query(`select s.id,s.status,s.punched_in_at,s.punched_out_at,s.last_sequence,
       s.project_id,s.schedule_id,s.local_date::text,p.name as project_name,p.site_name
       from public.field_sales_sessions s left join public.field_sales_projects p on p.organization_id=s.organization_id and p.id=s.project_id
@@ -52,7 +53,7 @@ async function handle(req: Request, write: boolean) {
       from public.field_sales_visits v join public.field_sales_projects p on p.organization_id=v.organization_id and p.id=v.project_id
       where v.organization_id=$1 and p.organization_id=$1 and v.employee_id=$2 and (v.local_date between $3 and $4 or (v.next_action<>'' and v.next_action_completed_at is null and v.next_action_at<=now())) order by v.local_date limit 500`, [auth.org, auth.actor, query.get('from'), query.get('through')])).rows);
     return ok({ identity: { organization_id: auth.org, employee_id: auth.actor }, employee: calendar.employees.find(e => e.user_id === auth.actor), region: calendar.region,
-      settings: calendar.settings, occurrences, projects: calendar.projects.filter(p => projectIds.has(p.id)), sessions, visits }, { headers });
+      settings: calendar.settings, occurrences, projects, sessions, visits }, { headers });
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

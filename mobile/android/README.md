@@ -33,13 +33,16 @@ It intentionally refuses to run against an already-connected employee installati
    with its own HTTPS origin. The server stores only HMAC(code) until exchange, then replaces
    it with the hash of a random 256-bit, revocable device bearer. Android stores that bearer,
    cache and pending queue encrypted with Android Keystore. A six-digit code is never a bearer.
-4. Sync the organization policy and today's projects. Select an assigned project, accept the
-   displayed tracking notice, and punch in. Precise location and visible notification permissions
-   are requested explicitly.
-5. Breaks continue tracking. Punch-out requests local service shutdown before disk/network
+4. Sync the organization policy, accept the displayed tracking notice and punch in. Working
+   time and GPS start immediately. Today's scheduled project is suggested afterward, but the
+   employee may choose another active project in the same organization. The override is audited.
+   Precise location and visible notification permissions are requested explicitly.
+5. Breaks continue tracking. The phone stops GPS at punch-out or the 14-hour limit; the server
+   rejects points at/after that limit and a minute-level worker closes forgotten shifts.
+   Punch-out requests local service shutdown before disk/network
    operations. Offline attendance and sample IDs survive retries without duplicate inserts.
-6. A replacement key is checked against the same CRM origin, organization and employee
-   while work is pending. Revocation is revalidated inside server transactions.
+6. The paired device remains connected until employee sign-out or administrator revocation.
+   Revocation is revalidated inside server transactions.
 
 The service is user-started, visible and not automatically restarted after process death
 or reboot. Reopening the connected app restarts an interrupted active-session service. It requests GPS

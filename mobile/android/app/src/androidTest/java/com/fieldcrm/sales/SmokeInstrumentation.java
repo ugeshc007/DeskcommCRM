@@ -99,7 +99,7 @@ public final class SmokeInstrumentation extends Instrumentation {
                             .put("starts_at", java.time.Instant.now().toString()).put("ends_at", java.time.Instant.now().plusSeconds(3600).toString()))));
             });
             activity = startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); waitForIdleSync(); Activity connected = activity;
-            final boolean[] simple = {false}; runOnMainSync(() -> simple[0] = contains(connected.getWindow().getDecorView(), "Today's project")
+            final boolean[] simple = {false}; runOnMainSync(() -> simple[0] = contains(connected.getWindow().getDecorView(), "Start work")
                 && contains(connected.getWindow().getDecorView(), "Punch in") && described(connected.getWindow().getDecorView(), "Notifications and sync status")
                 && described(connected.getWindow().getDecorView(), "Profile and sign out") && !contains(connected.getWindow().getDecorView(), "Sync now")
                 && !contains(connected.getWindow().getDecorView(), "Start break") && !contains(connected.getWindow().getDecorView(), "Attach visit photo"));

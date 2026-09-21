@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { copyToClipboard } from "@/lib/clipboard";
 import type { TeamMember } from "@/hooks/team/useTeamMembers";
 
-type Device = { id: string; label: string; expires_at: string; revoked_at: string | null; paired: boolean };
+type Device = { id: string; label: string; expires_at: string | null; revoked_at: string | null; paired: boolean };
 
 export function OfficerDevicesDialog({ member, onClose }: { member: TeamMember; onClose: () => void }) {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -66,7 +66,7 @@ export function OfficerDevicesDialog({ member, onClose }: { member: TeamMember; 
       <p className="text-xs text-muted-foreground">Valid for five minutes and one phone only. It cannot be displayed again. The app already knows the CRM address.</p></div>
       : <form onSubmit={create} className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-sm">Phone name<Input name="label" required maxLength={100} placeholder="Work phone" autoComplete="off"/></label><Button disabled={busy}>Create pairing code</Button></form>}
     {loading ? <p>Loading devices…</p> : devices.length === 0 ? <p className="text-sm">No phones connected yet.</p> : devices.map(device => <div key={device.id} className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-      <span>{device.label}<br/><span className="text-muted-foreground">{device.revoked_at ? "Revoked" : device.paired ? `Connected · expires ${new Date(device.expires_at).toLocaleString()}` : `Pairing code expires ${new Date(device.expires_at).toLocaleString()}`}</span></span>
+      <span>{device.label}<br/><span className="text-muted-foreground">{device.revoked_at ? "Revoked" : device.paired ? "Connected · valid until sign-out or revocation" : device.expires_at ? `Pairing code expires ${new Date(device.expires_at).toLocaleString()}` : "Pairing unavailable"}</span></span>
       {!device.revoked_at && <Button variant="outline" disabled={busy} onClick={() => void revoke(device)}>Revoke</Button>}
     </div>)}
   </DialogContent></Dialog>;

@@ -43,7 +43,7 @@ export const projectSchema = z.strictObject({
 export const scheduleSchema = z.strictObject({
   project_id: z.uuid(), employee_id: z.uuid(),
   start_date: localDateSchema, end_date: localDateSchema.nullable(),
-  start_time: localTimeSchema, end_time: localTimeSchema,
+  start_time: localTimeSchema.nullable(), end_time: localTimeSchema.nullable(),
   end_day_offset: z.union([z.literal(0), z.literal(1)]),
   repeat: z.enum(['once', 'weekly']),
   weekdays: z.array(z.number().int().min(1).max(7)).max(7),
@@ -51,7 +51,11 @@ export const scheduleSchema = z.strictObject({
 }).superRefine((value, ctx) => {
   if (value.end_date && value.end_date < value.start_date)
     ctx.addIssue({ code: 'custom', path: ['end_date'], message: 'End date must not precede start date.' });
-  if (value.end_day_offset === 0 && value.end_time <= value.start_time)
+  if ((value.start_time === null) !== (value.end_time === null))
+    ctx.addIssue({ code: 'custom', path: ['end_time'], message: 'Provide both times or leave both blank for an untimed assignment.' });
+  if (value.start_time === null && value.end_day_offset !== 0)
+    ctx.addIssue({ code: 'custom', path: ['end_day_offset'], message: 'An untimed assignment cannot end on the following day.' });
+  if (value.start_time !== null && value.end_time !== null && value.end_day_offset === 0 && value.end_time <= value.start_time)
     ctx.addIssue({ code: 'custom', path: ['end_time'], message: 'End time must be after start; select next day for overnight visits.' });
   if (value.repeat === 'weekly' && !value.weekdays.length)
     ctx.addIssue({ code: 'custom', path: ['weekdays'], message: 'Choose at least one recurring weekday.' });
@@ -69,15 +73,19 @@ const attendanceBase = {
 };
 export const attendanceCommandSchema = z.discriminatedUnion('action', [
   z.strictObject({ ...attendanceBase, action: z.literal('punch_in'),
-    project_id: z.uuid(), schedule_id: z.uuid(), local_date: localDateSchema }),
+    local_date: localDateSchema, project_id: z.uuid().optional(), schedule_id: z.uuid().optional() }),
+  z.strictObject({ ...attendanceBase, action: z.literal('select_project'),
+    project_id: z.uuid(), schedule_id: z.uuid().nullable(), local_date: localDateSchema }),
   z.strictObject({ ...attendanceBase, action: z.enum(['break_start', 'break_end', 'punch_out']),
     project_id: z.uuid().optional(), schedule_id: z.uuid().optional(), local_date: localDateSchema.optional() }),
 ]);
 export type AttendanceCommand = z.infer<typeof attendanceCommandSchema>;
 export type WorkStatus = 'off_duty' | 'working' | 'on_break';
+export const MAX_FIELD_SHIFT_MS = 14 * 60 * 60 * 1000;
 
 export function transitionAttendance(status: WorkStatus, action: AttendanceCommand['action']): WorkStatus {
   if (status === 'off_duty' && action === 'punch_in') return 'working';
+  if (status !== 'off_duty' && action === 'select_project') return status;
   if (status === 'working' && action === 'break_start') return 'on_break';
   if (status === 'on_break' && action === 'break_end') return 'working';
   if (status !== 'off_duty' && action === 'punch_out') return 'off_duty';
@@ -108,7 +116,7 @@ export interface WorkInterval {
 /** Half-open work interval: no point at or after punch-out is admissible. */
 export function sampleWithinSession(sample: LocationSample, session: WorkInterval): boolean {
   const at = Date.parse(sample.captured_at), start = Date.parse(session.punched_in_at);
-  const end = session.punched_out_at === null ? Infinity : Date.parse(session.punched_out_at);
+  const end = Math.min(session.punched_out_at === null ? Infinity : Date.parse(session.punched_out_at), start + MAX_FIELD_SHIFT_MS);
   return sample.session_id === session.id && Number.isFinite(at) && Number.isFinite(start) && at >= start && at < end;
 }
 

@@ -2035,6 +2035,22 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
   A six-digit code is never stored or logged as plaintext by the server. The strong bearer is
   stored only as SHA-256 on the server and encrypted on the phone.
 
+### Field Sales flexible shifts — 2026-09-21 (development)
+
+- [P0] The CRM administrator leaves date and both times blank, checks Mon and Sat, and saves.
+  The assignment begins on today's organization-local date and is available on each selected
+  weekday without imposing 9–5 hours. Browser proof: `field-sales.spec.ts` in a synthetic
+  local organization; screenshot in `.superpowers/evidence/field-sales-flexible-shifts-20260921/`.
+- [P0] An employee's paired Android phone stays signed in until explicit sign-out. Punch in
+  starts work time and GPS before project choice; today's scheduled projects appear first,
+  followed by other active projects in the same organization. Punch out stops GPS immediately.
+- [P0] At 14 hours, the phone and server independently stop the shift at the exact cutoff;
+  later GPS is rejected. Offline queued attendance before the cutoff can still replay after
+  server auto-close. Database proof: `tests/invariants/field-sales.test.ts` (24 passing).
+- Android build/unit, focused contracts, TypeScript, lint, local baseline INSTALL/UPDATE and
+  focused browser E2E pass. A real-device locked-screen/battery pilot is still needed before
+  claiming field reliability; no production deployment is implied by these local tests.
+
 ### Managed SaaS control plane
 
 - [P0] Platform owner creates a tenant, records a manual subscription, and sees the revision.

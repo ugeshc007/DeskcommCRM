@@ -56,7 +56,7 @@ export async function fieldTransaction<T>(pool: Pick<pg.Pool, 'connect'>, org: s
       // Serialize revocation against the actual read/write, not just preliminary authentication.
       const active = await db.query(`select id from public.field_sales_devices
         where organization_id=$1 and employee_id=$2 and id=$3
-        and revoked_at is null and expires_at>clock_timestamp() for share`, [org, actor, device.deviceId]);
+        and revoked_at is null and (expires_at is null or expires_at>clock_timestamp()) for share`, [org, actor, device.deviceId]);
       if (!active.rowCount) throw new Error('field_device_unauthorized');
     }
     const result = await operation(db, role);

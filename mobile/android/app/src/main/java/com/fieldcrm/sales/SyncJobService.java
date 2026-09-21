@@ -17,6 +17,7 @@ public final class SyncJobService extends JobService {
         }
     }
     @Override public boolean onStartJob(JobParameters parameters) {
+        try { Attendance.autoPunchOut(this); } catch (Exception ignored) { }
         return SyncEngine.sync(this, () -> jobFinished(parameters, false));
     }
     @Override public boolean onStopJob(JobParameters parameters) { return true; }

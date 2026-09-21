@@ -17,7 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import org.json.*;
 
-/** A deliberately small field workflow: choose today's project, punch in, punch out. */
+/** A deliberately small field workflow: punch in, choose a project, punch out. */
 public final class MainActivity extends Activity {
     private static final int INK = Color.rgb(23, 37, 61), MUTED = Color.rgb(91, 105, 125);
     private static final int BRAND = Color.rgb(91, 70, 255), BRAND_DARK = Color.rgb(62, 46, 194);
@@ -25,7 +25,11 @@ public final class MainActivity extends Activity {
     private static final int PAGE = Color.rgb(245, 247, 255), CARD = Color.WHITE;
     private LinearLayout content;
     private Spinner projectPicker;
-    private final ArrayList<JSONObject> todayAssignments = new ArrayList<>();
+    private final ArrayList<JSONObject> projectChoices = new ArrayList<>();
+    private final Handler clock = new Handler(Looper.getMainLooper());
+    private final Runnable refreshClock = new Runnable() {
+        @Override public void run() { render(); clock.postDelayed(this, 60000); }
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -33,7 +37,11 @@ public final class MainActivity extends Activity {
         SyncJobService.schedule(this);
         render();
     }
-    @Override public void onResume() { super.onResume(); render(); }
+    @Override public void onResume() {
+        super.onResume(); try { Attendance.autoPunchOut(this); } catch (Exception ignored) { }
+        render(); clock.removeCallbacks(refreshClock); clock.postDelayed(refreshClock, 60000);
+    }
+    @Override public void onPause() { clock.removeCallbacks(refreshClock); super.onPause(); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private GradientDrawable shape(int color, int radius) {
         GradientDrawable drawable = new GradientDrawable(); drawable.setColor(color); drawable.setCornerRadius(dp(radius)); return drawable;
@@ -108,48 +116,68 @@ public final class MainActivity extends Activity {
         String status = state.optString("status", "off_duty"); boolean working = WorkState.collecting(status);
         LinearLayout hero = card(); hero.setBackground(shape(working ? Color.rgb(228, 249, 240) : Color.rgb(235, 232, 255), 20));
         add(hero, label(working ? "You are punched in" : "Ready for today's work", 23, working ? Color.rgb(7, 105, 74) : BRAND_DARK, true), 0);
-        add(hero, label(working ? "Location tracking is active until you punch out." : "GPS is off. Select an assigned project to begin.", 15, MUTED, false), 6); add(content, hero, 22);
+        add(hero, label(working ? "Location tracking is active until punch-out or the 14-hour limit." : "GPS is off. Punch in to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
         if (working) activeShift(state); else offDuty(state);
     }
     private void offDuty(JSONObject state) throws Exception {
-        LinearLayout panel = card(); add(panel, label("Today's project", 18, INK, true), 0);
-        JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray occurrences = snapshot == null ? null : snapshot.optJSONArray("occurrences");
-        String zone = state.optString("timezone", "UTC"), today = LocalDate.now(ZoneId.of(zone)).toString(); todayAssignments.clear(); ArrayList<String> choices = new ArrayList<>();
-        if (occurrences != null) for (int i = 0; i < occurrences.length(); i++) {
-            JSONObject item = occurrences.getJSONObject(i); if (!today.equals(item.optString("date"))) continue;
-            todayAssignments.add(item); String time = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of(zone)).format(Instant.parse(item.getString("starts_at")));
-            choices.add(item.optString("project_name", "Assigned project") + "  •  " + time + (item.optString("site_name").isEmpty() ? "" : "\n" + item.optString("site_name")));
-        }
-        if (choices.isEmpty()) {
-            add(panel, label(snapshot == null ? "Assignments are loading…" : "No project is assigned for today.", 16, MUTED, false), 10);
-            Button refresh = action("Refresh assignments", BRAND); refresh.setOnClickListener(v -> sync()); add(panel, refresh, 18);
-        } else {
-            projectPicker = new Spinner(this); projectPicker.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, choices));
-            projectPicker.setMinimumHeight(dp(56)); add(panel, projectPicker, 10); Button punch = action("Punch in", GREEN); punch.setOnClickListener(v -> confirmPunchIn()); add(panel, punch, 18);
-        }
+        LinearLayout panel = card(); add(panel, label("Start work", 18, INK, true), 0);
+        add(panel, label("Your working hours and GPS begin when you punch in. Choose the project afterward.", 15, MUTED, false), 8);
+        Button punch = action("Punch in", GREEN); punch.setOnClickListener(v -> confirmPunchIn()); add(panel, punch, 18);
         add(content, panel, 16);
     }
     private void activeShift(JSONObject state) throws Exception {
         LinearLayout panel = card(); add(panel, label("Active project", 16, MUTED, true), 0);
-        add(panel, label(state.optString("active_project_name", "Assigned project"), 23, INK, true), 8);
+        add(panel, label(state.optString("active_project_name", "Choose a project below"), 23, INK, true), 8);
+        long elapsed = Math.max(0, Math.min(Attendance.MAX_SHIFT_MS, System.currentTimeMillis() - state.optLong("session_start_ms", System.currentTimeMillis())));
+        add(panel, label(String.format(Locale.US, "Working time: %d h %02d min", elapsed / 3600000L, (elapsed / 60000L) % 60), 15, INK, true), 7);
         if (!state.optString("active_site_name").isEmpty()) add(panel, label(state.optString("active_site_name"), 15, MUTED, false), 5);
         add(panel, label(TrackingService.running ? "GPS tracking is running" : "GPS is restarting automatically", 14, GREEN, true), 14);
+        JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray occurrences = snapshot == null ? null : snapshot.optJSONArray("occurrences");
+        JSONArray projects = snapshot == null ? null : snapshot.optJSONArray("projects");
+        String zone = state.optString("timezone", "UTC"), shiftDate = state.optString("active_local_date", LocalDate.now(ZoneId.of(zone)).toString());
+        projectChoices.clear(); ArrayList<String> choices = new ArrayList<>(); java.util.Set<String> scheduled = new java.util.HashSet<>();
+        if (occurrences != null) for (int i = 0; i < occurrences.length(); i++) {
+            JSONObject item = occurrences.getJSONObject(i); if (!shiftDate.equals(item.optString("date"))) continue;
+            String time = item.optBoolean("untimed") ? "Any time" : DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of(zone)).format(Instant.parse(item.getString("starts_at")));
+            projectChoices.add(new JSONObject().put("project_id", item.getString("project_id"))
+                .put("schedule_id", item.getString("occurrence_key").split(":", 2)[0])
+                .put("project_name", item.optString("project_name", "Scheduled project"))
+                .put("site_name", item.optString("site_name", "")));
+            scheduled.add(item.getString("project_id"));
+            choices.add("Scheduled: " + item.optString("project_name", "Project") + " · " + time);
+        }
+        if (projects != null) for (int i = 0; i < projects.length(); i++) {
+            JSONObject item = projects.getJSONObject(i); if (scheduled.contains(item.getString("id"))) continue;
+            projectChoices.add(new JSONObject().put("project_id", item.getString("id")).put("schedule_id", "")
+                .put("project_name", item.optString("name", "Project")).put("site_name", item.optString("site_name", "")));
+            choices.add("Other project: " + item.optString("name", "Project"));
+        }
+        if (choices.isEmpty()) add(panel, label("No active projects are available. Ask your manager; GPS and working time continue until punch-out.", 15, RED, false), 12);
+        else {
+            projectPicker = new Spinner(this); projectPicker.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, choices));
+            projectPicker.setMinimumHeight(dp(56)); add(panel, projectPicker, 12);
+            Button choose = action(state.optString("active_project_id").isEmpty() ? "Choose project" : "Change project", BRAND);
+            choose.setOnClickListener(v -> chooseProject()); add(panel, choose, 10);
+        }
         Button out = action("Punch out", RED); out.setOnClickListener(v -> confirmPunchOut()); add(panel, out, 22); add(content, panel, 16);
         if (!TrackingService.running) startTracking();
     }
     private void confirmPunchIn() {
         if (!permissions()) return;
-        if (projectPicker == null || todayAssignments.isEmpty()) { alert("No project selected", "Refresh and choose one of today's assigned projects."); return; }
-        JSONObject occurrence = todayAssignments.get(projectPicker.getSelectedItemPosition());
         try {
             JSONObject snapshot = SecureState.read(this).optJSONObject("snapshot"), policy = snapshot == null ? null : snapshot.optJSONObject("settings");
             if (policy == null || !policy.optBoolean("enabled")) throw new IllegalStateException();
-            new AlertDialog.Builder(this).setTitle("Punch in to " + occurrence.optString("project_name") + "?")
-                .setMessage(policy.optString("notice_text") + "\n\nLocation is collected until Punch out. A persistent notification remains visible.")
+            new AlertDialog.Builder(this).setTitle("Start your work session?")
+                .setMessage(policy.optString("notice_text") + "\n\nGPS starts now and stops at punch-out or after 14 hours. Choose a project after punching in.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Agree and punch in", (dialog, which) -> {
-                    try { Attendance.punchIn(this, occurrence); startTracking(); render(); } catch (Exception failure) { alert("Punch in not saved", "Refresh assignments and try again."); }
+                    try { Attendance.punchIn(this); startTracking(); render(); } catch (Exception failure) { alert("Punch in not saved", "Refresh and try again."); }
                 }).show();
         } catch (Exception failure) { alert("Policy unavailable", "Refresh assignments before punching in."); }
+    }
+    private void chooseProject() {
+        if (projectPicker == null || projectChoices.isEmpty()) return;
+        try { Attendance.selectProject(this, projectChoices.get(projectPicker.getSelectedItemPosition())); render(); }
+        catch (Exception failure) { alert("Project not saved", "Your work session and GPS remain active. Sync and try again."); }
     }
     private void confirmPunchOut() {
         new AlertDialog.Builder(this).setTitle("Punch out now?").setMessage("GPS tracking will stop immediately. Pending records will continue syncing safely.")

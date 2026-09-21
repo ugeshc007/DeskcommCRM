@@ -37,6 +37,7 @@ export interface ScheduleOccurrence {
   date: string;
   starts_at: string;
   ends_at: string;
+  untimed: boolean;
   project_id: string;
   employee_id: string;
 }
@@ -57,10 +58,11 @@ export function expandSchedule(input: {
     if (cancelled.has(date)) continue;
     const weekday = new Date(date + 'T00:00:00Z').getUTCDay() || 7;
     if (rule.repeat === 'once' ? date !== rule.start_date : !rule.weekdays.includes(weekday)) continue;
-    const starts_at = wallTimeToUtc(date, rule.start_time, region.timezone);
-    const ends_at = wallTimeToUtc(addCalendarDays(date, rule.end_day_offset), rule.end_time, region.timezone);
+    const untimed = rule.start_time === null;
+    const starts_at = wallTimeToUtc(date, rule.start_time ?? '00:00', region.timezone);
+    const ends_at = wallTimeToUtc(addCalendarDays(date, untimed ? 1 : rule.end_day_offset), rule.end_time ?? '00:00', region.timezone);
     if (Date.parse(ends_at) <= Date.parse(starts_at)) throw new Error('field_invalid_duration');
-    output.push({ occurrence_key: `${input.series_id}:${date}`, date, starts_at, ends_at,
+    output.push({ occurrence_key: `${input.series_id}:${date}`, date, starts_at, ends_at, untimed,
       project_id: rule.project_id, employee_id: rule.employee_id });
   }
   return output;
@@ -72,7 +74,7 @@ export function overlappingAssignments(rows: readonly ScheduleOccurrence[]): Arr
   for (let i = 0; i < sorted.length; i++) for (let j = i + 1; j < sorted.length; j++) {
     const a = sorted[i]!, b = sorted[j]!;
     if (Date.parse(b.starts_at) >= Date.parse(a.ends_at)) break;
-    if (a.employee_id === b.employee_id)
+    if (a.employee_id === b.employee_id && !a.untimed && !b.untimed)
       clashes.push([a.occurrence_key, b.occurrence_key]);
   }
   return clashes;

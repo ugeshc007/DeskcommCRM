@@ -1,6 +1,6 @@
 'use client';
 
-import { cloneElement, useId, useState, type FormEvent, type ReactElement } from 'react';
+import { cloneElement, useEffect, useId, useRef, useState, type FormEvent, type ReactElement } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarBlank, Buildings, Users, Plus, CaretLeft, ArrowRight } from '@/lib/ui/icons';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const t = useT();
   const cache = useQueryClient();
   const [start, setStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const calendarInitialized = useRef(false);
   const [view, setView] = useState<'day' | 'week'>('week');
   const [dialog, setDialog] = useState<'project' | 'schedule' | 'employee' | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
@@ -55,6 +56,13 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const manager = data?.role === 'admin' || data?.role === 'manager';
   const administrator = data?.role === 'admin';
   const timezone = data?.region?.timezone;
+  useEffect(() => {
+    if (!timezone || calendarInitialized.current) return;
+    calendarInitialized.current = true;
+    const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const part = (type: string) => parts.find(item => item.type === type)?.value ?? '';
+    setStart(`${part('year')}-${part('month')}-${part('day')}`);
+  }, [timezone]);
   const days = Array.from({ length: view === 'week' ? 7 : 1 }, (_, i) => addCalendarDays(start, i));
   const people = data?.employees ?? [], projects = data?.projects ?? [];
   const clashes = new Set((data?.overlaps ?? []).flat());
@@ -85,9 +93,12 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
     event.preventDefault(); const form = new FormData(event.currentTarget);
     const text = (key: string) => String(form.get(key) ?? '');
     const weekdays = editing && editScope === 'one' ? [] : form.getAll('weekday').map(Number);
+    const parts = new Intl.DateTimeFormat('en', { timeZone: timezone ?? 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+    const part = (type: string) => parts.find(item => item.type === type)?.value ?? '';
+    const today = `${part('year')}-${part('month')}-${part('day')}`;
     const schedule = {
-      project_id: text('project'), employee_id: text('employee'), start_date: editing?.date ?? text('start_date'),
-      end_date: editing && editScope === 'one' ? null : text('end_date') || null, start_time: text('start_time'), end_time: text('end_time'),
+      project_id: text('project'), employee_id: text('employee'), start_date: editing?.date ?? (text('start_date') || today),
+      end_date: editing && editScope === 'one' ? null : text('end_date') || null, start_time: text('start_time') || null, end_time: text('end_time') || null,
       end_day_offset: form.has('overnight') ? 1 : 0, repeat: weekdays.length ? 'weekly' : 'once',
       weekdays, instructions: text('instructions'),
     };
@@ -185,12 +196,12 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <Field label="Salesperson display name"><Input name="name" required maxLength={160}/></Field><Button disabled={busy}>Enroll salesperson</Button>
       </form>}
       {dialog === 'schedule' && <form className="space-y-4" onSubmit={submitSchedule}>
-        <p className="text-sm text-muted-foreground">Times use {editing?.timezone ?? timezone}. Select weekdays for a weekly repeating assignment; leave them unchecked for one visit. Earlier history is preserved.</p>
+        <p className="text-sm text-muted-foreground">Times use {editing?.timezone ?? timezone}. Choose weekdays for a weekly assignment. Leave the date blank to start today and both times blank for an any-time visit.</p>
         {editing && <Field label="Apply changes to"><select className={selectClass} value={editScope} onChange={event => setEditScope(event.target.value as 'one' | 'future')}><option value="one">Only this visit</option><option value="future">This visit and all following visits</option></select></Field>}
         <Field label="Project"><select name="project" required className={selectClass} defaultValue={editing?.schedule.project_id ?? ''}><option value="">Choose a project</option>{projects.filter(p => p.active).map(p => <option key={p.id} value={p.id}>{p.name} — {p.site_name}</option>)}</select></Field>
         <Field label="Salesperson"><select name="employee" required className={selectClass} defaultValue={editing?.employee_id ?? ''}><option value="">Choose a salesperson</option>{people.filter(p => p.active).map(p => <option key={p.user_id} value={p.user_id}>{p.display_name}</option>)}</select></Field>
-        <div className="grid grid-cols-2 gap-3"><Field label="Start date"><Input name="start_date" type="date" required defaultValue={editing?.date ?? start} readOnly={!!editing}/></Field><Field label="Repeat until (optional)"><Input name="end_date" type="date" defaultValue={editing?.schedule.end_date ?? ''} disabled={!!editing && editScope === 'one'}/></Field>
-          <Field label="Start time"><Input name="start_time" type="time" required defaultValue={editing?.schedule.start_time}/></Field><Field label="End time"><Input name="end_time" type="time" required defaultValue={editing?.schedule.end_time}/></Field></div>
+        <div className="grid grid-cols-2 gap-3"><Field label="Start date (optional)"><Input name="start_date" type="date" defaultValue={editing?.date ?? ''} readOnly={!!editing}/></Field><Field label="Repeat until (optional)"><Input name="end_date" type="date" defaultValue={editing?.schedule.end_date ?? ''} disabled={!!editing && editScope === 'one'}/></Field>
+          <Field label="Start time (optional)"><Input name="start_time" type="time" defaultValue={editing?.schedule.start_time ?? ''}/></Field><Field label="End time (optional)"><Input name="end_time" type="time" defaultValue={editing?.schedule.end_time ?? ''}/></Field></div>
         <label className="flex gap-2"><input type="checkbox" name="overnight" defaultChecked={editing?.schedule.end_day_offset === 1}/>Ends on the following day</label>
         <fieldset disabled={!!editing && editScope === 'one'}><legend className="mb-2 text-sm font-medium">Repeat weekly on</legend><div className="flex flex-wrap gap-3">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => <label key={day} className="flex min-h-11 items-center gap-1"><input type="checkbox" name="weekday" value={i + 1} defaultChecked={editing?.schedule.weekdays.includes(i + 1)}/>{day}</label>)}</div></fieldset>
         <Field label="Visit instructions"><Textarea name="instructions" maxLength={4000} defaultValue={editing?.schedule.instructions}/></Field><Button disabled={busy}>Save assignment</Button>

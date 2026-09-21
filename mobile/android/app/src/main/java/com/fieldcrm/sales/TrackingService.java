@@ -17,11 +17,22 @@ public final class TrackingService extends Service implements LocationListener {
     private static boolean mayCollect(JSONObject state) {
         JSONObject snapshot = state.optJSONObject("snapshot");
         JSONObject policy = snapshot == null ? null : snapshot.optJSONObject("settings");
-        return WorkState.mayCollect(state.optString("status"), state.optBoolean("access_denied"), policy != null && policy.optBoolean("enabled"));
+        long start = state.optLong("session_start_ms", 0);
+        return start > 0 && System.currentTimeMillis() < start + Attendance.MAX_SHIFT_MS
+            && WorkState.mayCollect(state.optString("status"), state.optBoolean("access_denied"), policy != null && policy.optBoolean("enabled"));
     }
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable sync = new Runnable() {
-        public void run() { SyncEngine.sync(TrackingService.this, null); handler.postDelayed(this, 60000); }
+        public void run() {
+            try { Attendance.autoPunchOut(TrackingService.this); } catch (Exception ignored) { stopSelf(); }
+            SyncEngine.sync(TrackingService.this, null); handler.postDelayed(this, 60000);
+        }
+    };
+    private final Runnable cutoff = new Runnable() {
+        public void run() {
+            stopSelf();
+            try { Attendance.autoPunchOut(TrackingService.this); } catch (Exception ignored) { }
+        }
     };
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -32,6 +43,8 @@ public final class TrackingService extends Service implements LocationListener {
         }
         try {
             JSONObject state = SecureState.read(this);
+            Attendance.autoPunchOut(this);
+            state = SecureState.read(this);
             if (!mayCollect(state)) { stopSelf(); return START_NOT_STICKY; }
             if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
                 throw new IllegalStateException("Precise location permission is required. Open the app to resume.");
@@ -47,6 +60,8 @@ public final class TrackingService extends Service implements LocationListener {
             if (!locations.isProviderEnabled(LocationManager.GPS_PROVIDER)) throw new IllegalStateException("Turn on phone location to resume tracking.");
             locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 30000L, 20f, this);
             running = true;
+            handler.removeCallbacks(cutoff);
+            handler.postDelayed(cutoff, Math.max(0, state.optLong("session_start_ms") + Attendance.MAX_SHIFT_MS - System.currentTimeMillis()));
             handler.removeCallbacks(sync); handler.post(sync);
         } catch (Exception error) {
             try { SecureState.mutate(this, state -> state.put("sync_error", "Tracking stopped. Check location permissions and phone settings, then resume in the app.")); } catch (Exception ignored) { }
@@ -59,7 +74,9 @@ public final class TrackingService extends Service implements LocationListener {
             if (!location.hasAccuracy() || location.getAccuracy() < 0 || location.getTime() <= 0) return;
             SecureState.mutate(this, state -> {
                 if (!mayCollect(state)) { stopSelf(); return; }
-                if (location.getTime() < state.optLong("session_start_ms", Long.MAX_VALUE) || location.getTime() > System.currentTimeMillis() + 60000L) return;
+                if (location.getTime() < state.optLong("session_start_ms", Long.MAX_VALUE) ||
+                    location.getTime() >= state.optLong("session_start_ms") + Attendance.MAX_SHIFT_MS ||
+                    location.getTime() > System.currentTimeMillis() + 60000L) return;
                 if (state.getJSONArray("points").length() >= 5000) throw new IllegalStateException("Offline storage limit reached. Sync before resuming.");
                 long sequence = state.optLong("point_sequence", -1) + 1;
                 state.getJSONArray("points").put(new JSONObject().put("sample_id", UUID.randomUUID().toString())

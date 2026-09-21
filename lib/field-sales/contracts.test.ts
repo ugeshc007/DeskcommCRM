@@ -51,11 +51,15 @@ describe('field sales authority-independent contracts', () => {
     expect(locationSampleSchema.safeParse({ ...sample, latitude: 91 }).success).toBe(false);
     expect(locationSampleSchema.safeParse({ ...sample, accuracy_m: -1 }).success).toBe(false);
   });
-  it('requires a real scheduled project when punching in but not when punching out', () => {
+  it('starts a session before project selection and requires an explicit selection event', () => {
     const common = { event_id: employee, session_id: session, sequence: 0, captured_at: '2026-09-21T05:00:00Z' };
     expect(attendanceCommandSchema.safeParse({ ...common, action: 'punch_in' }).success).toBe(false);
+    expect(attendanceCommandSchema.safeParse({ ...common, action: 'punch_in', local_date: '2026-09-21' }).success).toBe(true);
     expect(attendanceCommandSchema.safeParse({ ...common, action: 'punch_in', project_id: project,
       schedule_id: session, local_date: '2026-09-21' }).success).toBe(true);
+    expect(attendanceCommandSchema.safeParse({ ...common, sequence: 1, action: 'select_project', project_id: project,
+      schedule_id: null, local_date: '2026-09-21' }).success).toBe(true);
+    expect(attendanceCommandSchema.safeParse({ ...common, sequence: 1, action: 'select_project', project_id: project }).success).toBe(false);
     expect(attendanceCommandSchema.safeParse({ ...common, action: 'punch_out' }).success).toBe(true);
   });
   it('requires paired site coordinates', () => {
@@ -82,6 +86,14 @@ describe('organization-local recurring project schedule', () => {
     expect(scheduleSchema.safeParse({ ...rule, start_time: '22:00', end_time: '02:00' }).success).toBe(false);
     const row = expandSchedule({ ...input, schedule: { ...rule, start_time: '22:00', end_time: '02:00', end_day_offset: 1 } })[0];
     expect(row!.ends_at).toBe('2026-09-21T22:00:00.000Z');
+  });
+  it('expands an untimed weekly assignment as an all-day choice without a fixed working shift', () => {
+    const untimed = { ...rule, start_time: null, end_time: null, weekdays: [1, 6] };
+    const rows = expandSchedule({ ...input, schedule: untimed });
+    expect(rows.map(row => row.date)).toEqual(['2026-09-21', '2026-09-26']);
+    expect(rows.every(row => row.untimed)).toBe(true);
+    expect(overlappingAssignments(rows)).toHaveLength(0);
+    expect(scheduleSchema.safeParse({ ...untimed, end_time: '17:00' }).success).toBe(false);
   });
   it('flags actual employee overlap but permits adjacent slots and different employees', () => {
     const row = expandSchedule(input)[0]!;

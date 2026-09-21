@@ -75,11 +75,11 @@ export async function redeemFieldPairingCode(pool: Pick<pg.Pool, 'connect'>, cod
     if (!row) throw new Error('field_pairing_invalid');
     const token = 'fld_' + randomBytes(32).toString('hex');
     await db.query(`update public.field_sales_devices set token_hash=$1,pairing_code_hash=null,
-      pairing_expires_at=null,expires_at=now()+interval '30 days'
+      pairing_expires_at=null,expires_at=null
       where organization_id=$2 and id=$3`, [deviceTokenHash(token), row.organization_id, row.id]);
     await fieldAudit(db, row.organization_id, row.employee_id, 'field_sales.device_connected', row.id);
     await db.query('commit');
-    return { token, device_id: row.id as string, expires_at: new Date(Date.now() + 30 * 86400_000).toISOString() };
+    return { token, device_id: row.id as string, expires_at: null };
   } catch (error) { await db.query('rollback'); throw error; }
   finally { db.release(); }
 }
@@ -115,7 +115,7 @@ export async function authenticateFieldDevice(pool: Pick<pg.Pool, 'query'>, auth
   const row = (await pool.query(`select d.id,d.organization_id,d.employee_id from public.field_sales_devices d
     join public.field_sales_employees e on e.organization_id=d.organization_id and e.user_id=d.employee_id
     join public.user_organizations m on m.organization_id=d.organization_id and m.user_id=d.employee_id
-    where d.token_hash=$1 and d.revoked_at is null and d.expires_at>now() and e.active
+    where d.token_hash=$1 and d.revoked_at is null and (d.expires_at is null or d.expires_at>now()) and e.active
     and m.revoked_at is null and m.accepted_at is not null and m.role in ('field_officer','agent','manager','admin')`, [deviceTokenHash(token)])).rows[0];
   if (!row) throw new Error('field_device_unauthorized');
   return { deviceId: row.id as string, org: row.organization_id as string, actor: row.employee_id as string };

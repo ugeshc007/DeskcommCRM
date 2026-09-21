@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { copyToClipboard } from '@/lib/clipboard';
 
-type Device = { id: string; label: string; expires_at: string; revoked_at: string | null; paired: boolean };
+type Device = { id: string; label: string; expires_at: string | null; revoked_at: string | null; paired: boolean };
 export function FieldDevices({ organizationId, userId }: { organizationId: string; userId: string }) {
   const cache = useQueryClient(), key = ['field-devices', organizationId, userId];
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -52,11 +52,11 @@ export function FieldDevices({ organizationId, userId }: { organizationId: strin
       <label className="grid min-w-0 flex-1 gap-2 text-sm font-medium">Phone name<Input name="label" required maxLength={100} placeholder="My work phone" autoComplete="off"/></label>
       <Button disabled={busy || !!issued}>Create pairing code</Button>
     </form>
-    <p className="text-sm text-muted-foreground">The Android app already has this CRM address. Enter only the six-digit code. It expires after five minutes and can pair one phone; the phone then keeps a separate revocable credential for 30 days. Pairing never starts GPS tracking.</p>
+    <p className="text-sm text-muted-foreground">The Android app already has this CRM address. Enter only the six-digit code. It expires after five minutes and can pair one phone; the phone stays signed in until sign-out or revocation. Pairing never starts GPS tracking.</p>
     {devices.isPending && <p role="status">Loading your devices…</p>}
     {devices.data?.length === 0 && <p>No devices connected yet.</p>}
     {devices.data?.map(device => <article className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4" key={device.id}>
-      <div><h3 className="font-medium">{device.label}</h3><p className="text-sm text-muted-foreground">{device.revoked_at ? 'Revoked' : device.paired ? `Connected · expires ${new Date(device.expires_at).toLocaleString()}` : `Pairing code expires ${new Date(device.expires_at).toLocaleString()}`}</p></div>
+      <div><h3 className="font-medium">{device.label}</h3><p className="text-sm text-muted-foreground">{device.revoked_at ? 'Revoked' : device.paired ? 'Connected · valid until sign-out or revocation' : device.expires_at ? `Pairing code expires ${new Date(device.expires_at).toLocaleString()}` : 'Pairing unavailable'}</p></div>
       {!device.revoked_at && <Button variant="outline" disabled={busy} onClick={() => setRevoke(device)}>Revoke access</Button>}
     </article>)}
     <Dialog open={!!issued} onOpenChange={open => { if (!open) setIssued(null); }}><DialogContent><DialogHeader><DialogTitle>Six-digit pairing code</DialogTitle><DialogDescription>Enter this code in your own Android app within five minutes. It works once and is not a CRM password.</DialogDescription></DialogHeader>

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { recordAttendance, recordLocations } from '@/lib/field-sales/attendance';
+import { closeExpiredFieldSessions } from '@/lib/field-sales/auto-close';
 import { fieldTransaction, requireFieldScope, withFieldDevice } from '@/lib/field-sales/authority';
 import { authenticateFieldDevice, deviceTokenHash, issueFieldDevice, issueOfficerDevice, officerDevices, revokeOfficerDevice, listFieldDevices, revokeCurrentFieldDevice, revokeFieldDevice, redeemFieldPairingCode, pairingCodeHash } from '@/lib/field-sales/devices';
 import { completeNextAction, manageCorrection, readFieldOperations, recordVisit } from '@/lib/field-sales/operations';
@@ -18,8 +19,8 @@ beforeAll(async () => {
   expect((await pool.query('select fn_expurgar_field_sales_locations(1000) n')).rows[0].n).toBe(0);
   await pool.query('select fn_provision_field_sales_module()');
   await pool.query('select fn_provision_field_sales_photos()');
-  await pool.query('select fn_provision_field_sales_session_projects()');
-  await pool.query('select fn_provision_field_sales_session_projects()');
+  await pool.query('select fn_provision_field_sales_flexible_shifts()');
+  await pool.query('select fn_provision_field_sales_flexible_shifts()');
   await pool.query('select fn_provision_field_sales_photos()');
   await pool.query('select fn_provision_field_sales_devices()');
   await pool.query('select fn_provision_field_sales_pairing()');
@@ -298,6 +299,7 @@ describe('optional field-sales foundation', () => {
     const firstToken = (await redeemFieldPairingCode(pool, first.code)).token;
     const secondToken = (await redeemFieldPairingCode(pool, second.code)).token;
     const identity = await authenticateFieldDevice(pool, 'Bearer ' + firstToken);
+    expect((await pool.query('select expires_at from field_sales_devices where organization_id=$1 and id=$2', [f.org, identity.deviceId])).rows[0].expires_at).toBeNull();
     expect(await revokeCurrentFieldDevice(pool, identity.org, identity.actor, identity.deviceId)).toEqual({ signed_out: true });
     await expect(authenticateFieldDevice(pool, 'Bearer ' + firstToken)).rejects.toThrow('field_device_unauthorized');
     await expect(authenticateFieldDevice(pool, 'Bearer ' + secondToken)).resolves.toMatchObject({ org: f.org, actor: f.actor });
@@ -333,6 +335,40 @@ describe('optional field-sales foundation', () => {
     await recordAttendance(pool, f.org, f.actor, f.command);
     const saved = (await pool.query('select project_id,schedule_id,local_date::text from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0];
     expect(saved).toEqual({ project_id: f.project, schedule_id: f.schedule, local_date: f.localDate });
+  });
+  it('starts without a project, then audits an organization-scoped override', async () => {
+    const f = await fixture(), other = await fixture();
+    const { project_id: _project, schedule_id: _schedule, ...clockIn } = f.command;
+    await recordAttendance(pool, f.org, f.actor, clockIn);
+    const unassigned = (await pool.query('select project_id,schedule_id from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0];
+    expect(unassigned).toEqual({ project_id: null, schedule_id: null });
+    const choose = { event_id: randomUUID(), session_id: f.session, action: 'select_project', sequence: 1,
+      captured_at: new Date().toISOString(), project_id: f.project, schedule_id: null, local_date: f.localDate };
+    await expect(recordAttendance(pool, f.org, f.actor, { ...choose, project_id: other.project })).rejects.toThrow('field_assignment_unavailable');
+    await recordAttendance(pool, f.org, f.actor, choose);
+    expect((await pool.query('select project_id,schedule_id from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0])
+      .toEqual({ project_id: f.project, schedule_id: null });
+    expect((await pool.query("select metadata->>'override' as override from api_audit_log where organization_id=$1 and action='field_sales.select_project'", [f.org])).rows[0].override).toBe('true');
+  });
+  it('closes forgotten sessions at exactly fourteen hours and rejects later GPS', async () => {
+    const start = new Date(Date.now() - 15 * 3600000).toISOString();
+    const f = await fixture(start);
+    await recordAttendance(pool, f.org, f.actor, f.command);
+    expect((await closeExpiredFieldSessions(pool)).closed).toBeGreaterThanOrEqual(1);
+    const cutoff = new Date(Date.parse(start) + 14 * 3600000).toISOString();
+    const saved = (await pool.query('select punched_out_at,status from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0];
+    expect(saved.status).toBe('off_duty'); expect(saved.punched_out_at.toISOString()).toBe(cutoff);
+    const point = { sample_id: randomUUID(), session_id: f.session, sequence: 0,
+      captured_at: new Date(Date.parse(cutoff) - 1000).toISOString(), latitude: 25, longitude: 55, accuracy_m: 10, mock_location: false };
+    expect((await recordLocations(pool, f.org, f.actor, { samples: [point] })).inserted).toBe(1);
+    await expect(recordLocations(pool, f.org, f.actor, { samples: [{ ...point, sample_id: randomUUID(), sequence: 1, captured_at: cutoff }] }))
+      .rejects.toThrow('field_outside_work_session');
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'break_start', sequence: 1,
+      captured_at: new Date(Date.parse(cutoff) - 120000).toISOString() });
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'break_end', sequence: 2,
+      captured_at: new Date(Date.parse(cutoff) - 60000).toISOString() });
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 3, captured_at: cutoff });
+    expect((await pool.query('select punched_out_at from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0].punched_out_at.toISOString()).toBe(cutoff);
   });
   it('never accepts another employee/org session or off-duty points', async () => {
     const f = await fixture(), other = await fixture();

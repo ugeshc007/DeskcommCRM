@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       await db.query('begin'); await db.query("set local lock_timeout='5s'"); await db.query("set local statement_timeout='30s'");
       const actor = await db.query("select user_id from public.platform_admins where user_id=$1 and scope='full' and revoked_at is null for share", [auth.user.id]);
       if (!actor.rowCount) throw new Error('forbidden');
-      await db.query('select public.fn_provision_field_sales_session_projects()');
+      await db.query('select public.fn_provision_field_sales_flexible_shifts()');
       await db.query('select public.fn_provision_field_sales_pairing()');
       await db.query(`insert into public.api_audit_log(actor_user_id,action,resource_type,metadata,bypassed_rls,acting_as_platform_admin)
         values($1,'field_sales.module_installed','field_sales_module','{"version":1}',true,true)`, [auth.user.id]);

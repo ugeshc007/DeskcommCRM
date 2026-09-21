@@ -36,7 +36,7 @@ test.beforeAll(async () => {
     "insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'admin',now())",
     [adminId, org],
   );
-  await pool.query('select fn_provision_field_sales_session_projects()');
+  await pool.query('select fn_provision_field_sales_flexible_shifts()');
   await pool.query('select fn_provision_field_sales_pairing()');
   await pool.query(
     "insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Synthetic salesperson')",

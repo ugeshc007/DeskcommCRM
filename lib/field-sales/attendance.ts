@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
-import { attendanceCommandSchema, locationBatchSchema, sampleWithinSession, transitionAttendance, type WorkStatus } from './contracts';
+import { attendanceCommandSchema, locationBatchSchema, sampleWithinSession, transitionAttendance, MAX_FIELD_SHIFT_MS, type WorkStatus } from './contracts';
 import { fieldAudit, fieldTransaction, requireFieldEmployee, type FieldDb } from './authority';
 import { expandSchedule, localParts } from './schedule';
 
@@ -34,7 +34,7 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
     const at = Date.parse(command.captured_at);
     const now = (await db.query('select clock_timestamp() as at')).rows[0].at as Date;
     if (at > now.getTime() + 60000) throw new Error('field_device_clock_ahead');
-    const session = (await db.query(`select id,employee_id,status,last_sequence,last_event_at,punched_in_at
+    const session = (await db.query(`select id,employee_id,status,last_sequence,last_event_at,punched_in_at,punched_out_at,local_date::text as local_date
       from public.field_sales_sessions where organization_id=$1 and id=$2 for update`, [org, command.session_id])).rows[0];
     if (session && session.employee_id !== actor) throw new Error('field_forbidden');
     if (command.action === 'punch_in') {
@@ -43,34 +43,65 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
       if (active.rowCount) throw new Error('field_session_already_active');
       const recent = (await db.query('select max(punched_out_at) as ended from public.field_sales_sessions where organization_id=$1 and employee_id=$2', [org, actor])).rows[0].ended as Date | null;
       if (recent && at < recent.getTime()) throw new Error('field_session_overlap');
-      const schedule = (await db.query(`select id,project_id,employee_id,timezone,country_code,rule,active
-        from public.field_sales_schedules where organization_id=$1 and id=$2 and project_id=$3 for share`,
-      [org, command.schedule_id, command.project_id])).rows[0];
-      if (!schedule || schedule.employee_id !== actor || !schedule.active
-        || localParts(at, schedule.timezone).slice(0, 10) !== command.local_date) throw new Error('field_assignment_unavailable');
-      const occurrence = expandSchedule({ series_id: command.schedule_id, schedule: schedule.rule,
-        region: { country_code: schedule.country_code, timezone: schedule.timezone }, from: command.local_date, through: command.local_date })[0];
-      const cancelled = await db.query(`select 1 from public.field_sales_schedule_exceptions
-        where organization_id=$1 and schedule_id=$2 and local_date=$3 and cancelled`, [org, command.schedule_id, command.local_date]);
-      if (!occurrence || cancelled.rowCount) throw new Error('field_assignment_unavailable');
+      const region = (await db.query('select timezone from public.organizations where id=$1', [org])).rows[0];
+      if (!region?.timezone || localParts(at, region.timezone).slice(0, 10) !== command.local_date)
+        throw new Error('field_assignment_unavailable');
+      if (!!command.project_id !== !!command.schedule_id) throw new Error('field_assignment_unavailable');
+      if (command.schedule_id) {
+        const schedule = (await db.query(`select employee_id,project_id,timezone,country_code,rule,active from public.field_sales_schedules
+          where organization_id=$1 and id=$2 for share`, [org, command.schedule_id])).rows[0];
+        if (!schedule?.active || schedule.employee_id !== actor || schedule.project_id !== command.project_id ||
+          !expandSchedule({ series_id: command.schedule_id, schedule: schedule.rule,
+            region: { country_code: schedule.country_code, timezone: schedule.timezone }, from: command.local_date, through: command.local_date }).length)
+          throw new Error('field_assignment_unavailable');
+        const cancelled = await db.query('select 1 from public.field_sales_schedule_exceptions where organization_id=$1 and schedule_id=$2 and local_date=$3 and cancelled', [org, command.schedule_id, command.local_date]);
+        if (cancelled.rowCount) throw new Error('field_assignment_unavailable');
+      }
       await db.query(`insert into public.field_sales_sessions(organization_id,id,employee_id,project_id,schedule_id,local_date,status,punched_in_at,last_event_at,last_sequence)
         values($1,$2,$3,$4,$5,$6,'working',$7,$7,0)`,
-      [org, command.session_id, actor, command.project_id, command.schedule_id, command.local_date, command.captured_at]);
+      [org, command.session_id, actor, command.project_id ?? null, command.schedule_id ?? null, command.local_date, command.captured_at]);
+    } else if (command.action === 'select_project') {
+      if (!session || command.sequence !== session.last_sequence + 1 || session.punched_out_at && at >= (session.punched_out_at as Date).getTime())
+        throw new Error('field_sync_out_of_order');
+      if (at < (session.last_event_at as Date).getTime() || at >= (session.punched_in_at as Date).getTime() + MAX_FIELD_SHIFT_MS)
+        throw new Error('field_outside_work_session');
+      const project = await db.query('select id from public.field_sales_projects where organization_id=$1 and id=$2 and active for share', [org, command.project_id]);
+      if (!project.rowCount) throw new Error('field_assignment_unavailable');
+      if (command.local_date !== String(session.local_date).slice(0, 10)) throw new Error('field_assignment_unavailable');
+      if (command.schedule_id) {
+        const schedule = (await db.query(`select employee_id,project_id,timezone,country_code,rule,active from public.field_sales_schedules
+          where organization_id=$1 and id=$2 for share`, [org, command.schedule_id])).rows[0];
+        if (!schedule?.active || schedule.employee_id !== actor || schedule.project_id !== command.project_id ||
+          !expandSchedule({ series_id: command.schedule_id, schedule: schedule.rule,
+            region: { country_code: schedule.country_code, timezone: schedule.timezone }, from: command.local_date, through: command.local_date }).length)
+          throw new Error('field_assignment_unavailable');
+        const cancelled = await db.query('select 1 from public.field_sales_schedule_exceptions where organization_id=$1 and schedule_id=$2 and local_date=$3 and cancelled', [org, command.schedule_id, command.local_date]);
+        if (cancelled.rowCount) throw new Error('field_assignment_unavailable');
+      }
+      await db.query(`update public.field_sales_sessions set project_id=$3,schedule_id=$4,last_event_at=$5,last_sequence=$6
+        where organization_id=$1 and id=$2`, [org, command.session_id, command.project_id, command.schedule_id, command.captured_at, command.sequence]);
     } else {
       if (!session || command.sequence !== session.last_sequence + 1) throw new Error('field_sync_out_of_order');
       if (at < (session.last_event_at as Date).getTime()) throw new Error('field_device_clock_reversed');
-      const next = transitionAttendance(session.status as WorkStatus, command.action);
+      const cutoff = (session.punched_in_at as Date).getTime() + MAX_FIELD_SHIFT_MS;
+      const autoClosed = session.status === 'off_duty' && (session.punched_out_at as Date)?.getTime() === cutoff;
+      if (at >= cutoff && command.action !== 'punch_out') throw new Error('field_outside_work_session');
+      const next = autoClosed ? 'off_duty'
+        : transitionAttendance(session.status as WorkStatus, command.action);
+      const effectiveAt = command.action === 'punch_out' && at > cutoff ? new Date(cutoff).toISOString() : command.captured_at;
       await db.query(`update public.field_sales_sessions set status=$3,last_event_at=$4,last_sequence=$5,
-        punched_out_at=case when $3='off_duty' then $4::timestamptz else null end where organization_id=$1 and id=$2`,
-      [org, command.session_id, next, command.captured_at, command.sequence]);
+        punched_out_at=case when $6::boolean then punched_out_at when $3='off_duty' then $4::timestamptz else null end where organization_id=$1 and id=$2`,
+      [org, command.session_id, next, effectiveAt, command.sequence, autoClosed]);
       if (next === 'off_duty') {
         // An offline stop can arrive after newer samples: remove those outside its work interval.
-        await db.query('delete from public.field_sales_locations where organization_id=$1 and session_id=$2 and captured_at >= $3', [org, command.session_id, command.captured_at]);
+        await db.query('delete from public.field_sales_locations where organization_id=$1 and session_id=$2 and captured_at >= $3', [org, command.session_id, effectiveAt]);
       }
     }
     await db.query(`insert into public.field_sales_attendance_events(organization_id,id,session_id,sequence,action,captured_at,fingerprint)
       values($1,$2,$3,$4,$5,$6,$7)`, [org, command.event_id, command.session_id, command.sequence, command.action, command.captured_at, fingerprint]);
-    await fieldAudit(db, org, actor, 'field_sales.' + command.action, command.session_id, { sequence: command.sequence });
+    await fieldAudit(db, org, actor, 'field_sales.' + command.action, command.session_id,
+      { sequence: command.sequence, ...(command.action === 'select_project'
+        ? { project_id: command.project_id, schedule_id: command.schedule_id, override: command.schedule_id === null } : {}) });
     return { event_id: command.event_id, replayed: false };
   });
 }

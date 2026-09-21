@@ -30,7 +30,9 @@ jobs:
           set -euo pipefail
           checks="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
           for name in verify invariants build-and-size e2e imagens-ok android-unit android-emulator; do
-            if ! jq -e --arg name "$name" '.check_runs | any(.name == $name and .conclusion == "success")' <<< "$checks" >/dev/null; then
+            if ! jq -e --arg name "$name" \
+              '[.check_runs[] | select(.name == $name)] | sort_by(.started_at) | last | .conclusion == "success"' \
+              <<< "$checks" >/dev/null; then
               echo "Required check did not pass: $name" >&2
               exit 1
             fi

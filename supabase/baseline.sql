@@ -25373,6 +25373,34 @@ begin
  end if;
 end $upgrade$;
 
+-- ---- Field Sales device presence (migration 0383) ----
+-- Optional module remains unprovisioned on fresh installs until explicitly installed.
+create or replace function public.fn_provision_field_sales_pairing()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_devices();
+ alter table public.field_sales_devices alter column token_hash drop not null;
+ alter table public.field_sales_devices add column if not exists pairing_code_hash text;
+ alter table public.field_sales_devices add column if not exists pairing_expires_at timestamptz;
+ alter table public.field_sales_devices add column if not exists last_seen_at timestamptz;
+ create unique index if not exists field_sales_devices_pairing_code_hash_key
+   on public.field_sales_devices(pairing_code_hash) where pairing_code_hash is not null;
+ create index if not exists field_sales_devices_presence_idx
+   on public.field_sales_devices(organization_id,employee_id,last_seen_at desc)
+   where token_hash is not null and revoked_at is null;
+ revoke all on public.field_sales_devices from public,anon,authenticated,service_role;
+ grant select on public.field_sales_devices to service_role;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_pairing() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_pairing() to service_role;
+do $upgrade$
+begin
+ if to_regclass('public.field_sales_devices') is not null then
+   perform public.fn_provision_field_sales_pairing();
+ end if;
+end $upgrade$;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -25446,31 +25474,3 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
-
--- ---- Field Sales device presence (migration 0383) ----
--- Optional module remains unprovisioned on fresh installs until explicitly installed.
-create or replace function public.fn_provision_field_sales_pairing()
-returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
-begin
- perform public.fn_provision_field_sales_devices();
- alter table public.field_sales_devices alter column token_hash drop not null;
- alter table public.field_sales_devices add column if not exists pairing_code_hash text;
- alter table public.field_sales_devices add column if not exists pairing_expires_at timestamptz;
- alter table public.field_sales_devices add column if not exists last_seen_at timestamptz;
- create unique index if not exists field_sales_devices_pairing_code_hash_key
-   on public.field_sales_devices(pairing_code_hash) where pairing_code_hash is not null;
- create index if not exists field_sales_devices_presence_idx
-   on public.field_sales_devices(organization_id,employee_id,last_seen_at desc)
-   where token_hash is not null and revoked_at is null;
- revoke all on public.field_sales_devices from public,anon,authenticated,service_role;
- grant select on public.field_sales_devices to service_role;
- perform pg_notify('pgrst','reload schema');
-end $provision$;
-revoke execute on function public.fn_provision_field_sales_pairing() from public,anon,authenticated;
-grant execute on function public.fn_provision_field_sales_pairing() to service_role;
-do $upgrade$
-begin
- if to_regclass('public.field_sales_devices') is not null then
-   perform public.fn_provision_field_sales_pairing();
- end if;
-end $upgrade$;

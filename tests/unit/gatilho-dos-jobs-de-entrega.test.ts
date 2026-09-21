@@ -169,6 +169,13 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
     condicao: null,
     efeito: "Implantação manual no staging; sem ela a validação pré-produção não executa.",
   },
+  "ct102-release.yml::deploy": {
+    condicao: "github.ref == 'refs/heads/codex/ct102-release-speed'",
+    efeito:
+      "Implantação manual protegida no CT102, restrita à branch de release do fork. " +
+      "Se a condição mudar, uma execução de outra branch pode apontar a produção " +
+      "para uma imagem não homologada; se o job for desligado, a entrega para.",
+  },
 
   // --- e o que legitimamente tem interruptor -----------------------------------
   "acolhida.yml::acolher": {

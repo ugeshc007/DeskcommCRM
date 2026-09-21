@@ -147,8 +147,13 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/app/field-sales');
-  await page.getByRole('link', { name: 'Open live map' }).click();
-  await expect(page).toHaveURL(/\/app\/field-sales\/live$/);
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  const officerCard = page.getByRole('article').filter({ has: page.getByRole('link', { name: 'View position and route' }) });
+  await expect(officerCard.getByText('Present', { exact: true })).toBeVisible();
+  await expect(officerCard.getByText('Punched in')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('field-team-presence-desktop.png'), fullPage: true });
+  await officerCard.getByRole('link', { name: 'View position and route' }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/field-sales/live\\?employee_id=${employee}&date=${day}`));
   await expect(page.getByRole('heading', { name: 'Field team live view' })).toBeVisible();
   await page.getByLabel('Travel date').fill(day);
   await page.getByLabel('Field officer').selectOption(employee);

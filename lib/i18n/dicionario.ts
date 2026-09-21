@@ -8695,6 +8695,10 @@ const DICIONARIO_BASE: Traducoes = {
   },
   "Valor do negócio": { es: "Valor del negocio" },
   "Field Sales": { es: "Ventas de campo" },
+  "Field team live map": { es: "Mapa en vivo del equipo de campo" },
+  "Monitor on-duty field officers and review each recorded route by date.": {
+    es: "Supervisa al personal de campo en servicio y revisa cada ruta registrada por fecha.",
+  },
   "Schedule project visits and coordinate on-duty field teams.": {
     es: "Programa visitas a proyectos y coordina los equipos de campo en servicio.",
   },

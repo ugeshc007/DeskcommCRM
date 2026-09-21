@@ -25,7 +25,15 @@ type CalendarData = { installed: boolean; role?: 'field_officer' | 'agent' | 'ma
   manager_scopes?: Array<{ manager_id: string; employee_id: string }>;
   overlaps?: Array<[string, string]>; warnings?: Array<{ schedule_id: string; reason: string }> };
 type Member = { user_id: string; full_name: string | null; role: string };
+type TeamPresence = { generated_at: string; region: { timezone: string }; latest: Array<{ employee_id: string; status: string | null; captured_at: string | null; latitude: number | null; longitude: number | null }>;
+  sessions: Array<{ employee_id: string; punched_in_at: string; punched_out_at: string | null }> };
 const selectClass = 'h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm';
+
+function dateInZone(instant: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(instant);
+  const part = (type: string) => parts.find(item => item.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
 
 function Field({ label, children }: { label: string; children: ReactElement<{ id?: string }> }) {
   const generated = useId(), id = children.props.id ?? generated;
@@ -47,6 +55,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [dialog, setDialog] = useState<'project' | 'schedule' | 'employee' | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState('calendar');
   const [editing, setEditing] = useState<Occurrence | null>(null);
   const [editScope, setEditScope] = useState<'one' | 'future'>('one');
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
@@ -57,6 +66,12 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const manager = data?.role === 'admin' || data?.role === 'manager';
   const administrator = data?.role === 'admin';
   const timezone = data?.region?.timezone;
+  const teamDate = timezone ? dateInZone(new Date(), timezone) : start;
+  const teamPresence = useQuery({ queryKey: ['field-sales-team-presence', organizationId, userId, teamDate],
+    queryFn: () => readJson<TeamPresence>(`/api/v1/field-sales/operations?date=${teamDate}`),
+    enabled: data?.installed === true && activeTab === 'team', refetchInterval: 15000, gcTime: 0 });
+  const formatTime = (instant: string | null | undefined) => instant && timezone
+    ? new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(instant)) : '—';
   useEffect(() => {
     if (!timezone || calendarInitialized.current) return;
     calendarInitialized.current = true;
@@ -128,7 +143,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <div className="rounded-xl border bg-card p-4"><CalendarBlank aria-hidden className="mb-2 size-5"/><strong>{data.region?.country_code ?? 'Country required'} · {timezone ?? 'Time zone required'}</strong><p className="text-sm text-muted-foreground">{t('Inherited from CRM organization settings')}</p></div>
       </section>
       {!timezone && <p role="alert" className="rounded-lg border p-4">Configure the organization country and time zone before scheduling.</p>}
-      <Tabs defaultValue="calendar">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
         <TabsContent value="activity"><FieldOperations organizationId={organizationId} userId={userId} date={start}/></TabsContent>
         <TabsContent value="calendar" className="space-y-4">
@@ -174,7 +189,25 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
             </div>)}
           </section>}
           <p className="text-sm text-muted-foreground">Enrollment does not start tracking. Staff must punch in from their authorized Android app.</p>
-          {people.map(e => <div className="flex flex-wrap justify-between gap-2 rounded-lg border p-4" key={e.user_id}><span>{e.display_name}</span><span>{e.active ? 'Enrolled' : 'Inactive'}</span></div>)}
+          <section className="space-y-3" aria-label="Field officer attendance">
+            <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
+            {teamPresence.isPending && <p role="status">Loading team attendance…</p>}
+            {teamPresence.error && <p role="alert">{teamPresence.error.message} <Button variant="outline" onClick={() => void teamPresence.refetch()}>Retry</Button></p>}
+            {!people.length && <p className="rounded-xl border p-4">No field officers enrolled yet.</p>}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{people.map(person => {
+              const position = teamPresence.data?.latest.find(item => item.employee_id === person.user_id);
+              const sessions = teamPresence.data?.sessions.filter(item => item.employee_id === person.user_id) ?? [];
+              const openSession = sessions.find(item => !item.punched_out_at);
+              const lastSession = openSession ?? sessions[0];
+              const present = person.active && Boolean(openSession && position?.status);
+              return <article className="rounded-xl border bg-card p-4" key={person.user_id}>
+                <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3><span className={`rounded-full px-2 py-1 text-xs font-medium ${present ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>{!person.active ? 'Inactive' : present ? position?.status === 'break' ? 'Present · on break' : 'Present' : 'Absent / off duty'}</span></div>
+                <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><div><dt className="text-muted-foreground">Punched in</dt><dd>{formatTime(lastSession?.punched_in_at)}</dd></div><div><dt className="text-muted-foreground">Punched out</dt><dd>{formatTime(lastSession?.punched_out_at)}</dd></div></dl>
+                <p className="mt-3 text-xs text-muted-foreground">Last position: {position?.latitude !== null && position?.longitude !== null && position?.captured_at ? formatTime(position.captured_at) : 'Not reported'}</p>
+                {manager && <Button asChild variant="outline" className="mt-3"><Link href={`/app/field-sales/live?employee_id=${encodeURIComponent(person.user_id)}&date=${teamDate}`}>View position and route</Link></Button>}
+              </article>;
+            })}</div>
+          </section>
         </TabsContent>
         {administrator && <TabsContent value="policy"><form key={data.settings?.revision ?? 0} className="max-w-2xl space-y-4 rounded-xl border p-5" onSubmit={event => {
           event.preventDefault(); const f = new FormData(event.currentTarget); void save({ operation: 'settings', revision: data.settings?.revision ?? 0,

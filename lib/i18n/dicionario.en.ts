@@ -6994,6 +6994,9 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "This is the company default. Each deal can use a different currency.",
   "Valor do negócio": "Deal value",
   "Field Sales": "Field Sales",
+  "Field team live map": "Field team live map",
+  "Monitor on-duty field officers and review each recorded route by date.":
+    "Monitor on-duty field officers and review each recorded route by date.",
   "Schedule project visits and coordinate on-duty field teams.":
     "Schedule project visits and coordinate on-duty field teams.",
   "Inherited from CRM organization settings": "Inherited from CRM organization settings",

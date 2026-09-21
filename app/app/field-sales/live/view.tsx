@@ -13,10 +13,10 @@ function localDate(instant: string, timezone: string) {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
-export function FieldLiveView({ organizationId, userId }: { organizationId: string; userId: string }) {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [employeeId, setEmployeeId] = useState('');
-  const dateTouched = useRef(false);
+export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string }) {
+  const [date, setDate] = useState(() => initialDate ?? new Date().toISOString().slice(0, 10));
+  const [employeeId, setEmployeeId] = useState(initialEmployeeId ?? '');
+  const dateTouched = useRef(Boolean(initialDate));
   const query = useQuery({
     queryKey: ['field-sales-live', organizationId, userId, date, employeeId],
     refetchInterval: 15000,

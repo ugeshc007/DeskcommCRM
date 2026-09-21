@@ -25255,11 +25255,11 @@ begin
   alter table public.field_sales_sessions add constraint field_sales_sessions_schedule
    foreign key(organization_id,schedule_id) references public.field_sales_schedules(organization_id,id);
  end if;
- if not exists(select 1 from pg_constraint where conrelid='public.field_sales_sessions'::regclass and conname='field_sales_sessions_assignment_complete') then
-  alter table public.field_sales_sessions add constraint field_sales_sessions_assignment_complete
-   check((project_id is null and schedule_id is null and local_date is null)
-     or (project_id is not null and schedule_id is not null and local_date is not null));
- end if;
+ -- Final vocabulary (0381): a shift may begin before project selection.
+ alter table public.field_sales_sessions drop constraint if exists field_sales_sessions_assignment_complete;
+ alter table public.field_sales_sessions add constraint field_sales_sessions_assignment_complete
+  check((project_id is null and schedule_id is null)
+    or (project_id is not null and local_date is not null));
  create index if not exists field_sales_sessions_employee_date
   on public.field_sales_sessions(organization_id,employee_id,local_date,punched_in_at);
  perform pg_notify('pgrst','reload schema');
@@ -25344,6 +25344,35 @@ begin
  end if;
 end $upgrade$;
 
+-- ---- flexible Field Sales shifts (migration 0381) ----
+create or replace function public.fn_provision_field_sales_flexible_shifts()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_session_projects();
+ perform public.fn_provision_field_sales_pairing();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ alter table public.field_sales_devices alter column expires_at drop not null;
+ update public.field_sales_devices set expires_at=null
+  where token_hash is not null and revoked_at is null;
+ -- The assignment constraint is rebuilt once, with the final vocabulary,
+ -- by fn_provision_field_sales_session_projects above.
+ alter table public.field_sales_sessions drop constraint if exists field_sales_sessions_schedule_requires_project;
+ alter table public.field_sales_sessions add constraint field_sales_sessions_schedule_requires_project
+  check(schedule_id is null or project_id is not null);
+ alter table public.field_sales_attendance_events drop constraint if exists field_sales_attendance_events_action_check;
+ alter table public.field_sales_attendance_events add constraint field_sales_attendance_events_action_check
+  check(action in ('punch_in','select_project','break_start','break_end','punch_out'));
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_flexible_shifts() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_flexible_shifts() to service_role;
+do $upgrade$
+begin
+ if to_regclass('public.field_sales_sessions') is not null then
+  perform public.fn_provision_field_sales_flexible_shifts();
+ end if;
+end $upgrade$;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -25417,34 +25446,3 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
-
--- ---- flexible Field Sales shifts (migration 0381) ----
-create or replace function public.fn_provision_field_sales_flexible_shifts()
-returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
-begin
- perform public.fn_provision_field_sales_session_projects();
- perform public.fn_provision_field_sales_pairing();
- perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
- alter table public.field_sales_devices alter column expires_at drop not null;
- update public.field_sales_devices set expires_at=null
-  where token_hash is not null and revoked_at is null;
- alter table public.field_sales_sessions drop constraint if exists field_sales_sessions_assignment_complete;
- alter table public.field_sales_sessions add constraint field_sales_sessions_assignment_complete
-  check((project_id is null and schedule_id is null)
-    or (project_id is not null and local_date is not null));
- alter table public.field_sales_sessions drop constraint if exists field_sales_sessions_schedule_requires_project;
- alter table public.field_sales_sessions add constraint field_sales_sessions_schedule_requires_project
-  check(schedule_id is null or project_id is not null);
- alter table public.field_sales_attendance_events drop constraint if exists field_sales_attendance_events_action_check;
- alter table public.field_sales_attendance_events add constraint field_sales_attendance_events_action_check
-  check(action in ('punch_in','select_project','break_start','break_end','punch_out'));
- perform pg_notify('pgrst','reload schema');
-end $provision$;
-revoke execute on function public.fn_provision_field_sales_flexible_shifts() from public,anon,authenticated;
-grant execute on function public.fn_provision_field_sales_flexible_shifts() to service_role;
-do $upgrade$
-begin
- if to_regclass('public.field_sales_sessions') is not null then
-  perform public.fn_provision_field_sales_flexible_shifts();
- end if;
-end $upgrade$;

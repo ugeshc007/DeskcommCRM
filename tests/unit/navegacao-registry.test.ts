@@ -113,6 +113,7 @@ describe("sidebarGroups", () => {
     // calado no sidebar e reabrir a mesma corrida por pixel.
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
     expect(crm?.items.map((i) => i.href)).toEqual([
+      "/app/field-sales",
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",

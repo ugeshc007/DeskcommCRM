@@ -9,12 +9,12 @@ import { readIntegrationJson } from '@/app/api/v1/integration-connections/_share
 
 export const dynamic = 'force-dynamic';
 const headers = { 'Cache-Control': 'private, no-store' };
-type Context = { params: Promise<{ userId: string }> };
+type Context = { params: Promise<{ user_id: string }> };
 
 export async function GET(_req: Request, ctx: Context) {
   const auth = await requireRole('admin'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Device keys require your own organization account.', 403);
-  try { return ok(await officerDevices(getRequestPool(), auth.org.orgId, auth.user.id, (await ctx.params).userId), { headers }); }
+  try { return ok(await officerDevices(getRequestPool(), auth.org.orgId, auth.user.id, (await ctx.params).user_id), { headers }); }
   catch (error) { return fieldError(error); }
 }
 
@@ -24,7 +24,7 @@ export async function POST(req: Request, ctx: Context) {
   if (auth.user.support) return fail('forbidden', 'Device keys require your own organization account.', 403);
   try {
     const input = z.strictObject({ label: z.string().trim().min(1).max(100), display_name: z.string().trim().min(1).max(160) }).parse(await readIntegrationJson(req));
-    return ok(await issueOfficerDevice(getRequestPool(), auth.org.orgId, auth.user.id, (await ctx.params).userId, input.display_name, input.label), { headers });
+    return ok(await issueOfficerDevice(getRequestPool(), auth.org.orgId, auth.user.id, (await ctx.params).user_id, input.display_name, input.label), { headers });
   } catch (error) { return fieldError(error); }
 }
 
@@ -34,6 +34,6 @@ export async function DELETE(req: Request, ctx: Context) {
   if (auth.user.support) return fail('forbidden', 'Device keys require your own organization account.', 403);
   try {
     const input = z.strictObject({ id: z.uuid() }).parse(await readIntegrationJson(req));
-    return ok(await revokeOfficerDevice(getRequestPool(), auth.org.orgId, auth.user.id, (await ctx.params).userId, input.id), { headers });
+    return ok(await revokeOfficerDevice(getRequestPool(), auth.org.orgId, auth.user.id, (await ctx.params).user_id, input.id), { headers });
   } catch (error) { return fieldError(error); }
 }

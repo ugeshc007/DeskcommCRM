@@ -6997,4 +6997,12 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Schedule project visits and coordinate on-duty field teams.":
     "Schedule project visits and coordinate on-duty field teams.",
   "Inherited from CRM organization settings": "Inherited from CRM organization settings",
+  "Field Officers e staff viewer/agent podem aceitar convites manuais. Manager/admin ainda exigem confirmação por email.":
+    "Field Officers and viewer/agent staff may accept manual invitations. Manager/admin still require email confirmation.",
+  "Remove from list": "Remove from list",
+  "Remove revoked invitation?": "Remove revoked invitation?",
+  "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.":
+    "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.",
+  "Invitation removed from the list.": "Invitation removed from the list.",
+  "Remove": "Remove",
 };

@@ -8701,6 +8701,16 @@ const DICIONARIO_BASE: Traducoes = {
   "Inherited from CRM organization settings": {
     es: "Heredado de la configuración de la organización en el CRM",
   },
+  "Field Officers e staff viewer/agent podem aceitar convites manuais. Manager/admin ainda exigem confirmação por email.": {
+    es: "Los oficiales de campo y el personal viewer/agent pueden aceptar invitaciones manuales. Manager/admin todavía requieren confirmación por correo electrónico.",
+  },
+  "Remove from list": { es: "Quitar de la lista" },
+  "Remove revoked invitation?": { es: "¿Quitar la invitación revocada?" },
+  "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.": {
+    es: "Esto la quita de la lista. La invitación revocada sigue siendo inválida y se conserva su registro de auditoría.",
+  },
+  "Invitation removed from the list.": { es: "Invitación quitada de la lista." },
+  "Remove": { es: "Quitar" },
 };
 
 export const DICIONARIO: Traducoes = Object.fromEntries([

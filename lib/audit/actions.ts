@@ -509,6 +509,7 @@ export const AUDIT_ACTIONS = [
   "store.payment_prepared",
   "store.payment_recovered",
   "store.payment_event",
+  "auth.manual_invite_enrolled",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

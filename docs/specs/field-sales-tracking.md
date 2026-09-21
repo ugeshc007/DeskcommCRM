@@ -2,13 +2,16 @@
 
 Status: implementation started; NOT deployed. Evidence, not phase names, determines completion.
 
-## Current development checkpoint — 2026-09-20
+## Current development checkpoint — 2026-09-21
 
-- Staff setup without an email gateway uses the CRM's private invitation link; the employee
+- Staff setup without an email gateway uses the CRM's private invitation link. Only a persisted,
+  pending, undelivered viewer/agent invitation can enroll a new account without email confirmation;
+  possession of the privately shared link is the enrollment proof, not proof of mailbox ownership.
+  Expired, revoked or accepted invitations are refused. The employee
   chooses their own CRM password. An enrolled employee then creates and copies a one-time
   Android device key in **Field Sales → My Android devices**. The Android app does not accept
-  a short PIN or the CRM password as its device credential. This UI clarification does not
-  create accounts or device keys automatically.
+  a short PIN or the CRM password as its device credential. An account is created only when
+  the invited person submits the password form; a device key is created only on request.
 
 - Android's connected home is intentionally limited to today's real assigned-project selector,
   Punch In and Punch Out. Visits, photos, breaks, manual reconnect and manual work actions are

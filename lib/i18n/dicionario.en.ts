@@ -4739,6 +4739,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Você foi convidado": "You were invited",
   "Para aceitar o convite como": "To accept the invitation as",
   "faça login com o email": "login with email",
+  "crie sua conta ou entre com o email": "create an account or sign in with email",
   "Fazer login": "Login",
   "Ainda não tenho conta": "I don't have an account yet",
   "Email não corresponde": "Email does not match",
@@ -4860,8 +4861,8 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "Resend not configured — copyable link below (DEV).",
   "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.":
     "No email gateway? Create the invitation and share its private link. Each person sets their own password when opening the link.",
-  "Se o cadastro exigir confirmação por email, configure a confirmação antes de usar o link.":
-    "If signup requires email confirmation, configure confirmation before using the link.",
+  "Convites manuais de staff (viewer/agent) dispensam email. Manager/admin ainda exigem confirmação por email.":
+    "Manual staff invitations (viewer/agent) need no email. Manager/admin still require email confirmation.",
   "Convites criados": "Invitations created",
   "Email não enviado. Compartilhe este link somente com a pessoa convidada.":
     "Email not sent. Share this link only with the invited person.",

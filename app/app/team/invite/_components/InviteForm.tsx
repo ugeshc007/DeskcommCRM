@@ -82,7 +82,7 @@ export function InviteForm() {
         <p className="rounded-md border bg-muted/40 p-3 text-sm">
           {t("Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.")}
           <span className="mt-1 block text-xs text-muted-foreground">
-            {t("Se o cadastro exigir confirmação por email, configure a confirmação antes de usar o link.")}
+            {t("Convites manuais de staff (viewer/agent) dispensam email. Manager/admin ainda exigem confirmação por email.")}
           </span>
         </p>
         <div className="space-y-2">

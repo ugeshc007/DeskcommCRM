@@ -5935,6 +5935,7 @@ const DICIONARIO_BASE: Traducoes = {
   "Você foi convidado": { es: "Fuiste invitado" },
   "Para aceitar o convite como": { es: "Para aceptar la invitación como" },
   "faça login com o email": { es: "inicia sesión con el correo" },
+  "crie sua conta ou entre com o email": { es: "crea una cuenta o inicia sesión con el correo" },
   "Fazer login": { es: "Iniciar sesión" },
   "Ainda não tenho conta": { es: "Todavía no tengo cuenta" },
   "Email não corresponde": { es: "El correo no coincide" },
@@ -6077,8 +6078,8 @@ const DICIONARIO_BASE: Traducoes = {
   "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.": {
     es: "¿Sin servicio de correo? Crea la invitación y comparte su enlace privado. Cada persona establece su propia contraseña al abrirlo.",
   },
-  "Se o cadastro exigir confirmação por email, configure a confirmação antes de usar o link.": {
-    es: "Si el registro requiere confirmación por correo, configúrala antes de usar el enlace.",
+  "Convites manuais de staff (viewer/agent) dispensam email. Manager/admin ainda exigem confirmação por email.": {
+    es: "Las invitaciones manuales de personal (viewer/agent) no requieren correo. Manager/admin aún requieren confirmación por correo.",
   },
   "Convites criados": { es: "Invitaciones creadas" },
   "Email não enviado. Compartilhe este link somente com a pessoa convidada.": {

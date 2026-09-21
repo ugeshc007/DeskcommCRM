@@ -45,14 +45,16 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (pool) {
+    const staff = await pool.query('select id from auth.users where email=$1', [staffEmail]);
     await pool.query('delete from field_sales_devices where organization_id=$1', [org]);
     await pool.query('delete from organizations where id=$1', [org]);
+    if (staff.rows[0]) await auth.auth.admin.deleteUser(staff.rows[0].id);
     await pool.end();
   }
   if (adminId) await auth.auth.admin.deleteUser(adminId);
 });
 
-test('admin copies a private invite and an Android key without email delivery', async ({ page, context }, testInfo) => {
+test('admin copies a private invite, employee sets a password without email, and device key remains separate', async ({ page, context, browser }, testInfo) => {
   test.setTimeout(90_000);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/login');
@@ -62,7 +64,7 @@ test('admin copies a private invite and an Android key without email delivery', 
   await page.waitForURL(/\/app(?:\/|$)/);
   await page.goto('/app/team/invite');
 
-  await expect(page.getByText(/No email gateway\?/)).toBeVisible();
+  await expect(page.locator('form > p')).toContainText('No email gateway?');
   await page.getByRole('textbox', { name: 'Emails' }).fill(staffEmail);
   await page.getByRole('button', { name: 'Send invitations' }).click();
   await expect(page.getByText('Email not sent. Share this link only with the invited person.')).toBeVisible();
@@ -72,6 +74,58 @@ test('admin copies a private invite and an Android key without email delivery', 
   await page.getByRole('button', { name: 'Copy setup link' }).click();
   await expect(page.getByText('Setup link copied.')).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+
+  const staffContext = await browser.newContext();
+  const staffPage = await staffContext.newPage();
+  // The test server may use E2E_PORT while NEXT_PUBLIC_APP_URL still points to
+  // the default port. Keep the signed path, but use this isolated test server.
+  await staffPage.goto(`http://localhost:${process.env.E2E_PORT ?? '3001'}${new URL(link).pathname}`);
+  await expect(staffPage.getByRole('heading', { name: 'You were invited' })).toBeVisible();
+  // The existing-account detour must preserve the invitation (the reported bug).
+  await staffPage.getByRole('link', { name: 'Login' }).click();
+  await staffPage.getByRole('link', { name: 'Create account' }).click();
+  await expect(staffPage.getByText('Create your password to enter the company that invited you')).toBeVisible();
+  await expect(staffPage.getByRole('textbox', { name: 'Your name' })).toBeVisible();
+  await staffPage.getByRole('textbox', { name: 'Your name' }).fill('Synthetic Salesperson');
+  await expect(staffPage.getByRole('textbox', { name: 'Email' })).toHaveValue(staffEmail);
+  await staffPage.getByLabel('Password', { exact: true }).fill(password);
+  await staffPage.getByLabel('Confirm password').fill(password);
+  await staffPage.getByRole('button', { name: 'Create account' }).click();
+  await staffPage.waitForURL(/\/app(?:\/|$)/);
+  const membership = await pool.query(
+    "select role from user_organizations where organization_id=$1 and user_id=(select id from auth.users where email=$2)",
+    [org, staffEmail],
+  );
+  expect(membership.rows).toEqual([{ role: 'agent' }]);
+  const acceptedInvite = await pool.query(
+    'select accepted_by, revoked_at from team_invites where organization_id=$1 and email=$2',
+    [org, staffEmail],
+  );
+  expect(acceptedInvite.rows).toHaveLength(1);
+  expect(acceptedInvite.rows[0].accepted_by).toBeTruthy();
+  expect(acceptedInvite.rows[0].revoked_at).toBeNull();
+  await staffContext.close();
+
+  const revokedEmail = `revoked-${org}@synthetic.test`;
+  await page.getByRole('textbox', { name: 'Emails' }).fill(revokedEmail);
+  await page.getByRole('button', { name: 'Send invitations' }).click();
+  const revokedLink = await page.locator('code').innerText();
+  await pool.query(
+    'update team_invites set revoked_at=now() where organization_id=$1 and email=$2',
+    [org, revokedEmail],
+  );
+  const revokedContext = await browser.newContext();
+  const revokedPage = await revokedContext.newPage();
+  await revokedPage.goto(`http://localhost:${process.env.E2E_PORT ?? '3001'}${new URL(revokedLink).pathname}`);
+  await revokedPage.getByRole('link', { name: "I don't have an account yet" }).click();
+  await revokedPage.getByRole('textbox', { name: 'Your name' }).fill('Rejected Salesperson');
+  await revokedPage.getByLabel('Password', { exact: true }).fill(password);
+  await revokedPage.getByLabel('Confirm password').fill(password);
+  await revokedPage.getByRole('button', { name: 'Create account' }).click();
+  await expect(revokedPage.getByText('Invalid or expired invitation')).toBeVisible();
+  const revokedUser = await pool.query('select id from auth.users where email=$1', [revokedEmail]);
+  expect(revokedUser.rows).toHaveLength(0);
+  await revokedContext.close();
 
   // Preserve a visual artifact without writing the bearer link into the screenshot.
   await page.locator('code').evaluate(element => { element.textContent = '[private link hidden]'; });

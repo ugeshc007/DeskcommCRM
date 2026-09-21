@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { copyToClipboard } from '@/lib/clipboard';
 
 type Device = { id: string; label: string; expires_at: string; revoked_at: string | null };
 export function FieldDevices({ organizationId, userId }: { organizationId: string; userId: string }) {
@@ -37,10 +38,9 @@ export function FieldDevices({ organizationId, userId }: { organizationId: strin
   }
   async function copyDeviceKey() {
     if (!issued) return;
-    try {
-      await navigator.clipboard.writeText(issued.token);
+    if (await copyToClipboard(issued.token)) {
       setCopied(true); setCopyError('');
-    } catch {
+    } else {
       setCopyError('Copy failed. Select the key field and copy it manually.');
     }
   }

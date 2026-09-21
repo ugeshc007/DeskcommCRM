@@ -9,6 +9,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useT } from "@/hooks/i18n/useT";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useInviteMembers } from "@/hooks/team/useInviteMembers";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,10 +38,9 @@ export function InviteForm() {
   const invite = useInviteMembers();
 
   const copyInviteLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyToClipboard(url)) {
       toast.success(t("Link de acesso copiado."));
-    } catch {
+    } else {
       toast.error(t("Não foi possível copiar. Selecione o link abaixo e copie manualmente."));
     }
   };

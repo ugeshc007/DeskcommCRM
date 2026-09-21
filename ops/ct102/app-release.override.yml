@@ -1,0 +1,6 @@
+services:
+  app:
+    image: ${CT102_APP_IMAGE:?Pinned app image digest required}
+    pull_policy: never
+    environment:
+      APP_VERSION: ${CT102_APP_VERSION:?Commit version required}

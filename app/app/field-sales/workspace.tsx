@@ -25,7 +25,7 @@ type CalendarData = { installed: boolean; role?: 'field_officer' | 'agent' | 'ma
   manager_scopes?: Array<{ manager_id: string; employee_id: string }>;
   overlaps?: Array<[string, string]>; warnings?: Array<{ schedule_id: string; reason: string }> };
 type Member = { user_id: string; full_name: string | null; role: string };
-type TeamPresence = { generated_at: string; region: { timezone: string }; latest: Array<{ employee_id: string; status: string | null; captured_at: string | null; latitude: number | null; longitude: number | null }>;
+type TeamPresence = { generated_at: string; region: { timezone: string }; latest: Array<{ employee_id: string; status: string | null; captured_at: string | null; latitude: number | null; longitude: number | null; online: boolean; last_seen_at: string | null }>;
   sessions: Array<{ employee_id: string; punched_in_at: string; punched_out_at: string | null }> };
 const selectClass = 'h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm';
 
@@ -201,9 +201,10 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               const lastSession = openSession ?? sessions[0];
               const present = person.active && Boolean(openSession && position?.status);
               return <article className="rounded-xl border bg-card p-4" key={person.user_id}>
-                <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3><span className={`rounded-full px-2 py-1 text-xs font-medium ${present ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>{!person.active ? 'Inactive' : present ? position?.status === 'break' ? 'Present · on break' : 'Present' : 'Absent / off duty'}</span></div>
+                <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3><div className="flex flex-wrap gap-1"><span className={`rounded-full px-2 py-1 text-xs font-medium ${position?.online ? 'bg-sky-100 text-sky-900' : 'bg-muted text-muted-foreground'}`}>{position?.online ? 'Online' : 'Offline'}</span><span className={`rounded-full px-2 py-1 text-xs font-medium ${present ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>{!person.active ? 'Inactive' : present ? position?.status === 'break' ? 'Present · on break' : 'Present' : 'Absent / off duty'}</span></div></div>
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><div><dt className="text-muted-foreground">Punched in</dt><dd>{formatTime(lastSession?.punched_in_at)}</dd></div><div><dt className="text-muted-foreground">Punched out</dt><dd>{formatTime(lastSession?.punched_out_at)}</dd></div></dl>
                 <p className="mt-3 text-xs text-muted-foreground">Last position: {position?.latitude !== null && position?.longitude !== null && position?.captured_at ? formatTime(position.captured_at) : 'Not reported'}</p>
+                <p className="mt-1 text-xs text-muted-foreground">App last checked in: {formatTime(position?.last_seen_at)}</p>
                 {manager && <Button asChild variant="outline" className="mt-3"><Link href={`/app/field-sales/live?employee_id=${encodeURIComponent(person.user_id)}&date=${teamDate}`}>View position and route</Link></Button>}
               </article>;
             })}</div>

@@ -1,0 +1,87 @@
+name: ct102-release
+
+# One-click deployment of a previously built immutable image. No build on CT102.
+# Configure the ct102-production environment with required reviewers and the
+# four CT102_* SSH secrets described in docs/runbooks/ct102-release.md.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  checks: read
+
+concurrency:
+  group: ct102-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/codex/ct102-release-speed'
+    runs-on: ubuntu-latest
+    environment: ct102-production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the complete CI result for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          checks="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
+          for name in verify invariants build-and-size e2e imagens-ok android-unit android-emulator; do
+            if ! jq -e --arg name "$name" '.check_runs | any(.name == $name and .conclusion == "success")' <<< "$checks" >/dev/null; then
+              echo "Required check did not pass: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Set up registry inspection
+        uses: docker/setup-buildx-action@v4
+
+      - name: Pin immutable GHCR digest
+        id: pinned
+        run: |
+          set -euo pipefail
+          tag="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/deskcommcrm:sha-$GITHUB_SHA"
+          digest="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/deskcommcrm@$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Configure pinned SSH host and deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.CT102_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.CT102_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$DEPLOY_KEY" && -n "$HOST_KEY" ]] || { echo 'CT102 SSH secrets are not configured' >&2; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$HOST_KEY" > ~/.ssh/known_hosts
+
+      - name: Copy exact release files to CT102 and deploy only the app
+        env:
+          CT102_HOST: ${{ secrets.CT102_HOST }}
+          CT102_USER: ${{ secrets.CT102_USER }}
+          IMAGE: ${{ steps.pinned.outputs.ref }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CT102_HOST" && "$CT102_USER" == root ]] || { echo 'CT102 host or deployment user is not configured' >&2; exit 1; }
+          target="${CT102_USER}@${CT102_HOST}"
+          stage="/root/ct102-release-${GITHUB_SHA}"
+          destination="/opt/deskcommcrm/releases/${GITHUB_SHA}"
+          ssh -o StrictHostKeyChecking=yes "$target" "install -m 700 -d '$stage' && pct exec 102 -- mkdir -p '$destination'"
+          scp -o StrictHostKeyChecking=yes supabase/baseline.sql ops/ct102/deploy.sh ops/ct102/app-release.override.yml "$target:$stage/"
+          ssh -o StrictHostKeyChecking=yes "$target" \
+            "pct push 102 '$stage/baseline.sql' '$destination/baseline.sql' && \
+             pct push 102 '$stage/deploy.sh' '$destination/deploy.sh' && \
+             pct push 102 '$stage/app-release.override.yml' '$destination/app-release.override.yml' && \
+             pct exec 102 -- bash '$destination/deploy.sh' '$IMAGE' '$GITHUB_SHA' '$destination/baseline.sql'"
+
+      - name: Public post-release smoke
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            https://crm.techspothub.com/api/v1/health \
+            | jq -e --arg version "${GITHUB_SHA:0:7}" '.data.version == $version and .data.status != "unhealthy"'

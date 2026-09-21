@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import sharp from 'sharp';
+import { authenticateFieldDevice, deviceTokenHash } from '@/lib/field-sales/devices';
 
 // A real software WebGL renderer is needed for the map in headless CI.
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
@@ -33,6 +34,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {
   if (pool) {
+    await pool.query('delete from field_sales_devices where organization_id=$1', [org]);
     await pool.query('delete from organizations where id=$1 and slug=$2', [org, `field-ui-${org}`]);
     await pool.query('delete from auth.users where id=$1 and email=$2', [employee, `employee-${org}@synthetic.test`]);
     if (actor) await admin.auth.admin.deleteUser(actor);
@@ -145,10 +147,15 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
     await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
       values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), liveSession, sequence, new Date(start.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
   }
+  const deviceToken = 'fld_' + randomBytes(32).toString('hex');
+  await pool.query(`insert into field_sales_devices(organization_id,id,employee_id,label,token_hash,expires_at)
+    values($1,$2,$3,'Synthetic Android',$4,null)`, [org, randomUUID(), employee, deviceTokenHash(deviceToken)]);
+  await authenticateFieldDevice(pool, 'Bearer ' + deviceToken);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   const officerCard = page.getByRole('article').filter({ has: page.getByRole('link', { name: 'View position and route' }) });
+  await expect(officerCard.getByText('Online', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Present', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Punched in')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-team-presence-desktop.png'), fullPage: true });

@@ -84,6 +84,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         {!data.latest.length && <p className="rounded-xl border p-4">No field officers enrolled yet. Enroll staff under Field Sales → Team.</p>}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{data.latest.map(person => <article className={`rounded-xl border bg-card p-4 ${employeeId === person.employee_id ? 'border-primary' : ''}`} key={person.employee_id}>
           <h3 className="font-semibold">{person.display_name}</h3>
+          <p className="text-sm">{person.online ? 'Online' : 'Offline'} · App last checked in: {time(person.last_seen_at)}</p>
           <p className="text-sm">{person.status?.replaceAll('_', ' ') ?? 'Off duty'}</p>
           <p className="text-sm text-muted-foreground">Last reported: {time(person.captured_at)}</p>
           {person.mock_location && <p className="text-sm text-amber-700">Mock location flagged</p>}

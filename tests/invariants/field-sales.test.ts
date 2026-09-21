@@ -282,9 +282,16 @@ describe('optional field-sales foundation', () => {
     expect(await listFieldDevices(pool, b.org, b.actor)).toEqual([]);
     await expect(revokeFieldDevice(pool, b.org, b.actor, issued.id)).rejects.toThrow('field_forbidden');
     const identity = await authenticateFieldDevice(pool, 'Bearer ' + paired.token);
+    expect((await readFieldOperations(pool, a.org, a.actor, a.localDate)).latest[0]).toMatchObject({ online: true });
+    expect((await readFieldOperations(pool, b.org, b.actor, b.localDate)).latest[0]).toMatchObject({ online: false });
+    await pool.query("update field_sales_devices set last_seen_at=now()-interval '3 minutes' where organization_id=$1 and id=$2", [a.org, issued.id]);
+    expect((await readFieldOperations(pool, a.org, a.actor, a.localDate)).latest[0]).toMatchObject({ online: false });
+    await authenticateFieldDevice(pool, 'Bearer ' + paired.token);
+    expect((await readFieldOperations(pool, a.org, a.actor, a.localDate)).latest[0]).toMatchObject({ online: true });
     await withFieldDevice(identity, () => recordAttendance(pool, a.org, a.actor, a.command));
     await expect(withFieldDevice(identity, () => recordAttendance(pool, b.org, b.actor, b.command))).rejects.toThrow('field_device_unauthorized');
     await revokeFieldDevice(pool, a.org, a.actor, issued.id);
+    expect((await readFieldOperations(pool, a.org, a.actor, a.localDate)).latest[0]).toMatchObject({ online: false });
     await expect(authenticateFieldDevice(pool, 'Bearer ' + paired.token)).rejects.toThrow('field_device_unauthorized');
     // A previously authenticated request must revalidate at the actual transaction boundary.
     await expect(withFieldDevice(identity, () => recordAttendance(pool, a.org, a.actor, a.command))).rejects.toThrow('field_device_unauthorized');

@@ -112,11 +112,13 @@ export async function revokeOfficerDevice(pool: Pick<pg.Pool, 'connect'>, org: s
 export async function authenticateFieldDevice(pool: Pick<pg.Pool, 'query'>, authorization: string | null) {
   if (!authorization || !/^Bearer fld_[a-f0-9]{64}$/.test(authorization)) throw new Error('field_device_unauthorized');
   const token = authorization.slice(7);
-  const row = (await pool.query(`select d.id,d.organization_id,d.employee_id from public.field_sales_devices d
-    join public.field_sales_employees e on e.organization_id=d.organization_id and e.user_id=d.employee_id
-    join public.user_organizations m on m.organization_id=d.organization_id and m.user_id=d.employee_id
-    where d.token_hash=$1 and d.revoked_at is null and (d.expires_at is null or d.expires_at>now()) and e.active
-    and m.revoked_at is null and m.accepted_at is not null and m.role in ('field_officer','agent','manager','admin')`, [deviceTokenHash(token)])).rows[0];
+  const row = (await pool.query(`update public.field_sales_devices d set last_seen_at=now()
+    from public.field_sales_employees e, public.user_organizations m
+    where d.token_hash=$1 and d.revoked_at is null and (d.expires_at is null or d.expires_at>now())
+    and e.organization_id=d.organization_id and e.user_id=d.employee_id and e.active
+    and m.organization_id=d.organization_id and m.user_id=d.employee_id
+    and m.revoked_at is null and m.accepted_at is not null and m.role in ('field_officer','agent','manager','admin')
+    returning d.id,d.organization_id,d.employee_id`, [deviceTokenHash(token)])).rows[0];
   if (!row) throw new Error('field_device_unauthorized');
   return { deviceId: row.id as string, org: row.organization_id as string, actor: row.employee_id as string };
 }

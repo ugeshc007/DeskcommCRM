@@ -28,7 +28,7 @@ public final class MainActivity extends Activity {
     private final ArrayList<JSONObject> projectChoices = new ArrayList<>();
     private final Handler clock = new Handler(Looper.getMainLooper());
     private final Runnable refreshClock = new Runnable() {
-        @Override public void run() { render(); clock.postDelayed(this, 60000); }
+        @Override public void run() { render(); sync(); clock.postDelayed(this, 60000); }
     };
 
     @Override public void onCreate(Bundle state) {
@@ -39,7 +39,7 @@ public final class MainActivity extends Activity {
     }
     @Override public void onResume() {
         super.onResume(); try { Attendance.autoPunchOut(this); } catch (Exception ignored) { }
-        render(); clock.removeCallbacks(refreshClock); clock.postDelayed(refreshClock, 60000);
+        render(); sync(); clock.removeCallbacks(refreshClock); clock.postDelayed(refreshClock, 60000);
     }
     @Override public void onPause() { clock.removeCallbacks(refreshClock); super.onPause(); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

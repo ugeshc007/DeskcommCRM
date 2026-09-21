@@ -136,8 +136,12 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
       where s.organization_id=$1 and e.organization_id=$1 and s.employee_id=any($2::uuid[]) and s.punched_in_at<$4 and coalesce(s.punched_out_at,now())>=$3
       order by s.punched_in_at desc limit 501`, [org, ids, start, end])).rows;
     if (sessions.length > 500) throw new Error('field_operations_too_large');
-    const latest = (await db.query(`select e.user_id as employee_id,e.display_name,s.id as session_id,s.status,l.latitude,l.longitude,l.accuracy_m,l.captured_at,l.received_at,l.mock_location
+    const latest = (await db.query(`select e.user_id as employee_id,e.display_name,s.id as session_id,s.status,l.latitude,l.longitude,l.accuracy_m,l.captured_at,l.received_at,l.mock_location,
+      presence.last_seen_at,coalesce(presence.last_seen_at>=now()-interval '2 minutes',false) as online
       from public.field_sales_employees e left join public.field_sales_sessions s on s.organization_id=e.organization_id and s.employee_id=e.user_id and s.punched_out_at is null
+      left join lateral(select max(d.last_seen_at) as last_seen_at from public.field_sales_devices d
+        where d.organization_id=e.organization_id and d.employee_id=e.user_id and d.token_hash is not null
+        and d.revoked_at is null and (d.expires_at is null or d.expires_at>now()))presence on true
       left join lateral(select l.* from public.field_sales_locations l join public.field_sales_settings policy on policy.organization_id=l.organization_id
         where l.organization_id=$1 and l.session_id=s.id and l.captured_at>=s.punched_in_at and l.captured_at>=now()-make_interval(days=>policy.retention_days)
         order by l.captured_at desc,l.sequence desc limit 1)l on true

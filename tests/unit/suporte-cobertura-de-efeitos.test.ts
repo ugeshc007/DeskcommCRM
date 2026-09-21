@@ -26,6 +26,7 @@ it("todo handler mutante do app declara guarda de suporte ou é infraestrutura i
  for(const path of files("app/api/v1").filter(p=>p.endsWith("/route.ts"))){
   if(/app\/api\/v1\/(cron|webhooks)\//.test(path)||path==="app/api/v1/system/agent/route.ts")continue; // segredo de máquina, sem actor/session cookie
   if(path==="app/api/v1/field-sales/mobile/route.ts")continue; // bearer próprio do aparelho: token hasheado, revogável e ligado a uma única organização/pessoa
+  if(path==="app/api/v1/field-sales/pair/route.ts")continue; // sem cookie: código único de 5 minutos, emitido só por conta autorizada, troca atômica por bearer; suporte é barrado na emissão
   if(path.includes("/impersonate"))continue; // início/fim autenticam a posse e têm contrato próprio
   const source=ts.createSourceFile(path,readFileSync(path,"utf8"),ts.ScriptTarget.Latest,true);
   // DUAS FORMAS de exportar um handler, e o gate precisa das duas. A varredura

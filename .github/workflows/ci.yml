@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/field-sales-tracking]
 
 # O GITHUB_TOKEN destes jobs serve a `actions/checkout` (clone) e a
 # `actions/setup-node` (manifest de `actions/node-versions`, repo público) —
@@ -23,7 +23,29 @@ permissions:
   contents: read
 
 jobs:
+  # Feedback curto antes do gate integral. Ele roda somente testes relacionados
+  # aos arquivos do PR (mudanca global deixa a suite inteira para o verify).
+  # O job `verify` continua integral e depende deste: rapidez nao compra buraco.
+  focused:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/preparar-node
+        timeout-minutes: 5
+
+      - name: Testes dos modulos alterados
+        env:
+          CHANGED_BASE_REF: origin/${{ github.base_ref }}
+        run: pnpm test:changed
+
   verify:
+    needs: [focused]
+    if: always() && (needs.focused.result == 'success' || needs.focused.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

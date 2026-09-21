@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, codex/field-sales-tracking]
 
 # O GITHUB_TOKEN deste job serve a `actions/checkout` (clone) e a
 # `actions/setup-node` (manifest de `actions/node-versions`, repo público).

@@ -127,6 +127,12 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
   // --- os outros checks obrigatórios ------------------------------------------
   // Mesmo mecanismo, mesmo desfecho: `skipped` conta como check satisfeito.
   // Desligar qualquer um destes faz o PR entrar sem ter sido testado.
+  "ci.yml::focused": {
+    condicao: "github.event_name == 'pull_request'",
+    efeito:
+      "Feedback antecipado só para PR; quando pulado em push, verify continua independente " +
+      "e executa o gate completo.",
+  },
   "ci.yml::verify": {
     condicao: null,
     efeito: "Este é o check obrigatório `verify` (typecheck + lint + test:unit).",
@@ -150,6 +156,18 @@ const GATILHO_ESPERADO: Record<string, { condicao: string | null; efeito: string
   "perf.yml::build-and-size": {
     condicao: null,
     efeito: "Este é o check obrigatório `build-and-size` (`pnpm build` em Node 22).",
+  },
+  "android.yml::android-unit": {
+    condicao: null,
+    efeito: "Testes unitários, lint e build Android; um erro nesta faixa impede validar o aplicativo móvel.",
+  },
+  "android.yml::android-emulator": {
+    condicao: null,
+    efeito: "Smoke de instalação em emulador; sem ele o APK pode compilar e falhar no dispositivo.",
+  },
+  "staging-release.yml::deploy": {
+    condicao: null,
+    efeito: "Implantação manual no staging; sem ela a validação pré-produção não executa.",
   },
 
   // --- e o que legitimamente tem interruptor -----------------------------------

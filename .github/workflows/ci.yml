@@ -25,7 +25,7 @@ permissions:
 jobs:
   # Feedback curto antes do gate integral. Ele roda somente testes relacionados
   # aos arquivos do PR (mudanca global deixa a suite inteira para o verify).
-  # O job `verify` continua integral e depende deste: rapidez nao compra buraco.
+  # O job `verify` continua integral e independente deste: rapidez nao compra buraco.
   focused:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -44,8 +44,6 @@ jobs:
         run: pnpm test:changed
 
   verify:
-    needs: [focused]
-    if: always() && (needs.focused.result == 'success' || needs.focused.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

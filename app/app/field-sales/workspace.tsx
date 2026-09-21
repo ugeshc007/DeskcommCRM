@@ -22,7 +22,6 @@ type CalendarData = { installed: boolean; role?: 'field_officer' | 'agent' | 'ma
   region?: { country_code: string; timezone: string } | null;
   settings?: { revision: number; enabled: boolean; retention_days: number; notice_text: string } | null;
   employees?: Employee[]; projects?: Project[]; occurrences?: Occurrence[];
-  manager_scopes?: Array<{ manager_id: string; employee_id: string }>;
   overlaps?: Array<[string, string]>; warnings?: Array<{ schedule_id: string; reason: string }> };
 type Member = { user_id: string; full_name: string | null; role: string };
 type TeamPresence = { generated_at: string; region: { timezone: string }; latest: Array<{ employee_id: string; status: string | null; captured_at: string | null; latitude: number | null; longitude: number | null; online: boolean; last_seen_at: string | null }>;
@@ -174,20 +173,6 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{projects.map(p => <article key={p.id} className="rounded-xl border p-5"><h2 className="font-semibold">{p.name}</h2><p>{p.site_name}</p><p className="text-sm text-muted-foreground">{p.active ? 'Active' : 'Archived'}</p></article>)}</div>
         </TabsContent>
         <TabsContent value="team" className="space-y-4">{administrator && <Button variant="outline" onClick={() => setDialog('employee')}><Plus aria-hidden/>Enroll salesperson</Button>}
-          {administrator && <form className="max-w-xl space-y-3 rounded-xl border p-4" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void save({ operation: 'manager_scope', manager_id: String(form.get('manager')), employee_id: String(form.get('employee')), granted: form.has('granted') }); }}>
-            <h2 className="font-semibold">Manager visibility</h2><p className="text-sm text-muted-foreground">Managers see only explicitly assigned staff. Organization administrators can see the whole field team.</p>
-            <Field label="Manager"><select name="manager" required className={selectClass}><option value="">Choose manager</option>{(members.data ?? []).filter(member => member.role === 'manager').map(member => <option key={member.user_id} value={member.user_id}>{member.full_name ?? 'Unnamed manager'}</option>)}</select></Field>
-            <Field label="Salesperson"><select name="employee" required className={selectClass}><option value="">Choose salesperson</option>{people.filter(person => person.active).map(person => <option key={person.user_id} value={person.user_id}>{person.display_name}</option>)}</select></Field>
-            <label className="flex items-center gap-2"><input type="checkbox" name="granted" defaultChecked/>Grant access (uncheck to revoke)</label><Button disabled={busy}>Save manager scope</Button>
-          </form>}
-          {administrator && <section className="space-y-2" aria-label="Existing manager access">
-            <h2 className="font-semibold">Current manager access</h2>
-            {!data.manager_scopes?.length && <p className="text-sm text-muted-foreground">No manager has been assigned access yet.</p>}
-            {data.manager_scopes?.map(grant => <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" key={`${grant.manager_id}:${grant.employee_id}`}>
-              <span>{members.data?.find(member => member.user_id === grant.manager_id)?.full_name ?? 'Former or unnamed manager'} → {people.find(person => person.user_id === grant.employee_id)?.display_name ?? 'Former salesperson'}</span>
-              <Button variant="outline" disabled={busy} onClick={() => void save({ operation: 'manager_scope', ...grant, granted: false })}>Revoke access</Button>
-            </div>)}
-          </section>}
           <p className="text-sm text-muted-foreground">Enrollment does not start tracking. Staff must punch in from their authorized Android app.</p>
           <section className="space-y-3" aria-label="Field officer attendance">
             <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>

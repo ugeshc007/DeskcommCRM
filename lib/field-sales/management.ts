@@ -11,7 +11,6 @@ export const fieldManagementSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('settings'), revision: z.number().int().nonnegative(), enabled: z.boolean(),
     retention_days: z.number().int().min(1).max(365), notice_text: z.string().trim().min(1).max(8000) }),
   z.strictObject({ operation: z.literal('employee'), user_id: z.uuid(), display_name: z.string().trim().min(1).max(160), active: z.boolean() }),
-  z.strictObject({ operation: z.literal('manager_scope'), manager_id: z.uuid(), employee_id: z.uuid(), granted: z.boolean() }),
   z.strictObject({ operation: z.literal('project'), ...version, project: projectSchema }),
   z.strictObject({ operation: z.literal('schedule'), ...version, schedule: scheduleSchema }),
   z.strictObject({ operation: z.literal('cancel_occurrence'), ...version, date: localDateSchema }),
@@ -50,18 +49,6 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
         on conflict(organization_id,user_id) do update set display_name=excluded.display_name,active=excluded.active`,
       [org, input.user_id, input.display_name, input.active]);
       result = { id: input.user_id };
-    } else if (input.operation === 'manager_scope') {
-      if (role !== 'admin') throw new Error('field_forbidden');
-      if (input.granted) {
-        await requireFieldEmployee(db, org, input.employee_id);
-        const manager = await db.query(`select user_id from public.user_organizations where organization_id=$1 and user_id=$2
-          and role='manager' and accepted_at is not null and revoked_at is null for share`, [org, input.manager_id]);
-        if (!manager.rowCount) throw new Error('field_forbidden');
-      }
-      if (input.granted) await db.query(`insert into public.field_sales_manager_scope(organization_id,manager_id,employee_id)
-        values($1,$2,$3) on conflict do nothing`, [org, input.manager_id, input.employee_id]);
-      else await db.query('delete from public.field_sales_manager_scope where organization_id=$1 and manager_id=$2 and employee_id=$3', [org, input.manager_id, input.employee_id]);
-      result = { id: input.employee_id };
     } else if (input.operation === 'project') {
       if (role !== 'admin') throw new Error('field_forbidden');
       const p = input.project;
@@ -138,8 +125,7 @@ export async function readFieldCalendar(pool: Pick<pg.Pool, 'connect'>, org: str
     throw new Error('field_calendar_window_too_large');
   return fieldTransaction(pool, org, actor, async (db, role) => {
     const employees = (await db.query(`select e.user_id,e.display_name,e.active from public.field_sales_employees e
-      where e.organization_id=$1 and ($3='admin' or e.user_id=$2 or ($3='manager' and exists(
-        select 1 from public.field_sales_manager_scope g where g.organization_id=$1 and g.manager_id=$2 and g.employee_id=e.user_id)))
+      where e.organization_id=$1 and ($3 in ('admin','manager') or e.user_id=$2)
       order by e.display_name`, [org, actor, role])).rows;
     const ids = employees.map(e => e.user_id);
     const schedules = (await db.query(`select s.*,p.name as project_name,p.site_name,e.display_name as employee_name
@@ -163,12 +149,11 @@ export async function readFieldCalendar(pool: Pick<pg.Pool, 'connect'>, org: str
       } catch { warnings.push({ schedule_id: row.id, reason: 'Review this schedule: a local time or recurrence is invalid.' }); }
     }
     const projects = (await db.query(`select p.* from public.field_sales_projects p where p.organization_id=$1
-      and ($3='admin' or exists(select 1 from public.field_sales_schedules s where s.organization_id=$1
+      and ($3 in ('admin','manager') or exists(select 1 from public.field_sales_schedules s where s.organization_id=$1
       and s.project_id=p.id and s.employee_id=any($2::uuid[]))) order by p.name limit 500`, [org, ids, role])).rows;
     const settings = (await db.query('select revision,enabled,retention_days,notice_text,track_breaks from public.field_sales_settings where organization_id=$1', [org])).rows[0] ?? null;
     const region = organizationRegion((await db.query('select timezone,onboarding_state from public.organizations where id=$1', [org])).rows[0]);
-    const manager_scopes = role === 'admin' ? (await db.query('select manager_id,employee_id from public.field_sales_manager_scope where organization_id=$1 order by manager_id,employee_id', [org])).rows : [];
-    return { role, employees, projects, settings, manager_scopes, region: region.success ? region.data : null,
+    return { role, employees, projects, settings, region: region.success ? region.data : null,
       occurrences: occurrences.sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
       overlaps: overlappingAssignments(occurrences), warnings };
   });

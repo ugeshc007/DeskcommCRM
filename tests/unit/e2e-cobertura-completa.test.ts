@@ -76,10 +76,10 @@ const noDisco = readdirSync(DIR_SPECS)
   .sort();
 
 describe("cobertura do e2e no CI", () => {
-  it("particiona cada lista em dois runners, sem paralelizar a conta MFA em um processo", () => {
+  it("particiona cada lista em quatro runners, sem paralelizar a conta MFA em um processo", () => {
     expect(yml).toMatch(/parte:\s*\[1, 2, 3\]/);
-    expect(yml).toMatch(/shard:\s*\[1, 2\]/);
-    expect(yml).toContain("--workers=1 --shard=${{ matrix.shard }}/2 $LISTA");
+    expect(yml).toMatch(/shard:\s*\[1, 2, 3, 4\]/);
+    expect(yml).toContain("--workers=1 --shard=${{ matrix.shard }}/4 $LISTA");
   });
   it("o parser está vivo — controle positivo antes de qualquer conclusão", () => {
     // Sem isto, um regex que parou de casar devolveria três listas vazias e a
@@ -165,7 +165,7 @@ describe("cobertura do e2e no CI", () => {
         new RegExp(`LISTA="\\$${parte}"`),
       );
     expect(yml, "a lista escolhida não é passada ao Playwright").toMatch(
-      /playwright test --workers=1 --shard=\$\{\{ matrix\.shard \}\}\/2 \$LISTA/,
+      /playwright test --workers=1 --shard=\$\{\{ matrix\.shard \}\}\/4 \$LISTA/,
     );
     // E A CONTAGEM DO SUMMARY TAMBÉM SOMA TODAS AS PARTES.
     //

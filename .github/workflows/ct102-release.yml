@@ -63,6 +63,7 @@ jobs:
           printf '%s\n' "$HOST_KEY" > ~/.ssh/known_hosts
 
       - name: Copy exact release files to CT102 and deploy only the app
+        id: deploy_app
         env:
           CT102_HOST: ${{ secrets.CT102_HOST }}
           CT102_USER: ${{ secrets.CT102_USER }}
@@ -74,12 +75,16 @@ jobs:
           stage="/root/ct102-release-${GITHUB_SHA}"
           destination="/opt/deskcommcrm/releases/${GITHUB_SHA}"
           ssh -o StrictHostKeyChecking=yes "$target" "install -m 700 -d '$stage' && pct exec 102 -- mkdir -p '$destination'"
-          scp -o StrictHostKeyChecking=yes supabase/baseline.sql ops/ct102/deploy.sh ops/ct102/app-release.override.yml "$target:$stage/"
+          scp -o StrictHostKeyChecking=yes \
+            supabase/migrations/20260921210000_0383_field_sales_device_presence.sql \
+            ops/ct102/deploy.sh ops/ct102/rollback.sh ops/ct102/app-release.override.yml \
+            "$target:$stage/"
           ssh -o StrictHostKeyChecking=yes "$target" \
-            "pct push 102 '$stage/baseline.sql' '$destination/baseline.sql' && \
+            "pct push 102 '$stage/20260921210000_0383_field_sales_device_presence.sql' '$destination/20260921210000_0383_field_sales_device_presence.sql' && \
              pct push 102 '$stage/deploy.sh' '$destination/deploy.sh' && \
+             pct push 102 '$stage/rollback.sh' '$destination/rollback.sh' && \
              pct push 102 '$stage/app-release.override.yml' '$destination/app-release.override.yml' && \
-             pct exec 102 -- bash '$destination/deploy.sh' '$IMAGE' '$GITHUB_SHA' '$destination/baseline.sql'"
+             pct exec 102 -- bash '$destination/deploy.sh' '$IMAGE' '$GITHUB_SHA' '$destination/20260921210000_0383_field_sales_device_presence.sql'"
 
       - name: Public post-release smoke
         run: |
@@ -87,3 +92,13 @@ jobs:
           curl --fail --silent --show-error --retry 3 --retry-delay 2 \
             https://crm.techspothub.com/api/v1/health \
             | jq -e --arg version "${GITHUB_SHA:0:7}" '.data.version == $version and .data.status != "unhealthy"'
+
+      - name: Restore previous app when public smoke fails
+        if: ${{ failure() && steps.deploy_app.outcome == 'success' }}
+        env:
+          CT102_HOST: ${{ secrets.CT102_HOST }}
+          CT102_USER: ${{ secrets.CT102_USER }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=yes "${CT102_USER}@${CT102_HOST}" \
+            "pct exec 102 -- bash '/opt/deskcommcrm/releases/${GITHUB_SHA}/rollback.sh' '$GITHUB_SHA'"

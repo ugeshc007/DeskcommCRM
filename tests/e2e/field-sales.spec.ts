@@ -154,6 +154,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Manager visibility' })).toHaveCount(0);
   const officerCard = page.getByRole('article').filter({ has: page.getByRole('link', { name: 'View position and route' }) });
   await expect(officerCard.getByText('Online', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Present', { exact: true })).toBeVisible();

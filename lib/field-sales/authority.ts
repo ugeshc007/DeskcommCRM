@@ -33,12 +33,10 @@ export async function requireFieldScope(db: FieldDb, org: string, actor: string,
   // A manager's device key is still an employee-only credential, never a management token.
   if (deviceScope.getStore() && actor !== employee) throw new Error('field_forbidden');
   if (actor === employee && !write) return;
-  if (role === 'admin') return;
-  if (role === 'manager') {
-    const grant = await db.query(`select employee_id from public.field_sales_manager_scope
-      where organization_id=$1 and manager_id=$2 and employee_id=$3 for share`, [org, actor, employee]);
-    if (grant.rowCount) return;
-  }
+  // fieldRole already proved this actor is an active member of this organization.
+  // Managers and admins see the organization's field team by role; device keys
+  // remain employee-only even when their owner also has a management role.
+  if (role === 'admin' || role === 'manager') return;
   throw new Error('field_forbidden');
 }
 

@@ -116,9 +116,8 @@ export async function manageCorrection(pool: Pick<pg.Pool, 'connect'>, org: stri
 }
 
 async function visibleEmployees(db: FieldDb, org: string, actor: string, role: FieldRole) {
-  const grants = role === 'manager' ? (await db.query('select employee_id from public.field_sales_manager_scope where organization_id=$1 and manager_id=$2 for share', [org, actor])).rows.map(row => row.employee_id) : [];
   return (await db.query(`select user_id,display_name,active from public.field_sales_employees where organization_id=$1
-    and ($3='admin' or user_id=$2 or user_id=any($4::uuid[])) order by display_name for share`, [org, actor, role, grants])).rows;
+    and ($3 in ('admin','manager') or user_id=$2) order by display_name for share`, [org, actor, role])).rows;
 }
 export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, date: string,
   sessionId?: string | null, employeeId?: string | null) {

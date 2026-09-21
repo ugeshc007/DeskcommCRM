@@ -5,14 +5,15 @@ set -Eeuo pipefail
 
 image="${1:?image digest required}"
 revision="${2:?full commit SHA required}"
-baseline="${3:?baseline path required}"
+migration="${3:?migration path required}"
 release_override="$(cd "$(dirname "$0")" && pwd)/app-release.override.yml"
+release_dir="$(cd "$(dirname "$0")" && pwd)"
 project=/opt/deskcommcrm
 
 [[ "$image" =~ ^ghcr\.io/ugeshc007/deskcommcrm@sha256:[a-f0-9]{64}$ ]] || { echo 'Invalid pinned image' >&2; exit 2; }
 [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid commit SHA' >&2; exit 2; }
-[[ "$baseline" == "$project"/releases/"$revision"/baseline.sql ]] || { echo 'Unexpected baseline path' >&2; exit 2; }
-[[ -f "$baseline" && -f "$release_override" ]] || { echo 'Release files missing' >&2; exit 2; }
+[[ "$migration" == "$project"/releases/"$revision"/20260921210000_0383_field_sales_device_presence.sql ]] || { echo 'Unexpected migration path' >&2; exit 2; }
+[[ -f "$migration" && -f "$release_override" ]] || { echo 'Release files missing' >&2; exit 2; }
 cd "$project"
 [[ -f .env && -f docker-compose.prod.yml && -f docker-compose.ct102.yml && -f docker-compose.ct102.map.yml ]] || { echo 'CT102 compose files missing' >&2; exit 2; }
 [[ -s field-map-tiles/uae.pmtiles ]] || { echo 'Self-hosted map archive missing' >&2; exit 2; }
@@ -26,6 +27,8 @@ app_container="$(docker compose -f docker-compose.prod.yml -f docker-compose.ct1
 previous_image="$(docker inspect "$app_container" --format '{{.Config.Image}}')"
 previous_version="$(docker inspect "$app_container" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^APP_VERSION=//p' | head -1)"
 [[ -n "$previous_image" && -n "$previous_version" ]] || { echo 'Previous app version unavailable' >&2; exit 2; }
+[[ "$previous_image" =~ ^ghcr\.io/ugeshc007/deskcommcrm@sha256:[a-f0-9]{64}$ ]] || { echo 'Previous image is not a pinned CT102 app image' >&2; exit 2; }
+[[ "$previous_version" =~ ^[a-f0-9]{7,40}$ ]] || { echo 'Previous app version is invalid' >&2; exit 2; }
 switched=0
 rollback() {
   result=$?
@@ -50,8 +53,12 @@ docker pull "$image"
 image_revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
 [[ "$image_revision" == "$revision" ]] || { echo 'Image revision does not match release commit' >&2; exit 1; }
 
-docker run --rm -i -v "$baseline:/release-baseline.sql:ro" postgres:17-alpine \
-  psql "$(url_do_schema)" -q -v ON_ERROR_STOP=1 -f /release-baseline.sql
+docker run --rm -v "$migration:/release-migration.sql:ro" postgres:17-alpine \
+  psql "$(url_do_schema)" -1 -q -v ON_ERROR_STOP=1 -f /release-migration.sql
+
+# Retain the exact prior image for the runner's external public-health rollback.
+printf '%s\n%s\n' "$previous_image" "$previous_version" > "$release_dir/previous-app.txt"
+chmod 600 "$release_dir/previous-app.txt"
 
 export CT102_APP_IMAGE="$image" CT102_APP_VERSION="${revision:0:7}"
 compose config --quiet
@@ -60,10 +67,9 @@ compose up -d --no-deps app
 app_container="$(compose ps -q app)"
 for attempt in $(seq 1 30); do
   if [[ "$(docker inspect "$app_container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')" == healthy ]] \
-    && curl -fsS --max-time 5 http://127.0.0.1:3002/api/v1/health >/dev/null \
-    && curl -fsS --max-time 8 https://crm.techspothub.com/api/v1/health \
+    && curl -fsS --max-time 5 http://127.0.0.1:3002/api/v1/health \
       | grep -q "\"version\":\"${revision:0:7}\""; then
-    echo "CT102 app healthy at ${revision:0:7}; backup: $backup_dir"
+    echo "CT102 app internally healthy at ${revision:0:7}; backup: $backup_dir"
     switched=0
     exit 0
   fi

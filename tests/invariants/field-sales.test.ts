@@ -113,13 +113,17 @@ describe('optional field-sales foundation', () => {
     await expect(saveFieldPhoto(pool, f.org, f.manager, photo)).rejects.toThrow();
     expect((await saveFieldPhoto(pool, f.org, f.actor, photo)).replayed).toBe(false);
     expect((await saveFieldPhoto(pool, f.org, f.actor, photo)).replayed).toBe(true);
-    await expect(readFieldPhoto(pool, f.org, f.manager, photo.id)).rejects.toThrow('field_forbidden');
+    expect(await readFieldPhoto(pool, f.org, f.manager, photo.id)).toEqual(expect.any(String));
+    const teammate = randomUUID();
+    await pool.query('insert into auth.users(id,email) values($1,$2)', [teammate, `${teammate}@synthetic.test`]);
+    await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [teammate, f.org]);
+    await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Other agent')", [f.org, teammate]);
+    await expect(readFieldPhoto(pool, f.org, teammate, photo.id)).rejects.toThrow('field_forbidden');
     await expect(readFieldPhoto(pool, other.org, other.actor, photo.id)).rejects.toThrow('field_forbidden');
     expect(await listFieldPhotos(pool, f.org, f.actor, visit)).toHaveLength(1);
     const normalized = Buffer.from(await readFieldPhoto(pool, f.org, f.actor, photo.id), 'base64');
     expect((await sharp(normalized).metadata()).exif).toBeUndefined();
     await expect(deleteFieldPhoto(pool, other.org, other.actor, photo.id)).rejects.toThrow('field_forbidden');
-    await expect(deleteFieldPhoto(pool, f.org, f.manager, photo.id)).rejects.toThrow('field_forbidden');
     expect(await deleteFieldPhoto(pool, f.org, f.actor, photo.id)).toEqual({ deleted: true });
     await expect(readFieldPhoto(pool, f.org, f.actor, photo.id)).rejects.toThrow('field_forbidden');
     await saveFieldPhoto(pool, f.org, f.actor, { ...photo, id: randomUUID() });
@@ -135,13 +139,11 @@ describe('optional field-sales foundation', () => {
       session_id: f.session, action: 'travel', notes: '', next_action: 'Call the customer', next_action_at: new Date(Date.now() - 60000).toISOString() });
     const command = { visit_id: visitId, revision: 1 };
     await expect(completeNextAction(pool, other.org, other.actor, command)).rejects.toThrow('field_forbidden');
-    await expect(completeNextAction(pool, f.org, f.manager, command)).rejects.toThrow('field_forbidden');
     await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Synthetic manager')", [f.org, f.manager]);
-    await pool.query('insert into field_sales_manager_scope(organization_id,manager_id,employee_id) values($1,$2,$3)', [f.org, f.manager, f.actor]);
     const key = await issueFieldDevice(pool, f.org, f.manager, 'Manager own device');
     const identity = await authenticateFieldDevice(pool, `Bearer ${(await redeemFieldPairingCode(pool, key.code)).token}`);
     await expect(withFieldDevice(identity, () => completeNextAction(pool, f.org, f.manager, command))).rejects.toThrow('field_forbidden');
-    expect((await completeNextAction(pool, f.org, f.actor, command)).replayed).toBe(false);
+    expect((await completeNextAction(pool, f.org, f.manager, command)).replayed).toBe(false);
     expect((await completeNextAction(pool, f.org, f.actor, command)).replayed).toBe(true);
     const saved = (await pool.query('select next_action,next_action_completed_at from field_sales_visits where organization_id=$1 and id=$2', [f.org, visitId])).rows[0];
     expect(saved.next_action).toBe('Call the customer'); expect(saved.next_action_completed_at).not.toBeNull();
@@ -163,17 +165,19 @@ describe('optional field-sales foundation', () => {
     expect((await pool.query('select count(*)::int n from field_sales_locations where organization_id=$1', [other.org])).rows[0].n).toBe(0);
     await expect(recordLocations(pool, f.org, f.actor, { samples: [outside] })).rejects.toThrow('field_outside_work_session');
   });
-  it('lists manager grants only to admins and can revoke after the employee becomes inactive', async () => {
-    const f = await fixture();
-    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [f.org, f.actor]);
-    await manageFieldSales(pool, f.org, f.actor, { operation: 'manager_scope', manager_id: f.manager, employee_id: f.actor, granted: true });
+  it('uses organization role for manager visibility and revocation, without per-person grants', async () => {
+    const f = await fixture(), other = await fixture(), teammate = randomUUID();
+    await pool.query('insert into auth.users(id,email) values($1,$2)', [teammate, `${teammate}@synthetic.test`]);
+    await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'field_officer',now())", [teammate, f.org]);
+    await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Second officer')", [f.org, teammate]);
     const date = new Date().toISOString().slice(0, 10);
-    expect((await readFieldCalendar(pool, f.org, f.actor, date, date)).manager_scopes).toHaveLength(1);
-    expect((await readFieldCalendar(pool, f.org, f.manager, date, date)).manager_scopes).toEqual([]);
-    await pool.query('update field_sales_employees set active=false where organization_id=$1 and user_id=$2', [f.org, f.actor]);
+    expect((await readFieldCalendar(pool, f.org, f.actor, date, date)).employees.map(e => e.user_id)).toEqual([f.actor]);
+    expect((await readFieldCalendar(pool, f.org, f.manager, date, date)).employees.map(e => e.user_id)).toEqual(expect.arrayContaining([f.actor, teammate]));
+    expect((await readFieldCalendar(pool, other.org, other.manager, date, date)).employees.map(e => e.user_id)).toEqual([other.actor]);
+    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [f.org, f.actor]);
+    expect((await readFieldCalendar(pool, f.org, f.actor, date, date)).employees).toHaveLength(2);
     await pool.query('update user_organizations set revoked_at=now() where organization_id=$1 and user_id=$2', [f.org, f.manager]);
-    await manageFieldSales(pool, f.org, f.actor, { operation: 'manager_scope', manager_id: f.manager, employee_id: f.actor, granted: false });
-    expect((await readFieldCalendar(pool, f.org, f.actor, date, date)).manager_scopes).toEqual([]);
+    await expect(readFieldCalendar(pool, f.org, f.manager, date, date)).rejects.toThrow('field_forbidden');
   });
   async function assignment(f: Awaited<ReturnType<typeof fixture>>, date = new Date().toISOString().slice(0, 10)) {
     const project = randomUUID(), schedule = randomUUID();
@@ -205,7 +209,6 @@ describe('optional field-sales foundation', () => {
     await expect(recordVisit(pool, f.org, f.actor, { ...visit, command_id: randomUUID(), action: 'complete' })).rejects.toThrow('field_visit_outcome_required');
     await recordVisit(pool, f.org, f.actor, { ...visit, command_id: randomUUID(), action: 'complete', notes: 'Synthetic outcome' });
     await expect(recordVisit(pool, f.org, f.actor, { ...visit, command_id: randomUUID() })).rejects.toThrow('field_invalid_transition');
-    await pool.query('insert into field_sales_manager_scope(organization_id,manager_id,employee_id) values($1,$2,$3)', [f.org, f.manager, f.actor]);
     await expect(manageFieldSales(pool, f.org, f.manager, { operation: 'cancel_occurrence', id: a.schedule, revision: 1, date: a.date })).rejects.toThrow('field_history_immutable');
   });
   it('requires independent scoped correction approval and preserves original capture intervals', async () => {
@@ -218,21 +221,17 @@ describe('optional field-sales foundation', () => {
     const review = { operation: 'review', id: correction.id, decision: 'approved', note: 'Checked synthetic evidence' };
     await expect(manageCorrection(pool, f.org, f.actor, review)).rejects.toThrow('field_forbidden');
     await expect(manageCorrection(pool, other.org, other.manager, review)).rejects.toThrow('field_forbidden');
-    await expect(manageCorrection(pool, f.org, f.manager, review)).rejects.toThrow('field_forbidden');
-    await pool.query('insert into field_sales_manager_scope(organization_id,manager_id,employee_id) values($1,$2,$3)', [f.org, f.manager, f.actor]);
     await manageCorrection(pool, f.org, f.manager, review);
     const original = (await pool.query('select punched_in_at,punched_out_at from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0];
     expect(original.punched_in_at.toISOString()).toBe(f.start); expect(original.punched_out_at.toISOString()).toBe(out);
     await expect(manageCorrection(pool, f.org, f.manager, review)).rejects.toThrow('field_revision_conflict');
   });
-  it('hides other employees and off-duty current positions while permitting authorized historical routes', async () => {
+  it('shows managers their organization team, hides off-duty positions and blocks foreign routes', async () => {
     const f = await fixture(), other = await fixture(), date = f.localDate;
     await recordAttendance(pool, f.org, f.actor, f.command);
     await recordLocations(pool, f.org, f.actor, { samples: [{ sample_id: randomUUID(), session_id: f.session, sequence: 0, captured_at: f.start, latitude: 1, longitude: 2, accuracy_m: 3, mock_location: false }] });
-    expect((await readFieldOperations(pool, f.org, f.manager, date)).latest).toEqual([]);
-    await expect(readFieldOperations(pool, other.org, other.actor, date, f.session)).rejects.toThrow('field_forbidden');
-    await pool.query('insert into field_sales_manager_scope(organization_id,manager_id,employee_id) values($1,$2,$3)', [f.org, f.manager, f.actor]);
     expect((await readFieldOperations(pool, f.org, f.manager, date)).latest[0].latitude).toBe(1);
+    await expect(readFieldOperations(pool, other.org, other.actor, date, f.session)).rejects.toThrow('field_forbidden');
     await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 1, captured_at: new Date().toISOString() });
     const history = await readFieldOperations(pool, f.org, f.manager, date, f.session);
     expect(history.latest[0].latitude).toBeNull(); expect(history.points).toHaveLength(1);
@@ -242,7 +241,6 @@ describe('optional field-sales foundation', () => {
   });
   it('splits a future series atomically with optimistic revision protection', async () => {
     const f = await fixture(), a = await assignment(f, '2099-01-01');
-    await pool.query('insert into field_sales_manager_scope(organization_id,manager_id,employee_id) values($1,$2,$3)', [f.org, f.manager, f.actor]);
     const edit = { operation: 'reschedule', id: a.schedule, revision: 1, new_id: randomUUID(), date: a.date, scope: 'one', schedule: { ...a.rule, start_time: '11:00', end_time: '12:00' } };
     await manageFieldSales(pool, f.org, f.manager, edit);
     const calendar = await readFieldCalendar(pool, f.org, f.actor, a.date, a.date);
@@ -320,12 +318,12 @@ describe('optional field-sales foundation', () => {
     }
     expect((await pool.query("select relrowsecurity from pg_class where oid='public.field_sales_locations'::regclass")).rows[0].relrowsecurity).toBe(true);
   });
-  it('revalidates current membership and explicit manager assignment', async () => {
+  it('revalidates current membership while giving organization managers role-based scope', async () => {
     const a = await fixture(), b = await fixture();
     await expect(fieldTransaction(pool, a.org, b.actor, async () => true)).rejects.toThrow('field_forbidden');
-    await expect(fieldTransaction(pool, a.org, a.manager, (db, role) => requireFieldScope(db, a.org, a.manager, role, a.actor))).rejects.toThrow('field_forbidden');
-    await pool.query('insert into field_sales_manager_scope(organization_id,manager_id,employee_id) values($1,$2,$3)', [a.org, a.manager, a.actor]);
     await fieldTransaction(pool, a.org, a.manager, (db, role) => requireFieldScope(db, a.org, a.manager, role, a.actor));
+    await pool.query('update user_organizations set revoked_at=now() where organization_id=$1 and user_id=$2', [a.org, a.manager]);
+    await expect(fieldTransaction(pool, a.org, a.manager, (db, role) => requireFieldScope(db, a.org, a.manager, role, a.actor))).rejects.toThrow('field_forbidden');
     await pool.query('update user_organizations set revoked_at=now() where organization_id=$1 and user_id=$2', [a.org, a.actor]);
     await expect(recordAttendance(pool, a.org, a.actor, a.command)).rejects.toThrow('field_forbidden');
   });

@@ -3,10 +3,14 @@
 CT102 is a snapshot without `.git`; **do not run** `release-safe.sh` there.
 The dedicated `ct102-release` workflow uses the existing GitHub Actions Docker
 build and immutable `sha-<commit>` image tag. CT102 pulls that image, takes a
-fresh database/WhatsApp backup, applies the exact commit's idempotent baseline,
-restarts **only** the app, checks both internal and public health, and restores
-the previous app image if the switch fails. Database DDL is additive; database
-restore is deliberately manual, never an automatic destructive rollback.
+fresh database/WhatsApp backup, applies the release's versioned, idempotent
+migration in one transaction, and restarts **only** the app. CT102 checks internal
+health; the GitHub runner checks public health and calls `rollback.sh` if that
+probe fails. CT102 cannot reach its own public hostname reliably. Database DDL
+is additive; database restore is deliberately manual, never an automatic
+destructive rollback. Do not replay the entire baseline on this snapshot:
+`platform_meta_webhook` belongs to `supabase_admin`, not the schema URL's
+`postgres` role, so the update fails at `COMMENT ON TABLE`.
 
 ## One-time authorization (repository administrator)
 
@@ -37,10 +41,14 @@ refuses a missing/failed/cancelled check or mismatched image revision. It does
 not rebuild on CT102. The local app and migration can be prepared while CI is
 running, but the production switch must wait for a green gate.
 
-This is a **one-click release after checks**, not an instantaneous release or a
-Docker container running the pipeline. Build/cache work happens on GitHub
-runners; CT102 only pulls, migrates, and restarts. Existing self-host installations
-continue to use the standard versioned release workflow.
+This workflow currently carries migration `0383` for the Field Sales presence
+release. Before a later release with schema changes, update the explicit
+migration file in the workflow and deploy script; do not assume the old file
+covers a new schema. This is a **one-click release after checks**, not an
+instantaneous release or a Docker container running the pipeline. Build/cache
+work happens on GitHub runners; CT102 only pulls, migrates, and restarts.
+Existing self-host installations continue to use the standard versioned
+release workflow.
 
 ## Failure handling
 

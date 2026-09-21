@@ -4,7 +4,7 @@ on:
   pull_request:
     paths: ["mobile/android/**", ".github/workflows/android.yml"]
   push:
-    branches: [main, codex/field-sales-tracking]
+    branches: [main, codex/field-sales-tracking, codex/ct102-release-speed]
   workflow_dispatch: {}
 
 permissions:

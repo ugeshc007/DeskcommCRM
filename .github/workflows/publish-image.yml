@@ -14,7 +14,7 @@ name: Publicar imagem Docker (GHCR)
 on:
   push:
     tags: ["v*"]
-    branches: ["main", "codex/field-sales-tracking"]
+    branches: ["main", "codex/field-sales-tracking", "codex/ct102-release-speed"]
   # NÃO acrescente `release: types: [published]` aqui. Ele já esteve, e o efeito
   # foi medido na v1.3.0: `gh release create` empurra a tag E publica a release,
   # então o MESMO commit foi construído DUAS vezes, com 5 minutos de diferença.

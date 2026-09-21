@@ -35,7 +35,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, codex/field-sales-tracking]
+    branches: [main, codex/field-sales-tracking, codex/ct102-release-speed]
 
 # O GITHUB_TOKEN deste job serve a `actions/checkout` (clone) e a
 # `actions/setup-node` (manifest de `actions/node-versions`, repo público).

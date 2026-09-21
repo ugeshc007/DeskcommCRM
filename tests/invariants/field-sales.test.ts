@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { recordAttendance, recordLocations } from '@/lib/field-sales/attendance';
 import { fieldTransaction, requireFieldScope, withFieldDevice } from '@/lib/field-sales/authority';
-import { authenticateFieldDevice, deviceTokenHash, issueFieldDevice, listFieldDevices, revokeCurrentFieldDevice, revokeFieldDevice } from '@/lib/field-sales/devices';
+import { authenticateFieldDevice, deviceTokenHash, issueFieldDevice, issueOfficerDevice, officerDevices, revokeOfficerDevice, listFieldDevices, revokeCurrentFieldDevice, revokeFieldDevice } from '@/lib/field-sales/devices';
 import { completeNextAction, manageCorrection, readFieldOperations, recordVisit } from '@/lib/field-sales/operations';
 import { manageFieldSales, readFieldCalendar } from '@/lib/field-sales/management';
 import { saveFieldPhoto, readFieldPhoto, listFieldPhotos, deleteFieldPhoto } from '@/lib/field-sales/photos';
@@ -52,6 +52,32 @@ async function fixture(startAt?: string) {
 }
 
 describe('optional field-sales foundation', () => {
+  it('keeps Field Officer below viewer and binds admin-issued keys to one employee and organization', async () => {
+    const f = await fixture(), other = await fixture(), officer = randomUUID(), admin = randomUUID();
+    for (const [id, role] of [[officer, 'field_officer'], [admin, 'admin']]) {
+      await pool.query('insert into auth.users(id,email) values($1,$2)', [id, `${id}@synthetic.test`]);
+      await pool.query('insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,$3,now())', [id, f.org, role]);
+    }
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claim.sub',$1,true)", [officer]);
+      expect((await db.query('select public.fn_role_at_least($1,\'viewer\') allowed', [f.org])).rows[0].allowed).toBe(false);
+      expect((await db.query('select public.fn_user_org_ids() as organization_id')).rows).toEqual([]);
+      expect((await db.query('select count(*)::int n from public.contacts where organization_id=$1', [f.org])).rows[0].n).toBe(0);
+    } finally { await db.query('rollback'); db.release(); }
+    await expect(issueOfficerDevice(pool, other.org, other.actor, officer, 'Officer', 'Samsung')).rejects.toThrow('field_forbidden');
+    await expect(issueOfficerDevice(pool, f.org, f.manager, officer, 'Officer', 'Samsung')).rejects.toThrow('field_forbidden');
+    const issued = await issueOfficerDevice(pool, f.org, admin, officer, 'Officer', 'Samsung');
+    expect(issued.token).toMatch(/^fld_[a-f0-9]{64}$/);
+    const identity = await authenticateFieldDevice(pool, `Bearer ${issued.token}`);
+    expect(identity).toMatchObject({ org: f.org, actor: officer });
+    expect(await officerDevices(pool, f.org, admin, officer)).toHaveLength(1);
+    await expect(officerDevices(pool, other.org, other.actor, officer)).rejects.toThrow('field_forbidden');
+    await revokeOfficerDevice(pool, f.org, admin, officer, issued.id);
+    await expect(authenticateFieldDevice(pool, `Bearer ${issued.token}`)).rejects.toThrow('field_device_unauthorized');
+  });
   it('accepts ordered offline visits after punch-out, rejects off-duty and break captures', async () => {
     const f = await fixture(), a = await assignment(f), visit = randomUUID();
     await recordAttendance(pool, f.org, f.actor, f.command);

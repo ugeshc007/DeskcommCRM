@@ -77,6 +77,7 @@ export const AUDIT_ACTIONS = [
   // ser membro. O REENVIO de um convite audita como `member.invited` — é uma
   // nova emissão do mesmo convite.
   "member.invite_revoked",
+  "member.invite_archived",
   "token.created",
   "token.revoked",
   "profile.updated",

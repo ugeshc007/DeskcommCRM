@@ -6,7 +6,7 @@ import { requireSupportWrite } from '@/lib/impersonate/support';
 import { fieldError } from '../_shared';
 
 export async function GET(req: Request) {
-  const auth = await requireRole('agent'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('field_officer'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Employee photos are unavailable in support sessions.', 403);
   try {
     const query = new URL(req.url).searchParams, pool = getRequestPool();
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 }
 export async function DELETE(req: Request) {
   const denied = await requireSupportWrite(); if (denied) return denied;
-  const auth = await requireRole('agent'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('field_officer'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Use your own account for employee photos.', 403);
   try {
     return ok(await deleteFieldPhoto(getRequestPool(), auth.org.orgId, auth.user.id, new URL(req.url).searchParams.get('id') ?? ''), { headers: { 'Cache-Control': 'private, no-store' } });

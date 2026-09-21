@@ -4,12 +4,20 @@ Status: implementation started; NOT deployed. Evidence, not phase names, determi
 
 ## Current development checkpoint — 2026-09-21
 
+- Pending release verification: Team now offers a `Field Officer` role below Viewer in CRM
+  permissions. Administrators create and revoke one-time Android keys against accepted
+  Field Officer members from **Team → Members → Android device keys**. Key issuance explicitly
+  enrolls that employee but never starts GPS. Existing legacy self-service API remains for
+  previously enrolled agents/managers, while the Field Sales workspace no longer advertises
+  that tab. Revoked invitations can be archived from the Team list, retaining the revoked
+  database row so the signed URL remains invalid. This does not assert live deployment.
+
 - Staff setup without an email gateway uses the CRM's private invitation link. Only a persisted,
   pending, undelivered viewer/agent invitation can enroll a new account without email confirmation;
   possession of the privately shared link is the enrollment proof, not proof of mailbox ownership.
   Expired, revoked or accepted invitations are refused. The employee
   chooses their own CRM password. An enrolled employee then creates and copies a one-time
-  Android device key in **Field Sales → My Android devices**. The Android app does not accept
+  Android device key from an administrator in **Team → Members**. The Android app does not accept
   a short PIN or the CRM password as its device credential. An account is created only when
   the invited person submits the password form; a device key is created only on request.
 

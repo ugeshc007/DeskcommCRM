@@ -6,7 +6,7 @@ import type { Idioma } from "@/lib/i18n/idiomas";
  *
  * `ai_operator` é o papel do AGENTE PUBLICADO, e existe SÓ no escopo do token
  * efêmero — nunca em `user_organizations`. Nenhuma pessoa o recebe, e o CHECK
- * daquela tabela segue com os quatro papéis humanos de propósito: é isso que
+ * daquela tabela segue com os papéis humanos de propósito: é isso que
  * garante que ninguém ganhe autonomia de máquina por acidente de configuração.
  *
  * Ele senta ENTRE `agent` e `manager` porque descreve exatamente a faixa que
@@ -20,8 +20,9 @@ import type { Idioma } from "@/lib/i18n/idiomas";
  * consulta `fn_user_role_in_org`, que lê `user_organizations`. O agente não é
  * usuário. A RLS segue intacta.
  */
-export type Role = "viewer" | "agent" | "ai_operator" | "manager" | "admin";
+export type Role = "field_officer" | "viewer" | "agent" | "ai_operator" | "manager" | "admin";
 export const ROLE_RANK: Record<Role, number> = {
+  field_officer: 0.5,
   viewer: 1,
   agent: 2,
   ai_operator: 3,
@@ -45,10 +46,11 @@ export function roleAtLeast(role: string | null | undefined, min: Role): boolean
 }
 
 /** Papéis que uma PESSOA pode ter. Espelha `user_organizations_role_check`. */
-export const PAPEIS_HUMANOS: ReadonlyArray<Role> = ["viewer", "agent", "manager", "admin"];
+export const PAPEIS_HUMANOS: ReadonlyArray<Role> = ["field_officer", "viewer", "agent", "manager", "admin"];
 
 /** Rótulo pt-BR para quem configura. `ai_operator` nunca aparece em seletor de time. */
 export const ROTULO_DO_PAPEL: Record<Role, string> = {
+  field_officer: "Field Officer",
   viewer: "Somente leitura",
   agent: "Atendente",
   ai_operator: "Assistente com autonomia de operação",

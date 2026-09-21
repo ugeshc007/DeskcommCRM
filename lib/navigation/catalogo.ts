@@ -111,7 +111,7 @@ export const NAV_CATALOG = [
     group: "crm",
     section: "O dia a dia da venda",
     minRole: "agent",
-    sidebar: false,
+    sidebar: true,
   },
   // ---- Atendimento — onde o operador passa o dia ----
   {

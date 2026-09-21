@@ -103,7 +103,7 @@ export async function manageCorrection(pool: Pick<pg.Pool, 'connect'>, org: stri
       await db.query(`insert into public.field_sales_corrections(organization_id,id,employee_id,session_id,proposed_in,proposed_out,reason)
         values($1,$2,$3,$4,$5,$6,$7)`, [org, input.id, actor, input.session_id, input.proposed_in, input.proposed_out, input.reason]);
     } else {
-      if (!existing || role === 'agent' || existing.employee_id === actor) throw new Error('field_forbidden');
+      if (!existing || (role !== 'manager' && role !== 'admin') || existing.employee_id === actor) throw new Error('field_forbidden');
       await requireFieldScope(db, org, actor, role, existing.employee_id, true);
       if (existing.status !== 'pending') throw new Error('field_revision_conflict');
       await db.query(`update public.field_sales_corrections set status=$3,reviewed_by=$4,review_note=$5,reviewed_at=now()

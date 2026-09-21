@@ -9,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { addCalendarDays } from '@/lib/field-sales/schedule';
-import { FieldDevices } from './devices';
 import { FieldOperations } from './operations';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
@@ -18,7 +17,7 @@ type Employee = { user_id: string; display_name: string; active: boolean };
 type Project = { id: string; name: string; site_name: string; active: boolean };
 type Occurrence = { occurrence_key: string; employee_id: string; date: string; starts_at: string; ends_at: string;
   employee_name: string; project_name: string; site_name: string; revision: number; schedule: FieldSchedule; timezone: string };
-type CalendarData = { installed: boolean; role?: 'agent' | 'manager' | 'admin';
+type CalendarData = { installed: boolean; role?: 'field_officer' | 'agent' | 'manager' | 'admin';
   region?: { country_code: string; timezone: string } | null;
   settings?: { revision: number; enabled: boolean; retention_days: number; notice_text: string } | null;
   employees?: Employee[]; projects?: Project[]; occurrences?: Occurrence[];
@@ -115,8 +114,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       </section>
       {!timezone && <p role="alert" className="rounded-lg border p-4">Configure the organization country and time zone before scheduling.</p>}
       <Tabs defaultValue="calendar">
-        <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger><TabsTrigger value="devices">My Android devices</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
-        <TabsContent value="devices"><FieldDevices organizationId={organizationId} userId={userId}/></TabsContent>
+        <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
         <TabsContent value="activity"><FieldOperations organizationId={organizationId} userId={userId} date={start}/></TabsContent>
         <TabsContent value="calendar" className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">

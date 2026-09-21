@@ -94,6 +94,9 @@ jobs:
       fail-fast: false
       matrix:
         parte: [1, 2, 3]
+        # Each runner still has one Playwright worker (shared MFA account), but
+        # the two shards use isolated local databases and run concurrently.
+        shard: [1, 2]
     # ─────────────────────────────────────────────────────────────────────────
     # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
     #
@@ -839,7 +842,7 @@ jobs:
       # workers, dois specs gerando o mesmo código no mesmo intervalo de 30s
       # fazem o segundo ser recusado como replay. Foi o que derrubava a
       # `reset-password-mfa` (issue #80): ela passa sozinha e falha em paralelo.
-      - name: E2E — parte ${{ matrix.parte }} de 3
+      - name: E2E — parte ${{ matrix.parte }} de 3, shard ${{ matrix.shard }} de 2
         run: |
           set -euo pipefail
           # A lista sai da matrix, e as duas variáveis continuam existindo no
@@ -874,7 +877,7 @@ jobs:
           # (`✓ 12 [chromium] › tests/e2e/x.spec.ts:9:5 › título (3.4s)`), e a
           # soma por arquivo sai de um `gh run view <id> --log`. Custo medido:
           # ~240 linhas a mais de log, zero segundo de execução.
-          pnpm exec playwright test --workers=1 $LISTA --reporter=list
+          pnpm exec playwright test --workers=1 --shard=${{ matrix.shard }}/2 $LISTA --reporter=list
         env:
           # Só o que NÃO vem do `.env.e2e`: isto é ajuste de CI, não config do
           # produto. CI = 1 IP para todos os specs, e o teto de produção
@@ -887,7 +890,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: playwright-report-parte-${{ matrix.parte }}
+          name: playwright-report-parte-${{ matrix.parte }}-shard-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/

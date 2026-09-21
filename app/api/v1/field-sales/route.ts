@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 const noStore = { 'Cache-Control': 'private, no-store' };
 
 export async function GET(req: Request) {
-  const auth = await requireRole('agent'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('field_officer'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Employee location data is unavailable in support sessions.', 403);
   try {
     const pool = getRequestPool();

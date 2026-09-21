@@ -65,6 +65,8 @@ test('admin copies a private invite, employee sets a password without email, and
   await page.goto('/app/team/invite');
 
   await expect(page.locator('form > p')).toContainText('No email gateway?');
+  await page.getByRole('combobox', { name: 'Role' }).click();
+  await page.getByRole('option', { name: 'Field Officer' }).click();
   await page.getByRole('textbox', { name: 'Emails' }).fill(staffEmail);
   await page.getByRole('button', { name: 'Send invitations' }).click();
   await expect(page.getByText('Email not sent. Share this link only with the invited person.')).toBeVisible();
@@ -96,7 +98,7 @@ test('admin copies a private invite, employee sets a password without email, and
     "select role from user_organizations where organization_id=$1 and user_id=(select id from auth.users where email=$2)",
     [org, staffEmail],
   );
-  expect(membership.rows).toEqual([{ role: 'agent' }]);
+  expect(membership.rows).toEqual([{ role: 'field_officer' }]);
   const acceptedInvite = await pool.query(
     'select accepted_by, revoked_at from team_invites where organization_id=$1 and email=$2',
     [org, staffEmail],
@@ -127,22 +129,29 @@ test('admin copies a private invite, employee sets a password without email, and
   expect(revokedUser.rows).toHaveLength(0);
   await revokedContext.close();
 
-  // Preserve a visual artifact without writing the bearer link into the screenshot.
-  await page.locator('code').evaluate(element => { element.textContent = '[private link hidden]'; });
+  await page.goto('/app/team');
+  const revokedInvite = page.getByRole('row').filter({ hasText: revokedEmail });
+  await revokedInvite.getByRole('button', { name: /Ações|Actions/ }).click();
+  await page.getByRole('menuitem', { name: 'Remove from list' }).click();
+  await page.getByRole('dialog', { name: 'Remove revoked invitation?' }).getByRole('button', { name: 'Remove' }).click();
+  await expect(revokedInvite).toHaveCount(0);
+  expect((await pool.query('select revoked_at,archived_at from team_invites where organization_id=$1 and email=$2', [org, revokedEmail])).rows[0]).toMatchObject({ revoked_at: expect.any(Date), archived_at: expect.any(Date) });
+
+  // Team page does not expose the private invitation URL or device bearer.
   await page.screenshot({ path: testInfo.outputPath('manual-invitation.png'), fullPage: true });
 
-  await page.goto('/app/field-sales');
-  await page.getByRole('tab', { name: 'My Android devices' }).click();
-  await page.getByRole('textbox', { name: 'Phone name' }).fill('Synthetic Samsung');
-  await page.getByRole('button', { name: 'Create device key' }).click();
-  const deviceDialog = page.getByRole('dialog', { name: 'One-time device key' });
+  await page.goto('/app/team');
+  const staffRow = page.getByRole('row').filter({ hasText: staffEmail });
+  await staffRow.getByRole('button', { name: 'Android keys' }).click();
+  const deviceDialog = page.getByRole('dialog', { name: /Android access/ });
   await expect(deviceDialog).toBeVisible();
-  const deviceKey = await deviceDialog.getByRole('textbox', { name: 'Device key' }).inputValue();
+  await deviceDialog.getByRole('textbox', { name: 'Phone name' }).fill('Synthetic Samsung');
+  await deviceDialog.getByRole('button', { name: 'Create device key' }).click();
+  const deviceKey = await deviceDialog.getByRole('textbox', { name: 'One-time device key' }).inputValue();
   expect(deviceKey).toMatch(/^fld_[a-f0-9]{64}$/);
-  await deviceDialog.getByRole('button', { name: 'Copy device key' }).click();
-  await expect(deviceDialog.getByRole('button', { name: 'Copied' })).toBeVisible();
+  await deviceDialog.getByRole('button', { name: 'Copy key' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(deviceKey);
-  await deviceDialog.getByRole('textbox', { name: 'Device key' }).evaluate(element => {
+  await deviceDialog.getByRole('textbox', { name: 'One-time device key' }).evaluate(element => {
     (element as HTMLInputElement).value = '[private key hidden]';
   });
   await page.screenshot({ path: testInfo.outputPath('manual-android-key.png'), fullPage: true });

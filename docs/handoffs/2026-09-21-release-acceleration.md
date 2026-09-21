@@ -52,6 +52,16 @@ de entregar snapshots do código/migrations; não rodar `release-safe.sh` ali. O
 Android passou. O primeiro run E2E deste branch excedeu 30 minutos nas três partes; isso é
 falha de capacidade do gate, **não** validação verde de navegador.
 
+## Trabalho posterior no checkout isolado — ainda não publicado
+
+As três listas de specs do E2E permanecem fonte única, mas cada uma passou a rodar em
+dois shards Playwright isolados (seis runners no total, `--workers=1` para preservar MFA).
+O timeout de 30 minutos continua; o ganho real dependerá do próximo run de CI, e as
+seis inicializações simultâneas podem aumentar o uso de runners. A alteração de Equipe/
+Field Officer que entrou no mesmo lote exige o gate de banco e prova visual antes de
+qualquer release. O adaptador CT102 e staging continuam pendentes; esta nota não autoriza
+usar o kit de Git checkout naquela instalação.
+
 ## Comandos do operador
 
 Feedback rápido local:

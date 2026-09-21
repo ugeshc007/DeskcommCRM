@@ -22,7 +22,7 @@ export const fieldManagementSchema = z.discriminatedUnion('operation', [
 export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, raw: unknown) {
   const input = fieldManagementSchema.parse(raw);
   return fieldTransaction(pool, org, actor, async (db, role) => {
-    if (role === 'agent') throw new Error('field_forbidden');
+    if (role === 'agent' || role === 'field_officer') throw new Error('field_forbidden');
     // Serializes schedule changes for conflict/revision checks. Does not lock GPS ingestion.
     await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`field-calendar:${org}`]);
     let result: { id?: string; revision?: number } = {};
@@ -44,7 +44,7 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
     } else if (input.operation === 'employee') {
       if (role !== 'admin') throw new Error('field_forbidden');
       const member = await db.query(`select user_id from public.user_organizations where organization_id=$1
-        and user_id=$2 and accepted_at is not null and revoked_at is null and role in ('agent','manager','admin') for share`, [org, input.user_id]);
+        and user_id=$2 and accepted_at is not null and revoked_at is null and role in ('field_officer','agent','manager','admin') for share`, [org, input.user_id]);
       if (!member.rowCount) throw new Error('field_employee_unavailable');
       await db.query(`insert into public.field_sales_employees(organization_id,user_id,display_name,active) values($1,$2,$3,$4)
         on conflict(organization_id,user_id) do update set display_name=excluded.display_name,active=excluded.active`,

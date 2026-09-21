@@ -321,3 +321,4 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20260919020000` | `0316_field_sales_followups` | Optional next-action completion records and due-action index; preserves text and dates, keeps reminders employee/manager scoped. |
 | `20260919030000` | `0317_field_sales_photos` | Optional private, bounded visit photos with ownership/cascade lifecycle; no public object links. |
 | `20260920090000` | `0318_field_sales_session_projects` | New mobile work sessions must persist the selected assigned project occurrence; legacy sessions remain readable. Adds organization-scoped project/schedule FKs and the employee/date route index through the optional provisioner. |
+| `20260921120000` | `0319_field_officer_and_invite_archive` | Least-privilege Field Officer membership and invitation role; archive revoked invitations without deleting token-denial history. |

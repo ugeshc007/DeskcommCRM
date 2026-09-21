@@ -10,7 +10,7 @@ import { dailyFieldReport } from '@/lib/field-sales/reports';
 import { fieldAudit, fieldTransaction } from '@/lib/field-sales/authority';
 const headers = { 'Cache-Control': 'private, no-store' };
 export async function GET(req: Request) {
-  const auth = await requireRole('agent'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('field_officer'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Employee records are unavailable in support sessions.', 403);
   try {
     const query = new URL(req.url).searchParams;
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 }
 export async function POST(req: Request) {
   const denied = await requireSupportWrite(); if (denied) return denied;
-  const auth = await requireRole('agent'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('field_officer'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Use your own account for employee operations.', 403);
   try {
     const input = z.strictObject({ operation: z.enum(['visit', 'correction', 'complete_next_action']), command: z.unknown() }).parse(await readIntegrationJson(req));

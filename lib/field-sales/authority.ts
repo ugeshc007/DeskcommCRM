@@ -9,14 +9,14 @@ export function withFieldDevice<T>(identity: { deviceId: string; org: string; ac
 }
 
 export type FieldDb = Pick<pg.PoolClient, 'query'>;
-export type FieldRole = 'agent' | 'manager' | 'admin';
+export type FieldRole = 'field_officer' | 'agent' | 'manager' | 'admin';
 
 /** No platform/support bypass: location access requires current organization membership. */
 export async function fieldRole(db: FieldDb, org: string, actor: string): Promise<FieldRole> {
   z.uuid().parse(org); z.uuid().parse(actor);
   const row = (await db.query(`select role from public.user_organizations
     where organization_id=$1 and user_id=$2 and accepted_at is not null and revoked_at is null
-    and role in ('agent','manager','admin') for share`, [org, actor])).rows[0];
+    and role in ('field_officer','agent','manager','admin') for share`, [org, actor])).rows[0];
   if (!row) throw new Error('field_forbidden');
   return row.role as FieldRole;
 }
@@ -25,7 +25,7 @@ export async function requireFieldEmployee(db: FieldDb, org: string, employee: s
   const row = await db.query(`select e.user_id from public.field_sales_employees e
     join public.user_organizations m on m.organization_id=e.organization_id and m.user_id=e.user_id
     where e.organization_id=$1 and e.user_id=$2 and e.active and m.revoked_at is null
-    and m.accepted_at is not null and m.role in ('agent','manager','admin') for share of e,m`, [org, employee]);
+    and m.accepted_at is not null and m.role in ('field_officer','agent','manager','admin') for share of e,m`, [org, employee]);
   if (!row.rowCount) throw new Error('field_employee_unavailable');
 }
 

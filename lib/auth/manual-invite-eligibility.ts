@@ -14,7 +14,7 @@ export interface ManualInviteRow {
 /** The persisted row, not the signed URL alone, authorizes email-less enrollment. */
 export function manualInviteEligible(row: ManualInviteRow, payload: InvitePayload, now = Date.now()): boolean {
   return (
-    (payload.role === "viewer" || payload.role === "agent") &&
+    (payload.role === "viewer" || payload.role === "agent" || payload.role === "field_officer") &&
     row.organization_id === payload.organization_id &&
     row.accepted_at === null && row.revoked_at === null &&
     Date.parse(row.expires_at) > now &&

@@ -1,7 +1,7 @@
 ---
 type: operational-memory
 date: 2026-09-21
-status: implemented-not-deployed
+status: deployed-ct102-with-e2e-timeout
 branch: codex/field-sales-tracking
 ---
 
@@ -28,8 +28,8 @@ o que não foi medido está marcado como pendente.
 
 - `scripts/ci/test-changed.sh`: seleciona testes Vitest relacionados; mudanças transversais
   deixam a suíte inteira para o gate final, e mudanças self-host acionam o harness shell.
-- `.github/workflows/ci.yml`: job `focused` antes do `verify` integral. O job de invariantes
-  de banco continua separado e paralelo.
+- `.github/workflows/ci.yml`: job `focused` como feedback de PR, independente do `verify`
+  integral obrigatório. O job de invariantes de banco continua separado e paralelo.
 - `.github/workflows/android.yml`: unitários, lint, APK e instrumentação em emulador, com
   caches de Gradle e snapshot AVD.
 - `.github/workflows/staging-release.yml`: promoção manual de uma tag `vX.Y.Z` para o
@@ -47,9 +47,10 @@ No GitHub Environment `staging-ct102-parity`, cadastrar apenas no cofre de secre
 Nenhum deles pertence ao repositório. O host staging deve ser uma instalação separada, com
 o mesmo compose/proxy e uma base descartável/restaurável; nunca apontar para o banco de CT102.
 
-CT102 ainda precisa de uma release por digest das três imagens e de uma forma segura de
-entregar o snapshot do código/migrations; não rodar `release-safe.sh` ali. O workflow Android pode precisar de ajuste de capacidade caso o runner público não ofereça
-aceleração KVM. Isso só pode ser confirmado pelo primeiro run; não é evidência desta sessão.
+CT102 ainda precisa de um adaptador automatizado para releases futuras e de uma forma segura
+de entregar snapshots do código/migrations; não rodar `release-safe.sh` ali. O primeiro run
+Android passou. O primeiro run E2E deste branch excedeu 30 minutos nas três partes; isso é
+falha de capacidade do gate, **não** validação verde de navegador.
 
 ## Comandos do operador
 
@@ -75,7 +76,14 @@ bash hostgator-setup-kit/smoke-postdeploy.sh
 
 ## Estado de implantação
 
-Em 2026-09-21 estas mudanças estão no branch de trabalho e **não foram implantadas** por
-este registro. Publicação continua condicionada aos testes relevantes, revisão do diff,
-push e existência das imagens versionadas. Dados vivos não foram modificados. O job de CI
-e o Android ainda precisam da primeira execução real; código presente não equivale a gate verde.
+Em 2026-09-21, o código foi publicado no branch `codex/field-sales-tracking` e as imagens
+imutáveis do commit `069001d4` foram ativadas no CT102. O app, worker e scheduler ficaram
+`healthy`; o health público mostrou `version=069001d4`, Supabase e WAHA `ok`. O smoke local
+do CRM, da borda Field Sales e da Live View passou. O dump PostgreSQL e o arquivo de sessão
+WAHA foram preservados em `/opt/deskcommcrm/backups/`; o compose anterior ficou em
+`/opt/deskcommcrm/backups/release-069001d4/docker-compose.ct102.yml` para rollback.
+Nenhuma migration foi aplicada e os demais serviços não foram recriados. O CI integral,
+invariantes, Android, imagens e build passaram no commit; E2E terminou vermelho por timeout
+simultâneo das três partes no passo Playwright. Como o diff desde a versão viva anterior
+alterou apenas CI/scripts/testes/docs (sem código runtime), a ativação foi feita com este
+risco explicitamente registrado, sem chamar o E2E de verde. O staging ainda não foi criado.

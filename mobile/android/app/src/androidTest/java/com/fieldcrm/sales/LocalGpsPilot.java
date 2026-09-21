@@ -21,7 +21,7 @@ final class LocalGpsPilot {
             prepared = true;
             activity = runner.startActivitySync(new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             runner.waitForIdleSync();
-            Attendance.punchIn(context, TestAssignment.fromState(context));
+            Attendance.punchIn(context);
             runner.runOnMainSync(() -> context.startForegroundService(new Intent(context, TrackingService.class)));
             long deadline = android.os.SystemClock.elapsedRealtime() + 120000;
             while (android.os.SystemClock.elapsedRealtime() < deadline && SecureState.read(context).getJSONArray("points").length() == 0) Thread.sleep(1000);

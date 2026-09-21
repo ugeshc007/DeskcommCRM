@@ -101,7 +101,8 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
       values($1,$2,$3,$4,$5,$6,$7)`, [org, command.event_id, command.session_id, command.sequence, command.action, command.captured_at, fingerprint]);
     await fieldAudit(db, org, actor, 'field_sales.' + command.action, command.session_id,
       { sequence: command.sequence, ...(command.action === 'select_project'
-        ? { project_id: command.project_id, schedule_id: command.schedule_id, override: command.schedule_id === null } : {}) });
+        ? { project_id: command.project_id, ...(command.schedule_id ? { schedule_id: command.schedule_id } : {}),
+          override: command.schedule_id === null } : {}) });
     return { event_id: command.event_id, replayed: false };
   });
 }

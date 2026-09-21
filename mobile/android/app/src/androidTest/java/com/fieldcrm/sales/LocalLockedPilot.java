@@ -25,7 +25,7 @@ final class LocalLockedPilot {
             int initialCharge = battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER);
             screen = runner.startActivitySync(new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             runner.waitForIdleSync();
-            stage = "punch-in"; Attendance.punchIn(context, TestAssignment.fromState(context)); started = true;
+            stage = "punch-in"; Attendance.punchIn(context); started = true;
             runner.runOnMainSync(() -> context.startForegroundService(new Intent(context, TrackingService.class)));
             Thread.sleep(3000);
             stage = "foreground-service"; if (!TrackingService.running) throw new IllegalStateException();

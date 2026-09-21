@@ -67,13 +67,13 @@ public final class SmokeInstrumentation extends Instrumentation {
             String stored = testContext.getSharedPreferences("field_sales", 0).getString("encrypted", "");
             if (stored.contains("encrypted-storage-proof") || stored.contains("snapshot")) throw new AssertionError("Plaintext storage found");
             stage = "test-attendance";
-            Attendance.punchIn(testContext, TestAssignment.fromState(testContext)); Attendance.act(testContext, "break_start");
+            Attendance.punchIn(testContext); Attendance.act(testContext, "break_start");
             if (!WorkState.collecting(SecureState.read(testContext).getString("status"))) throw new AssertionError("Break policy differs");
             Attendance.act(testContext, "break_end"); Attendance.act(testContext, "punch_out");
             org.json.JSONObject closed = SecureState.read(testContext);
             if (!"off_duty".equals(closed.getString("status")) || closed.getJSONArray("events").length() != 4) throw new AssertionError("Offline attendance lost");
             String firstSession = closed.getString("session_id");
-            Attendance.punchIn(testContext, TestAssignment.fromState(testContext)); Attendance.act(testContext, "punch_out");
+            Attendance.punchIn(testContext); Attendance.act(testContext, "punch_out");
             org.json.JSONObject second = SecureState.read(testContext);
             if (firstSession.equals(second.getString("session_id")) || second.getJSONArray("events").length() != 6
                 || !firstSession.equals(second.getJSONArray("events").getJSONObject(0).getString("session_id"))

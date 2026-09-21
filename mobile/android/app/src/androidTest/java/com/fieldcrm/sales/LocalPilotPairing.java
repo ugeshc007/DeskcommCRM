@@ -23,10 +23,10 @@ final class LocalPilotPairing {
                 state.put("points", new org.json.JSONArray());
                 state.put("snapshot", new JSONObject().put("settings", new JSONObject().put("enabled", true)));
             });
-            Attendance.punchIn(isolated, TestAssignment.fromState(isolated)); Attendance.act(isolated, "break_start");
+            Attendance.punchIn(isolated); Attendance.act(isolated, "break_start");
             Attendance.act(isolated, "break_end"); Attendance.act(isolated, "punch_out");
             String first = SecureState.read(isolated).getString("session_id");
-            Attendance.punchIn(isolated, TestAssignment.fromState(isolated)); Attendance.act(isolated, "punch_out");
+            Attendance.punchIn(isolated); Attendance.act(isolated, "punch_out");
             JSONObject state = SecureState.read(isolated);
             if (!"off_duty".equals(state.getString("status")) || state.getJSONArray("events").length() != 6
                 || first.equals(state.getString("session_id"))

@@ -2022,6 +2022,19 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
   and baseline final-security-guard tests pass. Database/E2E and fresh real-device visual proof are
   still required before release.
 
+### Field Sales six-digit pairing — 2026-09-21 (development)
+
+- [P0] Team administrator creates a code for an accepted Field Officer. The code is exactly six
+  digits, visible only once, expires after five minutes and can be revoked before use. Android's
+  fresh screen asks only for that code; the compiled APK supplies the HTTPS CRM origin.
+- [P0] Redeeming a code atomically creates a random 256-bit employee-bound bearer. The code
+  cannot authenticate mobile API requests, be redeemed twice, or cross organization boundaries.
+  Expired codes and revoked/inactive memberships are rejected. Browser and database tests must
+  prove the full journey; Android instrumentation must prove the address field is absent.
+- [P0] Fifty attempts per five minutes globally and six per IP limit anonymous guessing.
+  A six-digit code is never stored or logged as plaintext by the server. The strong bearer is
+  stored only as SHA-256 on the server and encrypted on the phone.
+
 ### Managed SaaS control plane
 
 - [P0] Platform owner creates a tenant, records a manual subscription, and sees the revision.

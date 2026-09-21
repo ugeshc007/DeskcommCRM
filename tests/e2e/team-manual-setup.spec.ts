@@ -37,6 +37,7 @@ test.beforeAll(async () => {
     [adminId, org],
   );
   await pool.query('select fn_provision_field_sales_session_projects()');
+  await pool.query('select fn_provision_field_sales_pairing()');
   await pool.query(
     "insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Synthetic salesperson')",
     [org, adminId],
@@ -165,13 +166,18 @@ test('admin copies a private invite, employee sets a password without email, and
   const deviceDialog = managementPage.getByRole('dialog', { name: /Android access/ });
   await expect(deviceDialog).toBeVisible();
   await deviceDialog.getByRole('textbox', { name: 'Phone name' }).fill('Synthetic Samsung');
-  await deviceDialog.getByRole('button', { name: 'Create device key' }).click();
-  const deviceKey = await deviceDialog.getByRole('textbox', { name: 'One-time device key' }).inputValue();
-  expect(deviceKey).toMatch(/^fld_[a-f0-9]{64}$/);
-  await deviceDialog.getByRole('button', { name: 'Copy key' }).click();
-  expect(await managementPage.evaluate(() => navigator.clipboard.readText())).toBe(deviceKey);
-  await deviceDialog.getByRole('textbox', { name: 'One-time device key' }).evaluate(element => {
-    (element as HTMLInputElement).value = '[private key hidden]';
+  await deviceDialog.getByRole('button', { name: 'Create pairing code' }).click();
+  const pairingCode = await deviceDialog.getByRole('textbox', { name: 'Pairing code' }).inputValue();
+  expect(pairingCode).toMatch(/^\d{6}$/);
+  await deviceDialog.getByRole('button', { name: 'Copy code' }).click();
+  expect(await managementPage.evaluate(() => navigator.clipboard.readText())).toBe(pairingCode);
+  const pairedResponse = await managementPage.request.post('/api/v1/field-sales/pair', { data: { code: pairingCode } });
+  expect(pairedResponse.status()).toBe(200);
+  const paired = (await pairedResponse.json()).data;
+  expect(paired.token).toMatch(/^fld_[a-f0-9]{64}$/);
+  expect((await managementPage.request.post('/api/v1/field-sales/pair', { data: { code: pairingCode } })).status()).toBe(401);
+  await deviceDialog.getByRole('textbox', { name: 'Pairing code' }).evaluate(element => {
+    (element as HTMLInputElement).value = '[private code hidden]';
   });
   await managementPage.screenshot({ path: testInfo.outputPath('manual-android-key.png'), fullPage: true });
   await managementContext.close();

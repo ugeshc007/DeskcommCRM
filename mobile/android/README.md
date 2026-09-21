@@ -25,9 +25,14 @@ It intentionally refuses to run against an already-connected employee installati
 
 1. Installation admin installs the optional module; organization admin enrolls staff and
    configures a notice and retention period. Installation alone never enables tracking.
-2. The employee opens Field Sales → My Android devices and creates their own device key.
-3. In Android, enter the CRM HTTPS origin and key. The server stores only a token hash;
-   Android stores the token, cache and pending queue encrypted with Android Keystore.
+2. An organization administrator opens Team → the Field Officer → Android keys and creates a
+   six-digit pairing code. The code is valid for five minutes and one exchange. The legacy
+   self-service screen uses the same pairing contract for previously enrolled staff.
+3. In Android, enter only the six-digit code. The CRM origin is compiled into this APK as
+   `https://crm.techspothub.com`; a different self-host installation must rebuild the APK
+   with its own HTTPS origin. The server stores only HMAC(code) until exchange, then replaces
+   it with the hash of a random 256-bit, revocable device bearer. Android stores that bearer,
+   cache and pending queue encrypted with Android Keystore. A six-digit code is never a bearer.
 4. Sync the organization policy and today's projects. Select an assigned project, accept the
    displayed tracking notice, and punch in. Precise location and visible notification permissions
    are requested explicitly.

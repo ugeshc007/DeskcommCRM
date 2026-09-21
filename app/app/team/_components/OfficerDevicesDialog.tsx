@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { copyToClipboard } from "@/lib/clipboard";
 import type { TeamMember } from "@/hooks/team/useTeamMembers";
 
-type Device = { id: string; label: string; expires_at: string; revoked_at: string | null };
+type Device = { id: string; label: string; expires_at: string; revoked_at: string | null; paired: boolean };
 
 export function OfficerDevicesDialog({ member, onClose }: { member: TeamMember; onClose: () => void }) {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -37,8 +37,8 @@ export function OfficerDevicesDialog({ member, onClose }: { member: TeamMember; 
         body: JSON.stringify({ label, display_name: member.full_name ?? member.email ?? "Field Officer" }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? "Could not create key.");
-      setIssued(body.data.token);
-      setDevices(old => [{ id: body.data.id, label, expires_at: body.data.expires_at, revoked_at: null }, ...old]);
+      setIssued(body.data.code);
+      setDevices(old => [{ id: body.data.id, label, expires_at: body.data.expires_at, revoked_at: null, paired: false }, ...old]);
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not create key."); }
     finally { setBusy(false); }
   }
@@ -57,16 +57,16 @@ export function OfficerDevicesDialog({ member, onClose }: { member: TeamMember; 
 
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="max-h-[85vh] overflow-y-auto">
     <DialogHeader><DialogTitle>Android access — {member.full_name ?? member.email ?? "Field Officer"}</DialogTitle>
-      <DialogDescription>Each key works only for this employee’s projects and work sessions. Creating one enrolls this Field Officer, but GPS starts only after punch-in. Keys expire after 30 days.</DialogDescription></DialogHeader>
+      <DialogDescription>Create a six-digit code for this employee to pair one phone. It expires in five minutes and works once. The phone receives a separate, revocable credential; GPS starts only after punch-in.</DialogDescription></DialogHeader>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {issued ? <div className="space-y-3 rounded-lg border p-3"><p className="font-medium">One-time key — transfer privately to the employee’s Android phone</p>
-      <Input aria-label="One-time device key" readOnly type="password" autoComplete="off" value={issued} onFocus={event => event.target.select()}/>
-      <Button variant="outline" onClick={async () => { if (!await copyToClipboard(issued)) setError("Copy failed; select the key field and copy manually."); }}>Copy key</Button>
-      <Button onClick={() => setIssued(null)}>Done — hide key</Button>
-      <p className="text-xs text-muted-foreground">The key cannot be displayed again. It is not a CRM password or short PIN.</p></div>
-      : <form onSubmit={create} className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-sm">Phone name<Input name="label" required maxLength={100} placeholder="Work phone" autoComplete="off"/></label><Button disabled={busy}>Create device key</Button></form>}
-    {loading ? <p>Loading devices…</p> : devices.length === 0 ? <p className="text-sm">No keys created yet.</p> : devices.map(device => <div key={device.id} className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-      <span>{device.label}<br/><span className="text-muted-foreground">{device.revoked_at ? "Revoked" : `Expires ${new Date(device.expires_at).toLocaleString()}`}</span></span>
+    {issued ? <div className="space-y-3 rounded-lg border p-3"><p className="font-medium">Six-digit pairing code — share privately with the employee</p>
+      <Input aria-label="Pairing code" readOnly inputMode="numeric" autoComplete="off" className="text-center font-mono text-2xl tracking-[0.3em]" value={issued} onFocus={event => event.target.select()}/>
+      <Button variant="outline" onClick={async () => { if (!await copyToClipboard(issued)) setError("Copy failed; select the code field and copy manually."); }}>Copy code</Button>
+      <Button onClick={() => setIssued(null)}>Done — hide code</Button>
+      <p className="text-xs text-muted-foreground">Valid for five minutes and one phone only. It cannot be displayed again. The app already knows the CRM address.</p></div>
+      : <form onSubmit={create} className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 text-sm">Phone name<Input name="label" required maxLength={100} placeholder="Work phone" autoComplete="off"/></label><Button disabled={busy}>Create pairing code</Button></form>}
+    {loading ? <p>Loading devices…</p> : devices.length === 0 ? <p className="text-sm">No phones connected yet.</p> : devices.map(device => <div key={device.id} className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+      <span>{device.label}<br/><span className="text-muted-foreground">{device.revoked_at ? "Revoked" : device.paired ? `Connected · expires ${new Date(device.expires_at).toLocaleString()}` : `Pairing code expires ${new Date(device.expires_at).toLocaleString()}`}</span></span>
       {!device.revoked_at && <Button variant="outline" disabled={busy} onClick={() => void revoke(device)}>Revoke</Button>}
     </div>)}
   </DialogContent></Dialog>;

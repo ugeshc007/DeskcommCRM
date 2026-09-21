@@ -9,6 +9,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.*;
 import android.text.InputType;
+import android.text.InputFilter;
 import android.view.*;
 import android.widget.*;
 import java.time.*;
@@ -84,17 +85,18 @@ public final class MainActivity extends Activity {
     }
     private void connection() {
         add(content, label("Connect this phone", 24, INK, true), 24);
-        add(content, label("Use the one-time device key created in your CRM. Your account password is never entered here.", 15, MUTED, false), 8);
-        LinearLayout form = card(); EditText server = field("CRM HTTPS address", false); EditText key = field("Device key", true);
-        add(form, label("CRM HTTPS address", 14, INK, true), 0); add(form, server, 6);
-        add(form, label("Device key", 14, INK, true), 14); add(form, key, 6);
+        add(content, label("Ask your administrator for a six-digit pairing code. It works once and expires after five minutes. Your CRM password is never entered here.", 15, MUTED, false), 8);
+        LinearLayout form = card(); EditText key = field("Six-digit code", true);
+        key.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        key.setFilters(new InputFilter[]{new InputFilter.LengthFilter(6)});
+        add(form, label("Six-digit code", 14, INK, true), 0); add(form, key, 6);
         Button connect = action("Connect securely", BRAND); add(form, connect, 18); add(content, form, 20);
         connect.setOnClickListener(v -> {
-            try {
-                String base = SyncEngine.validateBase(server.getText().toString()), token = key.getText().toString().trim();
-                if (!token.matches("fld_[a-f0-9]{64}")) throw new IllegalArgumentException();
-                SecureState.mutate(this, current -> { current.put("server", base); current.put("token", token); }); key.setText(""); render(); sync();
-            } catch (Exception failure) { alert("Check connection", "Enter the CRM home HTTPS address and a valid device key from your own account."); }
+            String code = key.getText().toString().trim();
+            if (!code.matches("[0-9]{6}")) { alert("Check code", "Enter the six digits shown in Team → Android keys."); return; }
+            connect.setEnabled(false);
+            SyncEngine.pair(this, code, () -> runOnUiThread(() -> { key.setText(""); render(); sync(); }),
+                () -> runOnUiThread(() -> { connect.setEnabled(true); alert("Could not connect", "The code may be wrong, expired or already used. Ask your administrator for a new code."); }));
         });
     }
     private EditText field(String hint, boolean secret) {

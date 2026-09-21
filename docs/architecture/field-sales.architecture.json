@@ -6,7 +6,8 @@
   "mainPath": ["crm", "mobile", "authority", "records"],
   "nodes": [
     { "id": "crm", "lane": "ui", "col": 0, "type": "service", "label": "Field Sales workspace", "sublabel": "Projects, recurring calendar, policy and live view" },
-    { "id": "team", "lane": "ui", "col": 0, "type": "service", "label": "Team member access", "sublabel": "Field Officer role; admin-issued employee key; revoked invite archive" },
+    { "id": "team", "lane": "ui", "col": 0, "type": "service", "label": "Team member access", "sublabel": "Field Officer role; five-minute six-digit pairing; revoked invite archive" },
+    { "id": "pairing", "lane": "runtime", "col": 1, "type": "service", "label": "One-time pairing", "sublabel": "Global attempt limit; HMAC code; atomic exchange for 256-bit bearer" },
     { "id": "mobile", "lane": "ui", "col": 1, "type": "service", "label": "Android work app", "sublabel": "Explicit punch-in; visible foreground GPS; local stop at punch-out" },
     { "id": "queue", "lane": "data", "col": 1, "type": "database", "label": "Keystore-encrypted queue", "sublabel": "Stable IDs; network-only retry; account-bound reconnect" },
     { "id": "authority", "lane": "runtime", "col": 2, "type": "service", "label": "Current membership and device locks", "sublabel": "Organization + employee from authentication; raw authenticated SQL access denied" },
@@ -19,7 +20,9 @@
   ],
   "edges": [
     { "id": "crm-auth", "from": "crm", "to": "authority", "label": "Current role and explicit manager scope" },
-    { "id": "team-auth", "from": "team", "to": "authority", "label": "Accepted officer membership and one-time device key" },
+    { "id": "team-pairing", "from": "team", "to": "pairing", "label": "Accepted officer membership and short-lived code" },
+    { "id": "mobile-pairing", "from": "mobile", "to": "pairing", "label": "Six digits over fixed HTTPS origin" },
+    { "id": "pairing-auth", "from": "pairing", "to": "authority", "label": "Atomic redemption creates revocable employee-bound bearer" },
     { "id": "auth-team", "from": "authority", "to": "team", "label": "Revocation and expiry state visible to administrator" },
     { "id": "auth-data", "from": "authority", "to": "records", "label": "Scoped transaction and idempotency" },
     { "id": "records-operations", "from": "records", "to": "operations", "label": "Scoped reads; original records and approved corrections shown separately" },

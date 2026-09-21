@@ -45,7 +45,9 @@ public final class SmokeInstrumentation extends Instrumentation {
             if (getTargetContext().getSystemService(android.app.job.JobScheduler.class).getPendingJob(102) == null)
                 throw new AssertionError("Network-only retry job was not scheduled");
             final boolean[] visible = {false};
-            runOnMainSync(() -> visible[0] = contains(screen.getWindow().getDecorView(), "Connect securely") && contains(screen.getWindow().getDecorView(), "Device key"));
+            runOnMainSync(() -> visible[0] = contains(screen.getWindow().getDecorView(), "Connect securely")
+                && contains(screen.getWindow().getDecorView(), "Six-digit code")
+                && !contains(screen.getWindow().getDecorView(), "CRM HTTPS address"));
             if (!visible[0]) throw new AssertionError("Connection controls are not rendered");
             if (TrackingService.running || !"off_duty".equals(SecureState.read(getTargetContext()).getString("status"))) throw new AssertionError("Fresh installation must not track");
             // Separate synthetic preference namespace under the target UID; never employee state.

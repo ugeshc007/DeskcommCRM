@@ -16,6 +16,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   // Employee-scoped, expiring hash-only device bearer; current membership is
   // revalidated inside the handler. Never exposes management operations.
   /^\/api\/v1\/field-sales\/mobile$/,
+  // One-time six-digit pairing is validated, globally throttled and exchanged
+  // for a strong bearer inside the handler. No cookie exists on a fresh phone.
+  /^\/api\/v1\/field-sales\/pair$/,
   /^\/api\/v1\/webhooks\//,
   /^\/api\/v1\/cron\//,
   // Heartbeat do agente do host (bearer INTERNAL_SECRET/INTERNAL_CRON_SECRET,

@@ -1,24 +1,39 @@
 # Field Sales & Project Tracking — implementation contract
 
-Status: implementation started; NOT deployed. Evidence, not phase names, determines completion.
+Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migration 0320 and the matching app image; verify the installed schema and health version before claiming it is available. Evidence, not phase names, determines completion.
 
-## Current development checkpoint — 2026-09-21
+## Pairing revision — 2026-09-21
 
-- Pending release verification: Team now offers a `Field Officer` role below Viewer in CRM
+- The Android APK has the CRM HTTPS origin compiled in. Its fresh connection screen asks only
+  for six digits; the URL is not editable. A clone using another domain must build its APK with
+  that domain, and must never treat the URL as a secret.
+- Team → Field Officer → Android keys issues a random six-digit code, valid for five minutes and
+  a single exchange. The public exchange endpoint is globally and per-IP rate-limited. The
+  database stores an HMAC of the code, not the digits. After an atomic exchange the phone stores
+  a separate random 256-bit bearer in Android Keystore; the server stores its SHA-256 hash.
+- An issued code does not start GPS. Expiry, revocation and current employee membership are
+  checked before exchange. Existing strong device credentials remain valid.
+- A six-digit code is not suitable as a permanent API credential. If the CRM domain changes,
+  the APK must be rebuilt before newly paired devices can connect.
+
+## Previous release checkpoint — 2026-09-21
+
+- Team offers a `Field Officer` role below Viewer in CRM
   permissions. Administrators create and revoke one-time Android keys against accepted
   Field Officer members from **Team → Members → Android device keys**. Key issuance explicitly
   enrolls that employee but never starts GPS. Existing legacy self-service API remains for
   previously enrolled agents/managers, while the Field Sales workspace no longer advertises
   that tab. Revoked invitations can be archived from the Team list, retaining the revoked
-  database row so the signed URL remains invalid. This does not assert live deployment.
+  database row so the signed URL remains invalid. This release is live on CT102.
 
 - Staff setup without an email gateway uses the CRM's private invitation link. Only a persisted,
   pending, undelivered viewer/agent invitation can enroll a new account without email confirmation;
   possession of the privately shared link is the enrollment proof, not proof of mailbox ownership.
   Expired, revoked or accepted invitations are refused. The employee
   chooses their own CRM password. An enrolled employee then creates and copies a one-time
-  Android device key from an administrator in **Team → Members**. The Android app does not accept
-  a short PIN or the CRM password as its device credential. An account is created only when
+  Android device key from an administrator in **Team → Members**. In that release, the Android app
+  required a long bearer; the pairing revision above replaces that entry with a short-lived code.
+  An account is created only when
   the invited person submits the password form; a device key is created only on request.
 
 - Android's connected home is intentionally limited to today's real assigned-project selector,
@@ -33,9 +48,8 @@ Status: implementation started; NOT deployed. Evidence, not phase names, determi
 - CRM Live view shows every explicitly authorized salesperson's latest position. Selecting a
   marker or person loads that employee's route for the chosen organization-local date, split at
   separate sessions, long gaps and mock-location boundaries. No Google Maps key or token is used.
-- Android assemble, test-APK compile, unit tests and lint pass. TypeScript, targeted lint and
-  focused contract/security tests pass. Database/E2E and a fresh Samsung visual rerun remain
-  release gates; Docker is currently unavailable and ADB currently reports no connected device.
+- The release passed focused Team and Field Sales browser journeys and its database checks.
+  The full browser CI run timed out; that is not a claim of full-suite coverage.
 
 Older checkpoints below are historical evidence and may describe controls that the simplified
 2026-09-20 mobile home intentionally removed.

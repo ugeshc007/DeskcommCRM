@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { recordAttendance, recordLocations } from '@/lib/field-sales/attendance';
 import { fieldTransaction, requireFieldScope, withFieldDevice } from '@/lib/field-sales/authority';
-import { authenticateFieldDevice, deviceTokenHash, issueFieldDevice, issueOfficerDevice, officerDevices, revokeOfficerDevice, listFieldDevices, revokeCurrentFieldDevice, revokeFieldDevice } from '@/lib/field-sales/devices';
+import { authenticateFieldDevice, deviceTokenHash, issueFieldDevice, issueOfficerDevice, officerDevices, revokeOfficerDevice, listFieldDevices, revokeCurrentFieldDevice, revokeFieldDevice, redeemFieldPairingCode, pairingCodeHash } from '@/lib/field-sales/devices';
 import { completeNextAction, manageCorrection, readFieldOperations, recordVisit } from '@/lib/field-sales/operations';
 import { manageFieldSales, readFieldCalendar } from '@/lib/field-sales/management';
 import { saveFieldPhoto, readFieldPhoto, listFieldPhotos, deleteFieldPhoto } from '@/lib/field-sales/photos';
@@ -13,6 +13,7 @@ if (!process.env.TEST_DB_CONTAINER) throw new Error('Run through scripts/test-db
 const pool = new pg.Pool({ connectionString: `postgresql://postgres:postgres@127.0.0.1:${Number(process.env.TEST_DB_PORT ?? 54329)}/postgres` });
 afterAll(() => pool.end());
 beforeAll(async () => {
+  process.env.INTERNAL_SECRET ||= 'synthetic-pairing-secret-for-disposable-database-tests';
   expect((await pool.query("select to_regclass('public.field_sales_locations') relation")).rows[0].relation).toBeNull();
   expect((await pool.query('select fn_expurgar_field_sales_locations(1000) n')).rows[0].n).toBe(0);
   await pool.query('select fn_provision_field_sales_module()');
@@ -21,6 +22,7 @@ beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_session_projects()');
   await pool.query('select fn_provision_field_sales_photos()');
   await pool.query('select fn_provision_field_sales_devices()');
+  await pool.query('select fn_provision_field_sales_pairing()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_lifecycle()');
@@ -70,13 +72,16 @@ describe('optional field-sales foundation', () => {
     await expect(issueOfficerDevice(pool, other.org, other.actor, officer, 'Officer', 'Samsung')).rejects.toThrow('field_forbidden');
     await expect(issueOfficerDevice(pool, f.org, f.manager, officer, 'Officer', 'Samsung')).rejects.toThrow('field_forbidden');
     const issued = await issueOfficerDevice(pool, f.org, admin, officer, 'Officer', 'Samsung');
-    expect(issued.token).toMatch(/^fld_[a-f0-9]{64}$/);
-    const identity = await authenticateFieldDevice(pool, `Bearer ${issued.token}`);
+    expect(issued.code).toMatch(/^\d{6}$/);
+    await expect(authenticateFieldDevice(pool, `Bearer ${issued.code}`)).rejects.toThrow('field_device_unauthorized');
+    const paired = await redeemFieldPairingCode(pool, issued.code);
+    const identity = await authenticateFieldDevice(pool, `Bearer ${paired.token}`);
     expect(identity).toMatchObject({ org: f.org, actor: officer });
+    await expect(redeemFieldPairingCode(pool, issued.code)).rejects.toThrow('field_pairing_invalid');
     expect(await officerDevices(pool, f.org, admin, officer)).toHaveLength(1);
     await expect(officerDevices(pool, other.org, other.actor, officer)).rejects.toThrow('field_forbidden');
     await revokeOfficerDevice(pool, f.org, admin, officer, issued.id);
-    await expect(authenticateFieldDevice(pool, `Bearer ${issued.token}`)).rejects.toThrow('field_device_unauthorized');
+    await expect(authenticateFieldDevice(pool, `Bearer ${paired.token}`)).rejects.toThrow('field_device_unauthorized');
   });
   it('accepts ordered offline visits after punch-out, rejects off-duty and break captures', async () => {
     const f = await fixture(), a = await assignment(f), visit = randomUUID();
@@ -133,7 +138,7 @@ describe('optional field-sales foundation', () => {
     await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Synthetic manager')", [f.org, f.manager]);
     await pool.query('insert into field_sales_manager_scope(organization_id,manager_id,employee_id) values($1,$2,$3)', [f.org, f.manager, f.actor]);
     const key = await issueFieldDevice(pool, f.org, f.manager, 'Manager own device');
-    const identity = await authenticateFieldDevice(pool, `Bearer ${key.token}`);
+    const identity = await authenticateFieldDevice(pool, `Bearer ${(await redeemFieldPairingCode(pool, key.code)).token}`);
     await expect(withFieldDevice(identity, () => completeNextAction(pool, f.org, f.manager, command))).rejects.toThrow('field_forbidden');
     expect((await completeNextAction(pool, f.org, f.actor, command)).replayed).toBe(false);
     expect((await completeNextAction(pool, f.org, f.actor, command)).replayed).toBe(true);
@@ -264,31 +269,38 @@ describe('optional field-sales foundation', () => {
   it('stores only a device hash, isolates ownership and rejects revoked or expired devices', async () => {
     const a = await fixture(), b = await fixture();
     const issued = await issueFieldDevice(pool, a.org, a.actor, 'Synthetic Android');
-    expect(issued.token).toMatch(/^fld_[a-f0-9]{64}$/);
-    const stored = (await pool.query('select token_hash from field_sales_devices where organization_id=$1 and id=$2', [a.org, issued.id])).rows[0];
-    expect(stored.token_hash).toBe(deviceTokenHash(issued.token));
-    expect(JSON.stringify(await listFieldDevices(pool, a.org, a.actor))).not.toContain(issued.token);
+    expect(issued.code).toMatch(/^\d{6}$/);
+    const pending = (await pool.query('select token_hash,pairing_code_hash from field_sales_devices where organization_id=$1 and id=$2', [a.org, issued.id])).rows[0];
+    expect(pending.token_hash).toBeNull();
+    expect(pending.pairing_code_hash).toBe(pairingCodeHash(issued.code));
+    const paired = await redeemFieldPairingCode(pool, issued.code);
+    const stored = (await pool.query('select token_hash,pairing_code_hash from field_sales_devices where organization_id=$1 and id=$2', [a.org, issued.id])).rows[0];
+    expect(stored.token_hash).toBe(deviceTokenHash(paired.token));
+    expect(stored.pairing_code_hash).toBeNull();
+    expect(JSON.stringify(await listFieldDevices(pool, a.org, a.actor))).not.toContain(paired.token);
     expect(await listFieldDevices(pool, b.org, b.actor)).toEqual([]);
     await expect(revokeFieldDevice(pool, b.org, b.actor, issued.id)).rejects.toThrow('field_forbidden');
-    const identity = await authenticateFieldDevice(pool, 'Bearer ' + issued.token);
+    const identity = await authenticateFieldDevice(pool, 'Bearer ' + paired.token);
     await withFieldDevice(identity, () => recordAttendance(pool, a.org, a.actor, a.command));
     await expect(withFieldDevice(identity, () => recordAttendance(pool, b.org, b.actor, b.command))).rejects.toThrow('field_device_unauthorized');
     await revokeFieldDevice(pool, a.org, a.actor, issued.id);
-    await expect(authenticateFieldDevice(pool, 'Bearer ' + issued.token)).rejects.toThrow('field_device_unauthorized');
+    await expect(authenticateFieldDevice(pool, 'Bearer ' + paired.token)).rejects.toThrow('field_device_unauthorized');
     // A previously authenticated request must revalidate at the actual transaction boundary.
     await expect(withFieldDevice(identity, () => recordAttendance(pool, a.org, a.actor, a.command))).rejects.toThrow('field_device_unauthorized');
     const expired = await issueFieldDevice(pool, b.org, b.actor, 'Expired synthetic device');
     await pool.query("update field_sales_devices set expires_at=now()-interval '1 second' where organization_id=$1 and id=$2", [b.org, expired.id]);
-    await expect(authenticateFieldDevice(pool, 'Bearer ' + expired.token)).rejects.toThrow('field_device_unauthorized');
+    await expect(redeemFieldPairingCode(pool, expired.code)).rejects.toThrow('field_pairing_invalid');
   });
   it('mobile sign-out revokes only its authenticated device and leaves another device usable', async () => {
     const f = await fixture();
     const first = await issueFieldDevice(pool, f.org, f.actor, 'First Android');
     const second = await issueFieldDevice(pool, f.org, f.actor, 'Second Android');
-    const identity = await authenticateFieldDevice(pool, 'Bearer ' + first.token);
+    const firstToken = (await redeemFieldPairingCode(pool, first.code)).token;
+    const secondToken = (await redeemFieldPairingCode(pool, second.code)).token;
+    const identity = await authenticateFieldDevice(pool, 'Bearer ' + firstToken);
     expect(await revokeCurrentFieldDevice(pool, identity.org, identity.actor, identity.deviceId)).toEqual({ signed_out: true });
-    await expect(authenticateFieldDevice(pool, 'Bearer ' + first.token)).rejects.toThrow('field_device_unauthorized');
-    await expect(authenticateFieldDevice(pool, 'Bearer ' + second.token)).resolves.toMatchObject({ org: f.org, actor: f.actor });
+    await expect(authenticateFieldDevice(pool, 'Bearer ' + firstToken)).rejects.toThrow('field_device_unauthorized');
+    await expect(authenticateFieldDevice(pool, 'Bearer ' + secondToken)).resolves.toMatchObject({ org: f.org, actor: f.actor });
     expect((await pool.query("select count(*)::int n from api_audit_log where organization_id=$1 and action='field_sales.device_signed_out'", [f.org])).rows[0].n).toBe(1);
   });
   it('denies anonymous/authenticated raw access and provisioning', async () => {

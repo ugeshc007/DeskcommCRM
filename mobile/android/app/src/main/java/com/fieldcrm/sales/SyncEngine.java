@@ -24,6 +24,41 @@ public final class SyncEngine {
         if (uri.getPath() != null && !uri.getPath().isEmpty() && !uri.getPath().equals("/")) throw new IllegalArgumentException("Use the CRM home address, not a page path.");
         return uri.toString().replaceAll("/+$", "");
     }
+    /** A short code is exchanged once; it is never stored or sent as a bearer. */
+    public static void pair(Context rawContext, String code, Runnable success, Runnable failure) {
+        Context context = rawContext.getApplicationContext();
+        executor.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                if (!code.matches("[0-9]{6}") || SecureState.read(context).has("token")) throw new IllegalArgumentException();
+                String base = validateBase(BuildConfig.CRM_BASE_URL);
+                connection = (HttpURLConnection) new URI(base + "/api/v1/field-sales/pair").toURL().openConnection();
+                connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(15000); connection.setReadTimeout(20000);
+                connection.setRequestMethod("POST"); connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json"); connection.setRequestProperty("Accept", "application/json");
+                byte[] bytes = new JSONObject().put("code", code).toString().getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(bytes.length);
+                try (java.io.OutputStream output = connection.getOutputStream()) { output.write(bytes); }
+                if (connection.getResponseCode() != 200) throw new SecurityException();
+                try (InputStream input = connection.getInputStream()) {
+                    java.io.ByteArrayOutputStream received = new java.io.ByteArrayOutputStream();
+                    byte[] buffer = new byte[2048]; int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        received.write(buffer, 0, count);
+                        if (received.size() > 16_384) throw new IllegalStateException();
+                    }
+                    String token = new JSONObject(new String(received.toByteArray(), StandardCharsets.UTF_8))
+                        .getJSONObject("data").getString("token");
+                    if (!token.matches("fld_[a-f0-9]{64}")) throw new SecurityException();
+                    SecureState.mutate(context, state -> { state.put("server", base); state.put("token", token); });
+                }
+                success.run();
+            } catch (Exception ignored) {
+                // Never expose the code, token, response body or employee identity in logs.
+                failure.run();
+            } finally { if (connection != null) connection.disconnect(); }
+        });
+    }
     private static JSONObject request(JSONObject state, String method, String suffix, JSONObject body) throws Exception {
         String base = validateBase(state.getString("server"));
         HttpURLConnection connection = (HttpURLConnection) new URI(base + "/api/v1/field-sales/mobile" + suffix).toURL().openConnection();

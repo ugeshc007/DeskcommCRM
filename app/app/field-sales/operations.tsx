@@ -17,28 +17,32 @@ type Point = { session_id: string; latitude: number; longitude: number; captured
 type Session = { id: string; employee_id: string; display_name: string; project_name: string | null; site_name: string | null; status: string; punched_in_at: string; punched_out_at: string | null; corrected_in: string | null; corrected_out: string | null };
 type Correction = { id: string; employee_id: string; display_name: string; proposed_in: string; proposed_out: string; reason: string; status: string; review_note: string };
 type Visit = { id: string; revision: number; display_name: string; project_name: string; status: string; notes: string; next_action: string; next_action_at: string | null; next_action_completed_at: string | null };
-type Operations = { role: string; generated_at: string; region: { timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; corrections: Correction[]; points: Point[]; map: { map_tile_path: string | null; map_attribution: string } | null };
+export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; corrections: Correction[]; points: Point[]; map: { map_tile_path: string | null; map_attribution: string } | null };
 
-function RouteMap({ data, selectedEmployeeId, onSelectEmployee }: { data: Operations; selectedEmployeeId: string; onSelectEmployee: (employeeId: string) => void }) {
+export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate }: { data: Operations; selectedEmployeeId: string; onSelectEmployee: (employeeId: string) => void; routeDate: string }) {
   const container = useRef<HTMLDivElement>(null), map = useRef<LibreMap | null>(null), markers = useRef<Marker[]>([]);
-  const latest = useRef(data), selectEmployee = useRef(onSelectEmployee), fittedSelection = useRef('');
+  const latest = useRef(data), selectEmployee = useRef(onSelectEmployee), selection = useRef(selectedEmployeeId), day = useRef(routeDate), fittedSelection = useRef('');
   const [problem, setProblem] = useState(''), [mapReady, setMapReady] = useState(false);
-  useEffect(() => { latest.current = data; selectEmployee.current = onSelectEmployee; }, [data, onSelectEmployee]);
+  useEffect(() => { latest.current = data; selectEmployee.current = onSelectEmployee; selection.current = selectedEmployeeId; day.current = routeDate; }, [data, onSelectEmployee, selectedEmployeeId, routeDate]);
   useEffect(() => {
     let closed = false;
+    let resizeObserver: ResizeObserver | null = null;
     void Promise.all([import('maplibre-gl'), import('pmtiles')]).then(async ([lib, archive]) => {
       if (closed || !container.current) return;
+      setMapReady(false); setProblem('');
+      lib.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
       const tile = data.map?.map_tile_path;
       const header = tile?.endsWith('.pmtiles') ? await new archive.PMTiles(new URL(tile, window.location.origin).toString()).getHeader() : null;
       if (closed || !container.current) return;
-      lib.addProtocol('pmtiles', new archive.Protocol().tile);
-      const instance = new lib.Map({ container: container.current, center: [0, 0], zoom: 1, attributionControl: false,
+      const instance = new lib.Map({ container: container.current, center: data.region.country_code === 'AE' ? [54.4, 24.4] : [0, 0], zoom: data.region.country_code === 'AE' ? 6 : 1, attributionControl: false,
         ...(header ? { bounds: [[header.minLon, header.minLat], [header.maxLon, header.maxLat]] as [[number, number], [number, number]], fitBoundsOptions: { padding: 20 } } : {}),
-        style: fieldMapStyle(tile, window.location.origin) });
+        style: fieldMapStyle(tile, window.location.origin, header) });
       instance.on('idle', () => {
         if (!closed && tile && instance.isSourceLoaded('basemap')) setMapReady(!header || instance.querySourceFeatures('basemap', { sourceLayer: 'roads' }).length > 0);
       });
       map.current = instance;
+      resizeObserver = new ResizeObserver(() => instance.resize());
+      resizeObserver.observe(container.current);
       instance.addControl(new lib.NavigationControl(), 'top-right');
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
@@ -46,7 +50,7 @@ function RouteMap({ data, selectedEmployeeId, onSelectEmployee }: { data: Operat
         const current = latest.current;
         for (const position of current.latest) {
           if (position.latitude === null || position.longitude === null) continue;
-          const marker = new lib.Marker({ color: position.mock_location ? '#b45309' : position.employee_id === selectedEmployeeId ? '#2563eb' : '#166534' })
+          const marker = new lib.Marker({ color: position.mock_location ? '#b45309' : position.employee_id === selection.current ? '#2563eb' : '#166534' })
             .setLngLat([position.longitude, position.latitude]).setPopup(new lib.Popup().setText(`${position.display_name} — select to view this date's route`)).addTo(instance);
           const element = marker.getElement(); element.tabIndex = 0; element.setAttribute('role', 'button');
           element.setAttribute('aria-label', `View ${position.display_name}'s route for this date`);
@@ -67,12 +71,14 @@ function RouteMap({ data, selectedEmployeeId, onSelectEmployee }: { data: Operat
         const source = instance.getSource('route') as GeoJSONSource | undefined;
         if (source) source.setData(route);
         else { instance.addSource('route', { type: 'geojson', data: route }); instance.addLayer({ id: 'recorded-route', type: 'line', source: 'route', paint: { 'line-color': '#2563eb', 'line-width': 4 } }); }
-        if (selectedEmployeeId && fittedSelection.current !== selectedEmployeeId && current.points.length) {
+        const selectionKey = `${selection.current}:${day.current}`;
+        if (selection.current && fittedSelection.current !== selectionKey && current.points.length) {
           const bounds = new lib.LngLatBounds(); current.points.forEach(point => bounds.extend([point.longitude, point.latitude]));
-          instance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 250 }); fittedSelection.current = selectedEmployeeId;
+          instance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 250 }); fittedSelection.current = selectionKey;
         }
       };
       instance.on('load', () => {
+        instance.resize();
         draw();
         const points = latest.current.points.length ? latest.current.points : latest.current.latest.filter(p => p.latitude !== null && p.longitude !== null);
         if (points.length) {
@@ -85,8 +91,8 @@ function RouteMap({ data, selectedEmployeeId, onSelectEmployee }: { data: Operat
       const timer = window.setInterval(draw, 2000);
       instance.once('remove', () => window.clearInterval(timer));
     }).catch(() => setProblem('Map rendering could not be loaded. Use the position list below.'));
-    return () => { closed = true; markers.current.forEach(marker => marker.remove()); markers.current = []; map.current?.remove(); map.current = null; };
-  }, [data.map?.map_tile_path, selectedEmployeeId]);
+    return () => { closed = true; resizeObserver?.disconnect(); markers.current.forEach(marker => marker.remove()); markers.current = []; map.current?.remove(); map.current = null; };
+  }, [data.map?.map_tile_path, data.region.country_code]);
   return <section className="space-y-2">
     {!data.map?.map_tile_path && <p className="rounded-lg border p-3 text-sm">Basemap not configured. This view plots recorded coordinates only; it does not show roads. No external map tiles are requested.</p>}
     {problem && <p role="alert">{problem}</p>}
@@ -136,7 +142,7 @@ export function FieldOperations({ organizationId, userId, date }: { organization
     {data && <>
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-semibold">Daily attendance and visit report</h2><p className="text-sm text-muted-foreground">Includes breaks; not a payroll calculation. GPS coordinates and visit notes are excluded.</p></div><Button variant="outline" disabled={busy} onClick={() => void exportReport()}>Export daily CSV</Button></section>
       {employeeId && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"><p><strong>{data.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Selected salesperson'}</strong> · complete recorded route for {date}</p><Button variant="outline" onClick={() => setEmployeeId('')}>Show all live positions</Button></div>}
-      <RouteMap data={data} selectedEmployeeId={employeeId} onSelectEmployee={id => { setSessionId(''); setEmployeeId(id); }}/>
+      <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={id => { setSessionId(''); setEmployeeId(id); }}/>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{data.latest.map(person => <article className={`rounded-xl border p-4 ${employeeId === person.employee_id ? 'border-primary bg-primary/5' : ''}`} key={person.employee_id}><h3 className="font-semibold">{person.display_name}</h3><p>{person.status?.replaceAll('_', ' ') ?? 'Off duty'}</p><p className="text-sm">Last recorded: {time(person.captured_at)}</p><p className="text-sm text-muted-foreground">{person.latitude === null ? 'No on-duty position available' : `Accuracy ±${Math.round(person.accuracy_m ?? 0)} m${person.mock_location ? ' · Mock location flagged' : ''}`}</p>{person.latitude !== null && <Button className="mt-3" variant="outline" onClick={() => { setSessionId(''); setEmployeeId(person.employee_id); }}>View today&apos;s route</Button>}</article>)}</div>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Attendance and route history</h2>
         <p className="text-sm text-muted-foreground">Session spans include breaks. Approved corrections are shown separately and never rewrite raw GPS or original punch records.</p>

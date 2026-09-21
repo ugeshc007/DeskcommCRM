@@ -94,12 +94,12 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.keyboard.press('Escape');
   expect((await pool.query('select count(*)::int n from field_sales_photos where organization_id=$1 and id=$2', [org, photoId])).rows[0].n).toBe(0);
   if (process.env.FIELD_MAP_PILOT === 'true') {
-    const loaded = page.waitForResponse(response => response.url().endsWith('/field-map-tiles/uae.pmtiles'), { timeout: 15000 });
+    const loaded = page.waitForResponse(response => response.url().includes('/field-map-tiles/uae.pmtiles/') && response.status() === 200, { timeout: 20000 });
     await page.getByLabel('Tile path', { exact: true }).fill('/field-map-tiles/uae.pmtiles');
     await page.getByLabel('Tile-source attribution').fill('Protomaps');
     await page.getByRole('button', { name: 'Save map configuration' }).click();
-    expect((await loaded).status()).toBe(206);
     await page.locator('[data-map-ready]').scrollIntoViewIfNeeded();
+    expect((await loaded).status()).toBe(200);
     await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });
     await expect(page.getByText('Map tiles or rendering are unavailable.', { exact: false })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('self-hosted-uae-map.png'), fullPage: true });
@@ -135,4 +135,29 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   const part = (type: string) => parts.find(value => value.type === type)?.value;
   expect(stored).toMatchObject({ start_date: `${part('year')}-${part('month')}-${part('day')}`,
     start_time: null, end_time: null, repeat: 'weekly', weekdays: [1, 6] });
+
+  // The administrator's dedicated map uses real scoped GPS rows and an independent date selector.
+  const liveSession = randomUUID(), start = new Date(Date.now() - 120000);
+  const day = `${part('year')}-${part('month')}-${part('day')}`;
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,status,punched_in_at,last_event_at)
+    values($1,$2,$3,'working',$4,$4)`, [org, liveSession, employee, start]);
+  for (const [sequence, latitude, longitude] of [[0, 25.2048, 55.2708], [1, 25.2100, 55.2800]] as const) {
+    await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
+      values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), liveSession, sequence, new Date(start.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/app/field-sales');
+  await page.getByRole('link', { name: 'Open live map' }).click();
+  await expect(page).toHaveURL(/\/app\/field-sales\/live$/);
+  await expect(page.getByRole('heading', { name: 'Field team live view' })).toBeVisible();
+  await page.getByLabel('Travel date').fill(day);
+  await page.getByLabel('Field officer').selectOption(employee);
+  await expect(page.getByText('2 recorded points', { exact: false })).toBeVisible();
+  await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
+  if (process.env.FIELD_MAP_PILOT === 'true') await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });
+  await page.screenshot({ path: testInfo.outputPath('admin-live-map-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (process.env.FIELD_MAP_PILOT === 'true') await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('admin-live-map-mobile.png'), fullPage: true });
 });

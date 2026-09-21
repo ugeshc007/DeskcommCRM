@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rasterTilePath, readRasterTile, readMapArchive } from './map-tiles';
+import { rasterTilePath, readRasterTile, readMapArchive, readVectorTile } from './map-tiles';
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -21,6 +21,13 @@ describe('self-hosted map tile addressing', () => {
   });
   it('accepts bounded raster XYZ tiles with optional dataset prefixes', () => {
     expect(rasterTilePath(['uae', '4', '8', '9.webp'])).toEqual({ relative: 'uae/4/8/9.webp', mime: 'image/webp' });
+  });
+  it.each([
+    ['../uae.pmtiles', '0', '0', '0'], ['uae.pmtiles', '23', '0', '0'],
+    ['uae.pmtiles', '1', '2', '0'], ['uae.pmtiles', '1', '0', '2'],
+    ['uae.pmtiles', '01', '0', '0'], ['uae.pmtiles', '0', '-1', '0'],
+  ])('rejects an invalid vector archive or coordinate: %j', async (...parts) => {
+    await expect(readVectorTile('C:/nonexistent', parts)).rejects.toThrow('field_tile_invalid');
   });
   it.each([['..','0','0','0.png'], ['0','1','0.png'], ['23','0','0.png'], ['1','0','2.png'], ['1','0','0.svg'], ['https:','1','0','0.png'], ['01','0','0.png']])('rejects invalid paths: %j', (...parts) => {
     expect(() => rasterTilePath(parts)).toThrow('field_tile_invalid');

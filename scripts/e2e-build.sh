@@ -35,10 +35,12 @@ set +a
 
 echo "==> Buildando contra ${NEXT_PUBLIC_SUPABASE_URL}"
 if command -v pnpm >/dev/null 2>&1; then
+  node scripts/copy-maplibre-worker.mjs
   pnpm exec next build
 else
   # Git Bash no Windows enxerga o `corepack` sem extensão, mas não o shim
   # `pnpm.cmd`. Mantém a versão fixada no packageManager do projeto.
+  node scripts/copy-maplibre-worker.mjs
   corepack pnpm@9.15.9 exec next build
 fi
 

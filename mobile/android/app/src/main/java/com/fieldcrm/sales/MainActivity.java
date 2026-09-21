@@ -116,7 +116,7 @@ public final class MainActivity extends Activity {
         String status = state.optString("status", "off_duty"); boolean working = WorkState.collecting(status);
         LinearLayout hero = card(); hero.setBackground(shape(working ? Color.rgb(228, 249, 240) : Color.rgb(235, 232, 255), 20));
         add(hero, label(working ? "You are punched in" : "Ready for today's work", 23, working ? Color.rgb(7, 105, 74) : BRAND_DARK, true), 0);
-        add(hero, label(working ? "Location tracking is active until punch-out or the 14-hour limit." : "GPS is off. Punch in to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
+        add(hero, label(working ? "Your work session is in progress. Punch out when finished or after the 14-hour limit." : "Punch in to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
         if (working) activeShift(state); else offDuty(state);
     }
     private void offDuty(JSONObject state) throws Exception {
@@ -131,7 +131,7 @@ public final class MainActivity extends Activity {
         long elapsed = Math.max(0, Math.min(Attendance.MAX_SHIFT_MS, System.currentTimeMillis() - state.optLong("session_start_ms", System.currentTimeMillis())));
         add(panel, label(String.format(Locale.US, "Working time: %d h %02d min", elapsed / 3600000L, (elapsed / 60000L) % 60), 15, INK, true), 7);
         if (!state.optString("active_site_name").isEmpty()) add(panel, label(state.optString("active_site_name"), 15, MUTED, false), 5);
-        add(panel, label(TrackingService.running ? "GPS tracking is running" : "GPS is restarting automatically", 14, GREEN, true), 14);
+        add(panel, label(TrackingService.running ? "Work in progress" : "GPS is restarting automatically", 14, GREEN, true), 14);
         JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray occurrences = snapshot == null ? null : snapshot.optJSONArray("occurrences");
         JSONArray projects = snapshot == null ? null : snapshot.optJSONArray("projects");
         String zone = state.optString("timezone", "UTC"), shiftDate = state.optString("active_local_date", LocalDate.now(ZoneId.of(zone)).toString());

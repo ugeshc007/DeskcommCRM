@@ -1,6 +1,6 @@
 # Field Sales: self-hosted map assets
 
-Development implementation; a UAE archive has been downloaded and verified locally. No live dataset has been provisioned yet.
+The UAE pilot uses a self-hosted Protomaps v4 archive. A Google Maps API key is not needed.
 
 The app can serve licensed raster XYZ tiles from an absolute directory configured by
 `FIELD_MAP_TILES_DIR`. Supply a read-only runtime volume outside the repository and
@@ -9,16 +9,20 @@ deployment proxy configuration when adding a volume. Do not replace other hosted
 
 Expected layout: `<directory>/uae/<z>/<x>/<y>.png` (JPEG and WebP also supported).
 Alternatively install a Protomaps v4 vector archive as `<directory>/uae.pmtiles` and use
-`/field-map-tiles/uae.pmtiles`. Authenticated, bounded HTTP range reads serve the archive;
-the whole file is never returned in one request. Road and place labels use a bundled
-OFL-licensed Noto Sans font, not a remote font provider. Existing raster configurations remain valid.
-In Field Sales → Map, visits & approvals → Self-hosted basemap, enter
-`/field-map-tiles/uae/{z}/{x}/{y}.png` and the dataset's required attribution.
+`/field-map-tiles/uae.pmtiles`. The server serves authenticated, bounded XYZ extracts
+from the archive. MapLibre's worker and shared module are copied from the installed
+package before dev/build and served from `/maplibre/`; both files are required or the
+map mounts but never requests tiles. The whole archive is never returned in one request.
+Existing raster configurations remain valid.
+In Field Sales → Live view → Self-hosted basemap, enter either
+`/field-map-tiles/uae.pmtiles` or `/field-map-tiles/uae/{z}/{x}/{y}.png` and the
+dataset's required attribution.
 The map already displays the OpenStreetMap copyright link; preserve source attribution.
 
 Only authenticated CRM staff can request tiles. Requests are local file reads: no Google
 API, address lookup, paid routing or external fallback. Missing tiles return a visible map
-error. The server accepts zoom 0–22, valid tile coordinates, and raster files up to 1 MiB.
+error. The server accepts zoom 0–22, valid tile coordinates, raster files up to 1 MiB
+and vector extracts up to 2 MiB.
 Directory traversal, remote URLs, SVG and symlinks escaping the configured root are rejected.
 The volume must not be writable by tenants; administrator-owned assets are required.
 

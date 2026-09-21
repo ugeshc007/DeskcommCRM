@@ -1,7 +1,7 @@
 import { requireRole } from '@/lib/auth/require-role';
 import { fail } from '@/lib/api/wrappers';
 import { env } from '@/lib/env';
-import { readRasterTile, readMapArchive } from '@/lib/field-sales/map-tiles';
+import { readRasterTile, readMapArchive, readVectorTile } from '@/lib/field-sales/map-tiles';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,11 @@ export async function GET(request: Request, context: { params: Promise<{ tile: s
   if (auth.user.support) return fail('forbidden', 'Map assets are unavailable in support sessions.', 403);
   try {
     const parts = (await context.params).tile;
+    if (parts.length === 4 && parts[0]?.endsWith('.pmtiles')) {
+      const bytes = await readVectorTile(env.FIELD_MAP_TILES_DIR ?? '', parts);
+      return new Response(bytes, { headers: { 'Content-Type': 'application/vnd.mapbox-vector-tile',
+        'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' } });
+    }
     if (parts.at(-1)?.endsWith('.pmtiles')) {
       const result = await readMapArchive(env.FIELD_MAP_TILES_DIR ?? '', parts, request.headers.get('range'));
       return new Response(new Uint8Array(result.bytes), { status: 206, headers: {

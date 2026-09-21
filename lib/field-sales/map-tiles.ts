@@ -1,5 +1,6 @@
 import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { PMTiles, type Source } from 'pmtiles';
 
 /** Bounded range reads of administrator-installed vector archives; never stream a whole country. */
 export async function readMapArchive(root: string, parts: string[], range: string | null) {
@@ -23,6 +24,27 @@ export async function readMapArchive(root: string, parts: string[], range: strin
     if ((await file.read(bytes, 0, bytes.length, start)).bytesRead !== bytes.length) throw new Error('field_tile_invalid');
     return { bytes, start, end, size: stat.size, etag: `"${stat.size}-${Math.trunc(stat.mtimeMs)}"` };
   } finally { await file.close(); }
+}
+
+/** Serve only a bounded XYZ vector tile from a locally installed PMTiles archive. */
+export async function readVectorTile(root: string, parts: string[]) {
+  if (parts.length !== 4 || !/^[a-z0-9][a-z0-9_-]{0,79}\.pmtiles$/.test(parts[0]!)) throw new Error('field_tile_invalid');
+  const coordinates = parts.slice(1);
+  if (coordinates.some(value => !/^(0|[1-9]\d*)$/.test(value))) throw new Error('field_tile_invalid');
+  const [z, x, y] = coordinates.map(Number);
+  if (z === undefined || x === undefined || y === undefined || z > 22 || x >= 2 ** z || y >= 2 ** z) throw new Error('field_tile_invalid');
+  const file = parts[0]!;
+  const source: Source = {
+    getKey: () => path.join(root, file),
+    getBytes: async (offset, length) => {
+      if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || length < 1 || length > 2 * 1024 * 1024) throw new Error('field_range_invalid');
+      const { bytes, etag } = await readMapArchive(root, [file], `bytes=${offset}-${offset + length - 1}`);
+      return { data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, etag };
+    },
+  };
+  const tile = await new PMTiles(source).getZxy(z, x, y);
+  if (!tile || tile.data.byteLength > 2 * 1024 * 1024) throw new Error('field_tile_invalid');
+  return new Uint8Array(tile.data);
 }
 
 /** Only raster XYZ tiles, never arbitrary files, URLs, scripts or directory listings. */

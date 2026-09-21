@@ -7,6 +7,10 @@
     "node": ">=22"
   },
   "scripts": {
+    "predev": "node scripts/copy-maplibre-worker.mjs",
+    "predev:webpack": "node scripts/copy-maplibre-worker.mjs",
+    "prebuild": "node scripts/copy-maplibre-worker.mjs",
+    "prebuild:webpack": "node scripts/copy-maplibre-worker.mjs",
     "dev": "next dev",
     "dev:webpack": "next dev",
     "build": "next build",

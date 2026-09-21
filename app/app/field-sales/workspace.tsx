@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { cloneElement, useEffect, useId, useRef, useState, type FormEvent, type ReactElement } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarBlank, Buildings, Users, Plus, CaretLeft, ArrowRight } from '@/lib/ui/icons';
@@ -110,7 +111,10 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       <div><p className="mb-1 text-sm text-muted-foreground">CRM / Field operations</p>
         <h1 className="text-2xl font-semibold">Field Sales</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Plan project visits, coordinate your team and review on-duty activity.</p></div>
-      {manager && <Button onClick={() => { setError(''); setEditing(null); setDraftId(crypto.randomUUID()); setDialog('schedule'); }} disabled={!people.some(e => e.active) || !projects.some(p => p.active) || !timezone}><Plus aria-hidden />Assign project</Button>}
+      <div className="flex flex-wrap gap-2">
+        {administrator && <Button asChild variant="outline"><Link href="/app/field-sales/live">Open live map</Link></Button>}
+        {manager && <Button onClick={() => { setError(''); setEditing(null); setDraftId(crypto.randomUUID()); setDialog('schedule'); }} disabled={!people.some(e => e.active) || !projects.some(p => p.active) || !timezone}><Plus aria-hidden />Assign project</Button>}
+      </div>
     </header>
     {(error || query.error) && <p role="alert" className="rounded-lg border border-destructive p-3">{error || query.error?.message} <Button variant="outline" onClick={() => void query.refetch()}>Retry</Button></p>}
     {message && <p role="status" className="rounded-lg border p-3">{message}</p>}

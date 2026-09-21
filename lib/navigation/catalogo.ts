@@ -113,6 +113,15 @@ export const NAV_CATALOG = [
     minRole: "agent",
     sidebar: true,
   },
+  {
+    href: "/app/field-sales/live",
+    label: "Field team live map",
+    description: "Monitor on-duty field officers and review each recorded route by date.",
+    icon: "MapPin",
+    group: "crm",
+    section: "O dia a dia da venda",
+    minRole: "admin",
+  },
   // ---- Atendimento — onde o operador passa o dia ----
   {
     href: "/app/inbox",

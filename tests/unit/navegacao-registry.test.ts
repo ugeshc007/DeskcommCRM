@@ -151,6 +151,7 @@ describe("hubSections", () => {
     expect(secoes.map((s) => s.section)).toEqual(["O dia a dia da venda", "Preparar a venda"]);
     expect(secoes.flatMap((s) => s.items.map((i) => i.href))).toEqual([
       "/app/field-sales",
+      "/app/field-sales/live",
       "/app/kanban",
       "/app/contacts",
       "/app/tasks",

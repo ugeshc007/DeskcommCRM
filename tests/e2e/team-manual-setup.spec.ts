@@ -111,11 +111,14 @@ test('admin copies a private invite, employee sets a password without email, and
   const revokedEmail = `revoked-${org}@synthetic.test`;
   await page.getByRole('textbox', { name: 'Emails' }).fill(revokedEmail);
   await page.getByRole('button', { name: 'Send invitations' }).click();
-  const revokedLink = await page.locator('code').innerText();
-  await pool.query(
+  const revokedResult = page.locator('li').filter({ hasText: revokedEmail });
+  await expect(revokedResult).toBeVisible();
+  const revokedLink = await revokedResult.locator('code').innerText();
+  const revokedUpdate = await pool.query(
     'update team_invites set revoked_at=now() where organization_id=$1 and email=$2',
     [org, revokedEmail],
   );
+  expect(revokedUpdate.rowCount).toBe(1);
   const revokedContext = await browser.newContext();
   const revokedPage = await revokedContext.newPage();
   await revokedPage.goto(`http://localhost:${process.env.E2E_PORT ?? '3001'}${new URL(revokedLink).pathname}`);
@@ -129,30 +132,47 @@ test('admin copies a private invite, employee sets a password without email, and
   expect(revokedUser.rows).toHaveLength(0);
   await revokedContext.close();
 
-  await page.goto('/app/team');
-  const revokedInvite = page.getByRole('row').filter({ hasText: revokedEmail });
-  await revokedInvite.getByRole('button', { name: /Ações|Actions/ }).click();
-  await page.getByRole('menuitem', { name: 'Remove from list' }).click();
-  await page.getByRole('dialog', { name: 'Remove revoked invitation?' }).getByRole('button', { name: 'Remove' }).click();
+  const adminMembership = await pool.query(
+    'select role from user_organizations where organization_id=$1 and user_id=$2',
+    [org, adminId],
+  );
+  expect(adminMembership.rows).toEqual([{ role: 'admin' }]);
+  const managementContext = await browser.newContext();
+  await managementContext.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const managementPage = await managementContext.newPage();
+  await managementPage.goto('http://localhost:' + (process.env.E2E_PORT ?? '3001') + '/login');
+  await managementPage.getByRole('textbox', { name: 'Email' }).fill(adminEmail);
+  await managementPage.getByRole('textbox', { name: 'Password' }).fill(password);
+  await managementPage.getByRole('button', { name: 'Sign in' }).click();
+  await managementPage.waitForURL(/\/app(?:\/|$)/);
+  await managementPage.goto('/app/team');
+  await expect(managementPage.getByRole('heading', { name: 'Team' })).toBeVisible({ timeout: 15_000 });
+  const revokedInvite = managementPage.getByRole('row').filter({ hasText: revokedEmail });
+  await expect(revokedInvite).toHaveCount(1, { timeout: 5_000 });
+  await expect(revokedInvite.getByRole('button', { name: /ações|actions/i })).toHaveCount(1, { timeout: 5_000 });
+  await revokedInvite.getByRole('button', { name: /ações|actions/i }).click();
+  await managementPage.getByRole('menuitem', { name: 'Remove from list' }).click();
+  await managementPage.getByRole('dialog', { name: 'Remove revoked invitation?' }).getByRole('button', { name: 'Remove' }).click();
   await expect(revokedInvite).toHaveCount(0);
-  expect((await pool.query('select revoked_at,archived_at from team_invites where organization_id=$1 and email=$2', [org, revokedEmail])).rows[0]).toMatchObject({ revoked_at: expect.any(Date), archived_at: expect.any(Date) });
+  await expect.poll(async () => (await pool.query('select revoked_at,archived_at from team_invites where organization_id=$1 and email=$2', [org, revokedEmail])).rows[0]).toMatchObject({ revoked_at: expect.any(Date), archived_at: expect.any(Date) });
 
   // Team page does not expose the private invitation URL or device bearer.
-  await page.screenshot({ path: testInfo.outputPath('manual-invitation.png'), fullPage: true });
+  await managementPage.screenshot({ path: testInfo.outputPath('manual-invitation.png'), fullPage: true });
 
-  await page.goto('/app/team');
-  const staffRow = page.getByRole('row').filter({ hasText: staffEmail });
+  await managementPage.goto('/app/team');
+  const staffRow = managementPage.getByRole('row').filter({ hasText: staffEmail });
   await staffRow.getByRole('button', { name: 'Android keys' }).click();
-  const deviceDialog = page.getByRole('dialog', { name: /Android access/ });
+  const deviceDialog = managementPage.getByRole('dialog', { name: /Android access/ });
   await expect(deviceDialog).toBeVisible();
   await deviceDialog.getByRole('textbox', { name: 'Phone name' }).fill('Synthetic Samsung');
   await deviceDialog.getByRole('button', { name: 'Create device key' }).click();
   const deviceKey = await deviceDialog.getByRole('textbox', { name: 'One-time device key' }).inputValue();
   expect(deviceKey).toMatch(/^fld_[a-f0-9]{64}$/);
   await deviceDialog.getByRole('button', { name: 'Copy key' }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(deviceKey);
+  expect(await managementPage.evaluate(() => navigator.clipboard.readText())).toBe(deviceKey);
   await deviceDialog.getByRole('textbox', { name: 'One-time device key' }).evaluate(element => {
     (element as HTMLInputElement).value = '[private key hidden]';
   });
-  await page.screenshot({ path: testInfo.outputPath('manual-android-key.png'), fullPage: true });
+  await managementPage.screenshot({ path: testInfo.outputPath('manual-android-key.png'), fullPage: true });
+  await managementContext.close();
 });

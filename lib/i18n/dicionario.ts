@@ -6065,6 +6065,7 @@ const DICIONARIO_BASE: Traducoes = {
   "Adicione ao menos um email.": { es: "Agrega al menos un correo." },
   "Máximo 20 emails por convite.": { es: "Máximo 20 correos por invitación." },
   "convite(s) enviado(s)": { es: "invitación(es) enviada(s)" },
+  "convite(s) criado(s)": { es: "invitación(es) creada(s)" },
   "falha(s).": { es: "falla(s)." },
   "Enviando…": { es: "Enviando…" },
   "Enviar convites": { es: "Enviar invitaciones" },
@@ -6072,6 +6073,24 @@ const DICIONARIO_BASE: Traducoes = {
   "Email enviado.": { es: "Correo enviado." },
   "Resend não configurado — link copiável abaixo (DEV).": {
     es: "Resend no configurado — enlace copiable abajo (DEV).",
+  },
+  "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.": {
+    es: "¿Sin servicio de correo? Crea la invitación y comparte su enlace privado. Cada persona establece su propia contraseña al abrirlo.",
+  },
+  "Se o cadastro exigir confirmação por email, configure a confirmação antes de usar o link.": {
+    es: "Si el registro requiere confirmación por correo, configúrala antes de usar el enlace.",
+  },
+  "Convites criados": { es: "Invitaciones creadas" },
+  "Email não enviado. Compartilhe este link somente com a pessoa convidada.": {
+    es: "Correo no enviado. Comparte este enlace solo con la persona invitada.",
+  },
+  "Copiar link de acesso": { es: "Copiar enlace de acceso" },
+  "Link de acesso copiado.": { es: "Enlace de acceso copiado." },
+  "Não foi possível copiar. Selecione o link abaixo e copie manualmente.": {
+    es: "No se pudo copiar. Selecciona el enlace de abajo y cópialo manualmente.",
+  },
+  "Expira em 24 horas. Quem receber o link deve usar o email acima e definir a própria senha.": {
+    es: "Caduca en 24 horas. La persona destinataria debe usar el correo anterior y establecer su propia contraseña.",
   },
   "Falhas": { es: "Fallas" },
   "Resultados aparecerão aqui após o envio.": { es: "Los resultados aparecerán aquí después del envío." },

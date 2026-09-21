@@ -2000,6 +2000,13 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 
 ### Field Sales simplified mobile and Live view — 2026-09-20
 
+- [P0] No-email staff setup: the team invitation screen exposes a private, copyable link and
+  explains that the recipient sets their own password; the Field Sales device dialog exposes a
+  one-time copy action for the Android key. Component tests cover both copy actions without
+  putting credentials in toast messages. `team-manual-setup.spec.ts` passed against a local
+  production build and synthetic organization, including actual clipboard contents; screenshots
+  mask the bearer values. The real Android app's entry screen remains a separate pilot check.
+
 - [P0] Android fresh connection remains device-key based. Connected home shows only today's real
   assignment selector and Punch In/Out, with notification/profile icons and server-first sign-out.
 - [P0] Punch-in submits the chosen project/schedule/date; a foreign, canceled or nonexistent

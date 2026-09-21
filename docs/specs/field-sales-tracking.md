@@ -4,6 +4,12 @@ Status: implementation started; NOT deployed. Evidence, not phase names, determi
 
 ## Current development checkpoint — 2026-09-20
 
+- Staff setup without an email gateway uses the CRM's private invitation link; the employee
+  chooses their own CRM password. An enrolled employee then creates and copies a one-time
+  Android device key in **Field Sales → My Android devices**. The Android app does not accept
+  a short PIN or the CRM password as its device credential. This UI clarification does not
+  create accounts or device keys automatically.
+
 - Android's connected home is intentionally limited to today's real assigned-project selector,
   Punch In and Punch Out. Visits, photos, breaks, manual reconnect and manual work actions are
   no longer exposed on the home screen; background GPS and retry remain automatic.

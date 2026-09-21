@@ -11,6 +11,7 @@ export function FieldDevices({ organizationId, userId }: { organizationId: strin
   const cache = useQueryClient(), key = ['field-devices', organizationId, userId];
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [issued, setIssued] = useState<{ token: string; expires_at: string } | null>(null);
+  const [copied, setCopied] = useState(false), [copyError, setCopyError] = useState('');
   const [revoke, setRevoke] = useState<Device | null>(null);
   const devices = useQuery({ queryKey: key, gcTime: 0, queryFn: async (): Promise<Device[]> => {
     const response = await fetch('/api/v1/field-sales/devices', { cache: 'no-store' });
@@ -25,7 +26,7 @@ export function FieldDevices({ organizationId, userId }: { organizationId: strin
       const response = await fetch('/api/v1/field-sales/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? 'Device change failed. Refresh the list before retrying.');
-      if (body.data.token) setIssued(body.data);
+      if (body.data.token) { setIssued(body.data); setCopied(false); setCopyError(''); }
       setRevoke(null); await cache.invalidateQueries({ queryKey: key });
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Device change failed.'); }
     finally { setBusy(false); }
@@ -33,6 +34,15 @@ export function FieldDevices({ organizationId, userId }: { organizationId: strin
   function connect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget);
     void mutate({ operation: 'connect', label: String(form.get('label') ?? '') });
+  }
+  async function copyDeviceKey() {
+    if (!issued) return;
+    try {
+      await navigator.clipboard.writeText(issued.token);
+      setCopied(true); setCopyError('');
+    } catch {
+      setCopyError('Copy failed. Select the key field and copy it manually.');
+    }
   }
   return <section className="max-w-3xl space-y-5">
     <div><h2 className="text-lg font-semibold">Connect your Android phone</h2>
@@ -42,7 +52,7 @@ export function FieldDevices({ organizationId, userId }: { organizationId: strin
       <label className="grid min-w-0 flex-1 gap-2 text-sm font-medium">Phone name<Input name="label" required maxLength={100} placeholder="My work phone" autoComplete="off"/></label>
       <Button disabled={busy || !!issued}>Create device key</Button>
     </form>
-    <p className="text-sm text-muted-foreground">Enter your CRM HTTPS address and the key in the Android app. Keys expire after 30 days. Creating a key never starts GPS tracking.</p>
+    <p className="text-sm text-muted-foreground">Enter your CRM HTTPS address and this one-time key in the Android app. It is not a short login PIN or your CRM password. Keys expire after 30 days. Creating a key never starts GPS tracking.</p>
     {devices.isPending && <p role="status">Loading your devices…</p>}
     {devices.data?.length === 0 && <p>No devices connected yet.</p>}
     {devices.data?.map(device => <article className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4" key={device.id}>
@@ -51,7 +61,8 @@ export function FieldDevices({ organizationId, userId }: { organizationId: strin
     </article>)}
     <Dialog open={!!issued} onOpenChange={open => { if (!open) setIssued(null); }}><DialogContent><DialogHeader><DialogTitle>One-time device key</DialogTitle><DialogDescription>Enter this key only in your own Android app. It is not saved in browser storage and cannot be displayed again after closing.</DialogDescription></DialogHeader>
       <label className="grid gap-2 text-sm">Device key<Input readOnly type="password" autoComplete="off" value={issued?.token ?? ''} onFocus={event => event.target.select()}/></label>
-      <p className="text-sm text-muted-foreground">Select and copy the field to transfer it securely. If lost, revoke this device and create another key.</p>
+      <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" onClick={() => void copyDeviceKey()}>{copied ? 'Copied' : 'Copy device key'}</Button><span role="status" className="text-sm">{copyError}</span></div>
+      <p className="text-sm text-muted-foreground">Transfer this key privately to your Android phone. You can also select and copy the field manually. If lost, revoke this device and create another key.</p>
       <Button onClick={() => setIssued(null)}>Done — hide key</Button>
     </DialogContent></Dialog>
     <Dialog open={!!revoke} onOpenChange={open => { if (!open) setRevoke(null); }}><DialogContent><DialogHeader><DialogTitle>Revoke {revoke?.label}?</DialogTitle><DialogDescription>The phone will lose server access. It stops collection when its next sync detects revocation; an offline phone cannot receive this immediately. Ask the employee to punch out first.</DialogDescription></DialogHeader>

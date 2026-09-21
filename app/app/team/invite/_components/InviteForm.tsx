@@ -36,6 +36,15 @@ export function InviteForm() {
   const [result, setResult] = useState<ResultState | null>(null);
   const invite = useInviteMembers();
 
+  const copyInviteLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(t("Link de acesso copiado."));
+    } catch {
+      toast.error(t("Não foi possível copiar. Selecione o link abaixo e copie manualmente."));
+    }
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const emails = emailsRaw
@@ -59,7 +68,7 @@ export function InviteForm() {
       const ok = res.data.sent.length;
       const ko = res.data.failed.length;
       toast.success(
-        `${ok} ${t("convite(s) enviado(s)")}${ko > 0 ? `, ${ko} ${t("falha(s).")}` : "."}`,
+        `${ok} ${t("convite(s) criado(s)")}${ko > 0 ? `, ${ko} ${t("falha(s).")}` : "."}`,
       );
       setEmailsRaw("");
     } catch {
@@ -70,6 +79,12 @@ export function InviteForm() {
   return (
     <div className="grid gap-6 md:grid-cols-[1fr,2fr]">
       <form onSubmit={onSubmit} className="space-y-4">
+        <p className="rounded-md border bg-muted/40 p-3 text-sm">
+          {t("Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.")}
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {t("Se o cadastro exigir confirmação por email, configure a confirmação antes de usar o link.")}
+          </span>
+        </p>
         <div className="space-y-2">
           <Label htmlFor="emails">Emails</Label>
           <Textarea
@@ -119,7 +134,7 @@ export function InviteForm() {
             {result.sent.length > 0 ? (
               <section>
                 <h2 className="text-sm font-semibold">
-                  {t("Enviados")} ({result.sent.length})
+                  {t("Convites criados")} ({result.sent.length})
                 </h2>
                 <ul className="mt-2 space-y-2 text-sm">
                   {result.sent.map((s) => (
@@ -128,11 +143,17 @@ export function InviteForm() {
                       <div className="text-xs text-muted-foreground">
                         {s.email_dispatched
                           ? t("Email enviado.")
-                          : t("Resend não configurado — link copiável abaixo (DEV).")}
+                          : t("Email não enviado. Compartilhe este link somente com a pessoa convidada.")}
                       </div>
-                      {!s.email_dispatched ? (
-                        <code className="mt-1 block text-xs break-all">{s.accept_url}</code>
-                      ) : null}
+                      <div className="mt-2 space-y-2">
+                        <code className="block select-all text-xs break-all">{s.accept_url}</code>
+                        <Button type="button" variant="outline" size="sm" onClick={() => void copyInviteLink(s.accept_url)}>
+                          {t("Copiar link de acesso")}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          {t("Expira em 24 horas. Quem receber o link deve usar o email acima e definir a própria senha.")}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>

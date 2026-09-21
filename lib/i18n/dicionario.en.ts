@@ -4850,6 +4850,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Adicione ao menos um email.": "Add at least one email.",
   "Máximo 20 emails por convite.": "Maximum 20 emails per invitation.",
   "convite(s) enviado(s)": "invitation(s) sent",
+  "convite(s) criado(s)": "invitation(s) created",
   "falha(s).": "failure(s).",
   "Enviando…": "Sending…",
   "Enviar convites": "Send invitations",
@@ -4857,6 +4858,19 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Email enviado.": "Email sent.",
   "Resend não configurado — link copiável abaixo (DEV).":
     "Resend not configured — copyable link below (DEV).",
+  "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.":
+    "No email gateway? Create the invitation and share its private link. Each person sets their own password when opening the link.",
+  "Se o cadastro exigir confirmação por email, configure a confirmação antes de usar o link.":
+    "If signup requires email confirmation, configure confirmation before using the link.",
+  "Convites criados": "Invitations created",
+  "Email não enviado. Compartilhe este link somente com a pessoa convidada.":
+    "Email not sent. Share this link only with the invited person.",
+  "Copiar link de acesso": "Copy setup link",
+  "Link de acesso copiado.": "Setup link copied.",
+  "Não foi possível copiar. Selecione o link abaixo e copie manualmente.":
+    "Could not copy. Select the link below and copy it manually.",
+  "Expira em 24 horas. Quem receber o link deve usar o email acima e definir a própria senha.":
+    "Expires in 24 hours. The recipient must use the email above and set their own password.",
   Falhas: "Failures",
   "Resultados aparecerão aqui após o envio.": "Results will appear here after submission.",
   "Erro ao carregar membros.": "Error loading members.",

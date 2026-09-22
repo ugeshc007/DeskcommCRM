@@ -41,8 +41,8 @@ refuses a missing/failed/cancelled check or mismatched image revision. It does
 not rebuild on CT102. The local app and migration can be prepared while CI is
 running, but the production switch must wait for a green gate.
 
-This workflow currently carries migrations `0383` and `0384` for the Field Sales
-presence and project-customer release. Before a later release with schema changes, update the explicit
+This workflow currently carries migrations `0383`, `0384`, and `0385` for Field Sales
+device presence, project customers, and activity notes. Before a later release with schema changes, update the explicit
 migration file in the workflow and deploy script; do not assume the old file
 covers a new schema. This is a **one-click release after checks**, not an
 instantaneous release or a Docker container running the pipeline. Build/cache

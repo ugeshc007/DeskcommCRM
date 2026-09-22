@@ -416,6 +416,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     // "já registrado".
     const { error } = await svc.auth.admin.createUser({
       email: FRESH_EMAIL,
+      user_metadata: { locale: "pt-BR" },
       password: base.password,
       email_confirm: true,
     });

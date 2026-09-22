@@ -298,6 +298,9 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     await connectHandles(page, classifyId, endNoReplyId, "else"); // edge-5 → class_match no_reply
     await connectHandles(page, classifyId, endFallbackId, "else"); // edge-6 → always (fica no default)
     await expect(page.locator(".react-flow__edge")).toHaveCount(6);
+    // Agora o grafo tem arestas: organizar separa os três ramos e seus rótulos.
+    await page.getByTestId("auto-fit-flow").click();
+    await page.waitForTimeout(400);
 
     await setEdgeCondition(page, "edge-4", "positivo");
     await setEdgeCondition(page, "edge-5", "Sem resposta");

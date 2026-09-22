@@ -263,7 +263,7 @@ async function removerLogoSeHouver(page: Page, tela: string, escopo: Escopo): Pr
     .getByRole("button", { name: /^(remover|remove)$/i });
   if ((await remover.count()) === 0) return;
   await remover.click();
-  await expect(page.getByText(/logo removido/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/logo removido|logo removed/i)).toBeVisible({ timeout: 15_000 });
 }
 
 /** O que um `<img>` do produto mostra, medido por ferramenta. */
@@ -656,7 +656,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
     });
     await expect(remover, "precondição: a empresa precisa entrar neste caso COM logo próprio").toBeVisible();
     await remover.click();
-    await expect(page.getByText(/logo removido/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo removido|logo removed/i)).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/app/inbox");
     const barra = await logoDaBarra(page);
@@ -682,7 +682,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
       "precondição: a instalação precisa entrar neste caso COM logo próprio",
     ).toBeVisible();
     await remover.click();
-    await expect(page.getByText(/logo removido/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo removido|logo removed/i)).toBeVisible({ timeout: 15_000 });
 
     const noLogin = await logoDoLogin(browser);
     // `null` (nenhuma imagem) ou uma URL que não é do bucket (o `APP_LOGO_URL`

@@ -11,3 +11,4 @@ explicit locales and managed subscription mode without removing behavior checks.
 
 The expired support-session page keeps the signed-in user’s language for its exit button.
 Metrics labels now follow the same resolved organization language as the page, including users without a personal preference.
+The English logo-removal confirmation now clearly states that the logo was removed.

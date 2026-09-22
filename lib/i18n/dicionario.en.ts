@@ -2575,7 +2575,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Do jeito que está, esta cor não chegaria à tela: o sistema continuaria com as cores padrão dele.":
     "As it is, this color would not reach the screen: the system would continue with its default colors.",
   "Logo atualizado.": "Logo updated.",
-  "Logo removido.": "Soon removed.",
+  "Logo removido.": "Logo removed.",
   "PNG ou JPG, até": "PNG or JPG, even",
   "KB. Prefira fundo transparente. SVG não é aceito: ele pode executar código quando aberto direto pelo endereço da imagem.":
     "KB. Prefer transparent background. SVG is not accepted: it can execute code when opened directly from the image address.",

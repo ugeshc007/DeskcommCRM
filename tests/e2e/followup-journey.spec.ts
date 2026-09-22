@@ -294,16 +294,19 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     // Saem todas da bolinha "nenhuma delas" para nascerem `always`, como antes —
     // as duas primeiras viram class_match logo abaixo, pelo painel da aresta,
     // que é o que este trecho da jornada existe para exercitar.
-    await connectHandles(page, classifyId, endPositivoId, "else"); // edge-4 → class_match positivo
-    await connectHandles(page, classifyId, endNoReplyId, "else"); // edge-5 → class_match no_reply
-    await connectHandles(page, classifyId, endFallbackId, "else"); // edge-6 → always (fica no default)
-    await expect(page.locator(".react-flow__edge")).toHaveCount(6);
-    // Agora o grafo tem arestas: organizar separa os três ramos e seus rótulos.
+    // Configura cada ramo antes de criar o próximo. Três arestas provisórias
+    // na mesma saída "Sempre" sobrepõem os rótulos e interceptam o clique.
+    await connectHandles(page, classifyId, endPositivoId, "else"); // edge-4
     await page.getByTestId("auto-fit-flow").click();
     await page.waitForTimeout(400);
-
     await setEdgeCondition(page, "edge-4", "positivo");
+    await connectHandles(page, classifyId, endNoReplyId, "else"); // edge-5
+    await page.getByTestId("auto-fit-flow").click();
+    await page.waitForTimeout(400);
     await setEdgeCondition(page, "edge-5", "Sem resposta");
+    await connectHandles(page, classifyId, endFallbackId, "else"); // edge-6 → always
+    await expect(page.locator(".react-flow__edge")).toHaveCount(6);
+
     await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
     await expect(page.getByTestId("edge-config-sheet")).toHaveCount(0);
 

@@ -39,17 +39,22 @@ switched=0
 voice_started=0
 rollback() {
   result=$?
-  trap - ERR
+  trap - EXIT
+  if [[ "$result" == 0 ]]; then exit 0; fi
   if [[ "$switched" == 1 ]]; then
     echo 'Release failed; restoring previous app image' >&2
     CT102_APP_IMAGE="$previous_image" CT102_APP_VERSION="$previous_version" compose up -d --no-deps app || true
   fi
   if [[ "$voice_started" == 1 ]]; then
-    docker stop "$(cat "$release_dir/new-voice-container.txt")" || true
+    if [[ -f "$release_dir/new-voice-container.txt" ]]; then
+      docker stop "$(cat "$release_dir/new-voice-container.txt")" || true
+    else
+      compose stop field-voice || true
+    fi
   fi
   exit "$result"
 }
-trap rollback ERR
+trap rollback EXIT
 
 # Existing kit resolves the schema connection from CT102's private .env.
 # Never print that URL or any container environment.
@@ -80,12 +85,12 @@ export COMPOSE_PROFILES=field-voice
 compose config --quiet
 existing_voice="$(compose ps -a -q field-voice)"
 [[ -z "$existing_voice" ]] || { echo 'A voice sidecar already exists; manual review is required before replacing it' >&2; exit 1; }
+voice_started=1
 compose up -d --no-deps field-voice
 voice_container="$(compose ps -q field-voice)"
 [[ "$voice_container" =~ ^[a-f0-9]{64}$ ]] || { echo 'Voice sidecar did not start' >&2; exit 1; }
 printf '%s\n' "$voice_container" > "$release_dir/new-voice-container.txt"
 chmod 600 "$release_dir/new-voice-container.txt"
-voice_started=1
 voice_healthy=0
 for attempt in $(seq 1 30); do
   if [[ "$(docker inspect "$voice_container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')" == healthy ]]; then

@@ -30,6 +30,7 @@ describe('CT102 release safety', () => {
     expect(rollback).toContain('previous-app.txt');
     expect(rollback).toContain('docker compose -f docker-compose.prod.yml');
     expect(deploy).toContain('voice_healthy');
+    expect(deploy).toContain('trap rollback EXIT');
     expect(rollback).toContain('new-voice-container.txt');
   });
 });

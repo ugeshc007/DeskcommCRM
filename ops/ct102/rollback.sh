@@ -29,7 +29,7 @@ for attempt in $(seq 1 30); do
     if [[ -f "$voice_state" ]]; then
       voice_container="$(cat "$voice_state")"
       [[ "$voice_container" =~ ^[a-f0-9]{64}$ ]] || { echo 'Invalid voice rollback state' >&2; exit 1; }
-      docker stop "$voice_container"
+      docker stop "$voice_container" || true
     fi
     echo "Previous CT102 app restored at ${previous[1]}"
     exit 0

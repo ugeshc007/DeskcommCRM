@@ -60,8 +60,8 @@ test('admin copies a private invite, employee sets a password without email, and
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/login');
   await page.getByRole('textbox', { name: 'Email' }).fill(adminEmail);
-  await page.getByRole('textbox', { name: 'Password' }).fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.locator('#password').fill(password);
+  await page.getByRole('button', { name: /Sign in|Entrar/i }).click();
   await page.waitForURL(/\/app(?:\/|$)/);
   await page.goto('/app/team/invite');
 
@@ -143,8 +143,8 @@ test('admin copies a private invite, employee sets a password without email, and
   const managementPage = await managementContext.newPage();
   await managementPage.goto('http://localhost:' + (process.env.E2E_PORT ?? '3001') + '/login');
   await managementPage.getByRole('textbox', { name: 'Email' }).fill(adminEmail);
-  await managementPage.getByRole('textbox', { name: 'Password' }).fill(password);
-  await managementPage.getByRole('button', { name: 'Sign in' }).click();
+  await managementPage.locator('#password').fill(password);
+  await managementPage.getByRole('button', { name: /Sign in|Entrar/i }).click();
   await managementPage.waitForURL(/\/app(?:\/|$)/);
   await managementPage.goto('/app/team');
   await expect(managementPage.getByRole('heading', { name: 'Team' })).toBeVisible({ timeout: 15_000 });

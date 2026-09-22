@@ -28,7 +28,7 @@ async function login(page: Page, c: Fixture) {
   await page.locator("#email").fill(c.email);
   await page.locator("#password").fill(c.password);
   await page.getByRole("button", { name: /entrar|sign in/i }).click();
-  await page.waitForURL(/\/app\//, { timeout: 60_000 });
+  await page.waitForURL(/\/(?:app|admin)\//, { timeout: 60_000 });
 }
 
 test.describe.configure({ mode: "serial", timeout: 180_000 });

@@ -236,7 +236,9 @@ test.describe("kit visual da Agenda", () => {
     await expect(painel).toHaveAttribute("data-tempo", "confirmando", { timeout: ESPERA });
     await painel.getByTestId("confirmar-marcacao").click();
     await expect(painel).toHaveAttribute("data-tempo", "marcado", { timeout: ESPERA });
-    await expect(painel.getByText("Marcado.")).toBeVisible();
+    // A vitrine não tem provider de idioma próprio: respeita o padrão da
+    // instalação. O estado e a confirmação devem aparecer em qualquer idioma.
+    await expect(painel.getByRole("heading", { name: /^(Marcado\.|Marked\.|Agendado\.)$/ })).toBeVisible();
   });
 
   test("quem pediu para não receber mensagem: marca igual, mas a tela avisa ANTES", async () => {

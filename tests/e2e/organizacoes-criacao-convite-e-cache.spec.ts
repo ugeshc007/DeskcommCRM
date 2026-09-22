@@ -17,7 +17,7 @@ async function login(page: Page, email: string) {
   await page.getByLabel(/e-?mail/i).fill(email);
   await page.getByLabel(/senha/i).fill(password);
   await page.getByRole("button", { name: /entrar/i }).click();
-  await page.waitForURL(/\/app(\/|$)/, { timeout: 60_000 });
+  await page.waitForURL(/\/(?:app|admin)(\/|$)/, { timeout: 60_000 });
 }
 async function conversation(org: string, name: string) {
   const contact = await insert("contacts", { organization_id: org, name, display_name: name });
@@ -39,11 +39,12 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
   let guestContext;
   try {
     for (const email of [ownerEmail, guestEmail]) {
-      const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
+      const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true,
+        user_metadata: { locale: "pt-BR" } });
       if (error || !data.user) throw error ?? new Error("user missing");
       users.push(data.user.id);
     }
-    const orgA = await insert("organizations", { display_name: `Empresa A ${suffix}`, legal_name: `Empresa A ${suffix}`, slug: `a-${suffix}`, onboarded_at: new Date().toISOString() });
+    const orgA = await insert("organizations", { display_name: `Empresa A ${suffix}`, legal_name: `Empresa A ${suffix}`, slug: `a-${suffix}`, locale: "pt-BR", onboarded_at: new Date().toISOString() });
     orgs.push(orgA);
     for (const user of users) await insert("user_organizations", { organization_id: orgA, user_id: user, role: "admin", accepted_at: new Date().toISOString() });
     const pa = await db.from("platform_admins").insert({ user_id: users[0], granted_by: users[0], scope: "full", mfa_required: false, reason: "Local E2E fixture" });
@@ -52,6 +53,8 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
     orgs.push(forgedTarget);
     await conversation(orgA, `Cliente A ${suffix}`);
     await login(page, ownerEmail);
+    // Platform admins land on /admin; this scenario exercises the tenant UI.
+    await page.goto("/app/inbox");
     await page.getByTestId("tenant-switcher").click();
     await page.getByRole("menuitem", { name: "Gerenciar organizações" }).click();
     await page.getByRole("link", { name: /Novo tenant/i }).click();
@@ -90,6 +93,8 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
     const created = (await (await response).json()).data;
     expect(created.id).toBeTruthy();
     const orgB = created.id as string;
+    const idiomaDaOrg = await db.from("organizations").update({ locale: "pt-BR" }).eq("id", orgB);
+    if (idiomaDaOrg.error) throw idiomaDaOrg.error;
     expect(created.id).toBe(lost[0]!.id);
     expect(created.owner_invitation.accept_url).toBe(lost[0]!.owner_invitation.accept_url);
     expect(lost.every(item => item.id === orgB)).toBe(true);

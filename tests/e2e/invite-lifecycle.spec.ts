@@ -143,6 +143,12 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     // persistente, os testes depois rodam rápido.
     test.setTimeout(600_000);
     await resetInvitee(); // convidado começa SEM acesso
+    // Esta spec afirma texto em português; a conta sintética não herda idioma
+    // de uma organização antes de aceitar o convite.
+    const idioma = await svc.auth.admin.updateUserById(inv.invitee_id, {
+      user_metadata: { locale: "pt-BR" },
+    });
+    if (idioma.error) throw idioma.error;
 
     // (a) telas autenticadas de /app + endpoints — como agent (membro, sem MFA)
     const ctx = await browser.newContext();
@@ -203,8 +209,8 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
       .toBe(true);
     // Vamos direto ao accept_url (fluxo real do link do email).
     await page.goto(tokenPath(acceptUrl));
-    await expect(page.getByRole("heading", { name: /Aceitar convite/i })).toBeVisible();
-    await page.getByRole("button", { name: /Aceitar convite/i }).click();
+    await expect(page.getByRole("heading", { name: /Aceitar convite|Accept invitation/i })).toBeVisible();
+    await page.getByRole("button", { name: /Aceitar convite|Accept invitation/i }).click();
     await page.waitForURL(/\/app\/inbox/);
 
     // depois do aceite: membership agent criada

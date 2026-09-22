@@ -101,8 +101,8 @@ async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  // Sem sessão, a instalação usa inglês; após login vale o locale da fixture.
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // Sem sessão, vale o idioma configurado nesta instalação de teste.
+  await page.getByRole("button", { name: /^(Sign in|Entrar)$/i }).click();
   await page.waitForURL(/\/app\//);
 }
 
@@ -116,7 +116,7 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: /^(Sign in|Entrar)$/i }).click();
   await page.waitForURL(/\/login\/mfa/);
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -124,11 +124,11 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
       await page.waitForTimeout(msUntilNextTotpWindow() + 200);
     }
     const code = generateTotp(secret);
-    const firstDigit = page.getByRole("textbox", { name: "Digit 1", exact: true });
+    const firstDigit = page.locator('input[aria-label="Digit 1"], input[aria-label="Dígito 1"]');
     await firstDigit.click();
     await page.keyboard.type(code, { delay: 40 });
     try {
-      await page.waitForURL(/\/app\//, { timeout: 8_000 });
+      await page.waitForURL(/\/(?:app|admin)\//, { timeout: 8_000 });
       return;
     } catch {
       await page.waitForTimeout(msUntilNextTotpWindow() + 200);

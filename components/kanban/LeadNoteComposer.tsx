@@ -36,7 +36,7 @@ export function LeadNoteComposer({ leadId, pipelineId }: { leadId: string; pipel
 
   return (
     <div className="space-y-2 border-b border-border py-3">
-      <label htmlFor={`lead-note-${leadId}`} className="text-xs font-medium">
+      <label htmlFor={`lead-note-${leadId}`} className="block text-xs font-medium">
         {t("Adicionar nota")}
       </label>
       <Textarea

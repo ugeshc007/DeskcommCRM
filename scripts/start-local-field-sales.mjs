@@ -19,6 +19,9 @@ for (const key of ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL', 'SUPABASE_DB_URL'
   const host = new URL(value).hostname;
   if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) throw new Error('Refusing non-local Supabase configuration');
 }
+// Invitation and callback links must point to this local dev server, not the
+// port of another checkout whose environment file supplied the credentials.
+process.env.NEXT_PUBLIC_APP_URL = `http://127.0.0.1:${port}`;
 delete process.env.NODE_OPTIONS;
 delete process.env.__NEXT_PROCESSED_ENV;
 process.env.NEXT_TELEMETRY_DISABLED = '1';

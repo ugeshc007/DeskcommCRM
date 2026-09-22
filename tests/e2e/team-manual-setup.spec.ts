@@ -55,8 +55,8 @@ test.afterAll(async () => {
   if (adminId) await auth.auth.admin.deleteUser(adminId);
 });
 
-test('admin copies a private invite, employee sets a password without email, and device key remains separate', async ({ page, context, browser }, testInfo) => {
-  test.setTimeout(90_000);
+test('admin copies a private invite, employee sets a password without email, and device key remains separate', async ({ page, context, browser, baseURL }, testInfo) => {
+  test.setTimeout(120_000);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/login');
   await page.getByRole('textbox', { name: 'Email' }).fill(adminEmail);
@@ -82,7 +82,7 @@ test('admin copies a private invite, employee sets a password without email, and
   const staffPage = await staffContext.newPage();
   // The test server may use E2E_PORT while NEXT_PUBLIC_APP_URL still points to
   // the default port. Keep the signed path, but use this isolated test server.
-  await staffPage.goto(`http://localhost:${process.env.E2E_PORT ?? '3001'}${new URL(link).pathname}`);
+  await staffPage.goto(`${baseURL}${new URL(link).pathname}`);
   await expect(staffPage.getByRole('heading', { name: 'You were invited' })).toBeVisible();
   // The existing-account detour must preserve the invitation (the reported bug).
   await staffPage.getByRole('link', { name: 'Login' }).click();
@@ -122,7 +122,7 @@ test('admin copies a private invite, employee sets a password without email, and
   expect(revokedUpdate.rowCount).toBe(1);
   const revokedContext = await browser.newContext();
   const revokedPage = await revokedContext.newPage();
-  await revokedPage.goto(`http://localhost:${process.env.E2E_PORT ?? '3001'}${new URL(revokedLink).pathname}`);
+  await revokedPage.goto(`${baseURL}${new URL(revokedLink).pathname}`);
   await revokedPage.getByRole('link', { name: "I don't have an account yet" }).click();
   await revokedPage.getByRole('textbox', { name: 'Your name' }).fill('Rejected Salesperson');
   await revokedPage.getByLabel('Password', { exact: true }).fill(password);
@@ -141,7 +141,7 @@ test('admin copies a private invite, employee sets a password without email, and
   const managementContext = await browser.newContext();
   await managementContext.grantPermissions(['clipboard-read', 'clipboard-write']);
   const managementPage = await managementContext.newPage();
-  await managementPage.goto('http://localhost:' + (process.env.E2E_PORT ?? '3001') + '/login');
+  await managementPage.goto(`${baseURL}/login`);
   await managementPage.getByRole('textbox', { name: 'Email' }).fill(adminEmail);
   await managementPage.locator('#password').fill(password);
   await managementPage.getByRole('button', { name: /Sign in|Entrar/i }).click();
@@ -154,6 +154,7 @@ test('admin copies a private invite, employee sets a password without email, and
   await revokedInvite.getByRole('button', { name: /ações|actions/i }).click();
   await managementPage.getByRole('menuitem', { name: 'Remove from list' }).click();
   await managementPage.getByRole('dialog', { name: 'Remove revoked invitation?' }).getByRole('button', { name: 'Remove' }).click();
+  await expect(managementPage.getByText('Invitation removed from the list.')).toBeVisible({ timeout: 15_000 });
   await expect(revokedInvite).toHaveCount(0);
   await expect.poll(async () => (await pool.query('select revoked_at,archived_at from team_invites where organization_id=$1 and email=$2', [org, revokedEmail])).rows[0]).toMatchObject({ revoked_at: expect.any(Date), archived_at: expect.any(Date) });
 

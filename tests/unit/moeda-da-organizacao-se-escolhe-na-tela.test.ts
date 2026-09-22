@@ -46,7 +46,9 @@ function adminFalso() {
   return {
     from: () => ({
       select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: { settings: {} }, error: null }) }),
+        eq: () => ({ maybeSingle: async () => ({ data: {
+          settings: {}, onboarding_state: { welcome: { completed: true }, team: { completed: true } },
+        }, error: null }) }),
       }),
       update: (linha: Record<string, unknown>) => {
         atualizado = linha;
@@ -91,6 +93,22 @@ beforeEach(() => {
     role: "admin",
   } as never);
   vi.mocked(createAdminClient).mockReturnValue(adminFalso() as never);
+});
+
+describe("o país e fuso da organização", () => {
+  it("salva o país que a operação de campo lê sem apagar o onboarding existente", async () => {
+    const { updateTenant } = await import("@/app/actions/settings/updateTenant");
+    expect(await updateTenant(entrada({ country_code: "AE", timezone: "Asia/Dubai" }) as never)).toEqual({ ok: true });
+    expect(atualizado).toMatchObject({ timezone: "Asia/Dubai", onboarding_state: {
+      welcome: { completed: true, country_code: "AE" }, team: { completed: true },
+    } });
+    expect(orgIdAtualizado).toBe(ORG_ID);
+  });
+
+  it("recusa país e fuso inválidos antes da escrita", () => {
+    expect(tenantSchema.safeParse(entrada({ country_code: "XX" })).success).toBe(false);
+    expect(tenantSchema.safeParse(entrada({ timezone: "not/a-zone" })).success).toBe(false);
+  });
 });
 
 describe("a moeda da organização", () => {

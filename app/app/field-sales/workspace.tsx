@@ -262,6 +262,12 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       {dialog === 'customers' && customerProjectId && <div className="space-y-4">
         <p className="text-sm text-muted-foreground">The optional due balance uses your CRM currency. A negative balance is advance credit. A new CSV import replaces balances for matching shop codes; past collection records remain unchanged.</p>
         {message && <p role="status" className="text-sm">{message}</p>}
+        <div className="max-h-60 space-y-2 overflow-y-auto"><h3 className="font-medium">Project customers ({customerRoster.data?.length ?? 0})</h3>
+          {customerRoster.isPending && <p>Loading shops…</p>}{customerRoster.error && <p role="alert">{customerRoster.error.message}</p>}
+          {!customerRoster.data?.length && !customerRoster.isPending && <p className="text-sm text-muted-foreground">No shops added yet.</p>}
+          {customerRoster.data?.map(customer => <div key={customer.id} className="rounded-lg border p-2 text-sm"><strong>{customer.shop_name}</strong> · {customer.customer_code}
+            <p className="text-muted-foreground">{customer.balance_cents === null ? 'Due not specified' : Number(customer.balance_cents) < 0 ? `Advance credit: ${customer.currency} ${(Math.abs(Number(customer.balance_cents)) / 100).toFixed(2)}` : `Due: ${customer.currency} ${(Number(customer.balance_cents) / 100).toFixed(2)}`}</p></div>)}
+        </div>
         <form className="space-y-3 rounded-lg border p-3" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget);
           const amount = String(form.get('due') ?? '').trim();
           if (amount && !/^-?\d{1,10}(?:\.\d{1,2})?$/.test(amount)) { setError('Enter a plain amount with up to two decimal places.'); return; }
@@ -278,14 +284,9 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <form className="space-y-2 rounded-lg border p-3" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget);
           form.set('project_id', customerProjectId); void saveCustomers(form); }}>
           <h3 className="font-medium">Bulk upload CSV</h3><p className="text-xs text-muted-foreground">Columns: customer_code,shop_name,address,due_amount. Maximum 500 shops per file.</p>
+          <Button type="button" variant="outline" asChild><a href="/field-sales-shops-template.csv" download="field-sales-shops-template.csv">Download CSV template</a></Button>
           <Input type="file" name="file" accept=".csv,text/csv" required/><Button variant="outline" disabled={busy}>Upload shops</Button>
         </form>
-        <div className="max-h-60 space-y-2 overflow-y-auto"><h3 className="font-medium">Project customers</h3>
-          {customerRoster.isPending && <p>Loading shops…</p>}{customerRoster.error && <p role="alert">{customerRoster.error.message}</p>}
-          {!customerRoster.data?.length && !customerRoster.isPending && <p className="text-sm text-muted-foreground">No shops added yet.</p>}
-          {customerRoster.data?.map(customer => <div key={customer.id} className="rounded-lg border p-2 text-sm"><strong>{customer.shop_name}</strong> · {customer.customer_code}
-            <p className="text-muted-foreground">{customer.balance_cents === null ? 'Due not specified' : Number(customer.balance_cents) < 0 ? `Advance credit: ${customer.currency} ${(Math.abs(Number(customer.balance_cents)) / 100).toFixed(2)}` : `Due: ${customer.currency} ${(Number(customer.balance_cents) / 100).toFixed(2)}`}</p></div>)}
-        </div>
       </div>}
       {dialog === 'manage' && <div className="space-y-4">
         <p className="text-sm text-muted-foreground">Assign a project to make it available in this officer’s app. Select the weekdays when it is scheduled; the officer may choose another assigned project. No fixed working hours are imposed.</p>

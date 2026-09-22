@@ -16,20 +16,12 @@ import {
 import { updateTenant } from "@/app/actions/settings/updateTenant";
 import { useT } from "@/hooks/i18n/useT";
 import { MOEDAS_SERVIDAS, simboloDaMoeda, type MoedaServida } from "@/lib/money";
+import { COUNTRY_OPTIONS, TIMEZONE_OPTIONS, countryForTimezone } from "@/lib/geography";
 import { tenantSchema, type Locale, type TenantInput } from "@/lib/schemas/settings";
 
 interface Props {
   initial: TenantInput;
 }
-
-const TIMEZONES = [
-  "America/Sao_Paulo",
-  "America/Manaus",
-  "America/Belem",
-  "America/Recife",
-  "America/Fortaleza",
-  "UTC",
-];
 
 export function TenantForm({ initial }: Props) {
   const t = useT();
@@ -100,19 +92,25 @@ export function TenantForm({ initial }: Props) {
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="country_code">{t("País ou região")}</Label>
+            <select id="country_code" value={form.country_code ?? ""} onChange={(e) => {
+              const country = e.target.value;
+              setForm((current) => ({ ...current, country_code: country,
+                timezone: countryForTimezone(current.timezone) === country ? current.timezone
+                  : TIMEZONE_OPTIONS.find((zone) => zone.countryCode === country)?.id ?? current.timezone }));
+            }} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm lg:h-9" required>
+              <option value="">{t("País ou região")}</option>
+              {COUNTRY_OPTIONS.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="timezone">{t("Fuso horário")}</Label>
-            <Select value={form.timezone} onValueChange={(v) => set("timezone", v)}>
-              <SelectTrigger id="timezone">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select id="timezone" value={form.timezone} onChange={(e) => set("timezone", e.target.value)}
+              className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm lg:h-9">
+              {!TIMEZONE_OPTIONS.some((zone) => zone.id === form.timezone) && <option value={form.timezone}>{form.timezone}</option>}
+              {TIMEZONE_OPTIONS.filter((zone) => !form.country_code || zone.countryCode === form.country_code || zone.id === form.timezone)
+                .map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
+            </select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="locale">{t("Idioma")}</Label>

@@ -47,6 +47,50 @@ test.afterAll(async () => {
   }
 });
 
+test('organization region and shop template are usable in the manager UI', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await page.goto('/login');
+  await page.locator('#email').fill(email);
+  await page.locator('#password').fill(password);
+  await page.getByRole('button', { name: /entrar|sign in/i }).click();
+  await page.waitForURL(/\/app(?:\/|$)/);
+  await page.goto('/app/settings/tenant');
+  await expect(page.getByLabel('Country or region')).toHaveValue('AE');
+  await expect(page.getByLabel('Time zone')).toHaveValue('Asia/Dubai');
+  await page.screenshot({ path: testInfo.outputPath('organization-region.png'), fullPage: true });
+  await page.goto('/app/settings/tenant/agenda');
+  await expect(page.getByRole('heading', { name: 'Schedule types' })).toBeVisible();
+
+  await page.goto('/app/field-sales');
+  await page.getByRole('tab', { name: 'Projects', exact: true }).click();
+  const projectCard = page.locator('article').filter({ hasText: 'Synthetic showroom' });
+  await projectCard.getByRole('button', { name: 'Manage shops and due' }).click();
+  const shops = page.getByRole('dialog', { name: 'Shops · Synthetic showroom' });
+  const downloadPromise = page.waitForEvent('download');
+  await shops.getByRole('link', { name: 'Download CSV template' }).click();
+  const template = await downloadPromise;
+  expect(template.suggestedFilename()).toBe('field-sales-shops-template.csv');
+  expect(readFileSync(await template.path(), 'utf8').trim()).toBe('customer_code,shop_name,address,due_amount');
+  await shops.getByLabel('Shop name').fill('Synthetic corner shop');
+  await shops.getByLabel('Shop code (optional)').fill('SHOP-1');
+  await shops.getByLabel('Current due amount (optional)').fill('125.50');
+  await shops.getByRole('button', { name: 'Save shop' }).click();
+  await expect(shops.getByText('Project customers (1)')).toBeVisible();
+  await expect(shops.getByText('Synthetic corner shop')).toBeVisible();
+  await shops.locator('input[name="file"]').setInputFiles({ name: 'shops.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('customer_code,shop_name,address,due_amount\nSHOP-2,Synthetic second shop,,75.00\n'),
+  });
+  await shops.getByRole('button', { name: 'Upload shops' }).click();
+  await expect(shops.getByText('Project customers (2)')).toBeVisible();
+  await expect(shops.getByText('Synthetic second shop')).toBeVisible();
+  await shops.evaluate((element) => { element.scrollTop = 0; });
+  await page.screenshot({ path: testInfo.outputPath('shops-and-due.png'), fullPage: true });
+  await shops.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('tab', { name: 'Live view', exact: true }).click();
+  await expect(page.getByText('Configure country and time zone in the CRM organization settings first.')).toHaveCount(0);
+  await expect(page.getByText('Live team view', { exact: false })).toBeVisible();
+});
+
 test('weekly project assignment, scoped activity and narrow-screen layout', async ({ page }, testInfo) => {
   test.setTimeout(90000);
   await page.goto('/login');

@@ -26,7 +26,7 @@ export function fieldError(error: unknown) {
     field_amount_out_of_range: 'The amount or resulting balance is outside the supported range.',
     field_project_unavailable: 'Choose an active project in this organization.',
     field_assignment_unavailable: 'This assignment is not available. Refresh the calendar.',
-    field_history_immutable: 'Past assignments cannot be rewritten.',
+    field_history_immutable: 'This assignment already has recorded work or changes. It cannot be rewritten in place; earlier history must be preserved.',
     field_series_edit_requires_scope: 'Use an occurrence or future-series edit; existing history must be preserved.',
     field_invalid_edit_scope: 'The replacement must start on the selected date. Review its recurring weekdays.',
     field_calendar_window_too_large: 'Choose a calendar window of at most 93 days.',

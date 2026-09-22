@@ -8,7 +8,7 @@ import { authenticateFieldDevice, deviceTokenHash, issueFieldDevice, issueOffice
 import { completeNextAction, manageCorrection, readFieldOperations, recordVisit } from '@/lib/field-sales/operations';
 import { manageFieldSales, readFieldCalendar } from '@/lib/field-sales/management';
 import { saveFieldPhoto, readFieldPhoto, listFieldPhotos, deleteFieldPhoto } from '@/lib/field-sales/photos';
-import { manageProjectCustomers, readProjectCustomers, readAssignedCustomers, recordCustomerCollection, voidCustomerCollection } from '@/lib/field-sales/collections';
+import { manageProjectCustomers, readProjectCustomers, readAssignedCustomers, recordCustomerCollection, removeProjectCustomer, voidCustomerCollection } from '@/lib/field-sales/collections';
 import { recordFieldActivity } from '@/lib/field-sales/activity';
 import sharp from 'sharp';
 
@@ -296,6 +296,22 @@ describe('optional field-sales foundation', () => {
     expect(after.occurrences.some(o => o.date === '2099-01-02')).toBe(true);
     expect(after.occurrences.some(o => o.date >= '2099-01-09' && o.occurrence_key.startsWith(replacement))).toBe(false);
   });
+  it('edits an unused recurring assignment in place, but protects recorded work', async () => {
+    const f = await fixture(), a = await assignment(f, '2099-01-01');
+    const changed = { ...a.rule, start_date: '2099-01-02', end_date: null,
+      start_time: null, end_time: null, repeat: 'weekly', weekdays: [2, 4] };
+    await manageFieldSales(pool, f.org, f.manager, { operation: 'edit_schedule', id: a.schedule, revision: 1, schedule: changed });
+    const rows = (await pool.query('select id,rule,revision from field_sales_schedules where organization_id=$1 and id=$2', [f.org, a.schedule])).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].rule).toMatchObject(changed);
+    expect(rows[0].revision).toBe(2);
+    await expect(manageFieldSales(pool, f.org, f.manager,
+      { operation: 'edit_schedule', id: a.schedule, revision: 1, schedule: changed })).rejects.toThrow('field_revision_conflict');
+    await pool.query(`insert into field_sales_visits(organization_id,id,employee_id,project_id,schedule_id,local_date,status,completed_at,next_action,next_action_at)
+      values($1,$2,$3,$4,$5,'2099-01-02','completed',now(),'Synthetic follow-up','2099-01-03T00:00:00Z')`, [f.org, randomUUID(), f.actor, a.project, a.schedule]);
+    await expect(manageFieldSales(pool, f.org, f.manager,
+      { operation: 'edit_schedule', id: a.schedule, revision: 2, schedule: changed })).rejects.toThrow('field_history_immutable');
+  });
   it('expires GPS using each organization policy while preserving attendance and auditing only deletions', async () => {
     const captured = new Date(Date.now() - 2 * 86400000).toISOString();
     const a = await fixture(captured), b = await fixture(captured);
@@ -460,6 +476,15 @@ describe('optional field-sales foundation', () => {
     expect((await readProjectCustomers(pool, f.org, f.manager, f.project))[0].balance_cents).toBe('10000');
     const history = await readFieldOperations(pool, f.org, f.manager, f.localDate, null, f.actor);
     expect(history.collections.find(row => row.id === payment.collection_id).void_reason).toBe(correction.reason);
+    const removal = { operation: 'remove', project_id: f.project, customer_id: customer.id, revision: 3 };
+    await expect(removeProjectCustomer(pool, foreign.org, foreign.manager, removal)).rejects.toThrow();
+    const current = (await readProjectCustomers(pool, f.org, f.manager, f.project))[0];
+    expect((await removeProjectCustomer(pool, f.org, f.manager, { ...removal, revision: current.revision })).removed).toBe(true);
+    await expect(removeProjectCustomer(pool, f.org, f.manager, { ...removal, revision: current.revision })).rejects.toThrow('field_revision_conflict');
+    expect(await readProjectCustomers(pool, f.org, f.manager, f.project)).toEqual([]);
+    expect(await readAssignedCustomers(pool, f.org, f.actor, f.localDate)).toEqual([]);
+    expect((await readFieldOperations(pool, f.org, f.manager, f.localDate, null, f.actor)).collections).toHaveLength(2);
+    expect((await pool.query('select active from field_sales_project_customers where organization_id=$1 and id=$2', [f.org, customer.id])).rows[0].active).toBe(false);
   });
   it('closes forgotten sessions at exactly fourteen hours and rejects later GPS', async () => {
     const start = new Date(Date.now() - 15 * 3600000).toISOString();

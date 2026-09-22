@@ -15,6 +15,8 @@ export const customerManagementSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('add'), project_id: z.uuid(), customer: customerRow }),
   z.strictObject({ operation: z.literal('bulk'), project_id: z.uuid(), customers: z.array(customerRow).min(1).max(500) }),
 ]);
+export const customerRemoveSchema = z.strictObject({ operation: z.literal('remove'),
+  project_id: z.uuid(), customer_id: z.uuid(), revision: z.number().int().positive() });
 export const collectionCommandSchema = z.strictObject({
   collection_id: z.uuid(), project_customer_id: z.uuid(), project_id: z.uuid(),
   session_id: z.uuid(), captured_at: z.iso.datetime({ offset: true }),
@@ -48,6 +50,22 @@ export async function manageProjectCustomers(pool: Pick<pg.Pool, 'connect'>, org
     }
     await fieldAudit(db, org, actor, 'field_sales.customers_' + input.operation, input.project_id, { count: customers.length });
     return { saved: customers.length, currency };
+  });
+}
+
+/** Archive the shop without severing historical visits or payment receipts. */
+export async function removeProjectCustomer(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, raw: unknown) {
+  const input = customerRemoveSchema.parse(raw);
+  return fieldTransaction(pool, org, actor, async (db, role) => {
+    if (role !== 'admin' && role !== 'manager') throw new Error('field_forbidden');
+    await projectCurrency(db, org, input.project_id);
+    const result = await db.query(`update public.field_sales_project_customers
+      set active=false,revision=revision+1,updated_at=now()
+      where organization_id=$1 and project_id=$2 and id=$3 and active and revision=$4
+      returning id`, [org, input.project_id, input.customer_id, input.revision]);
+    if (!result.rows.length) throw new Error('field_revision_conflict');
+    await fieldAudit(db, org, actor, 'field_sales.customer_removed', input.customer_id, { project_id: input.project_id });
+    return { removed: true };
   });
 }
 

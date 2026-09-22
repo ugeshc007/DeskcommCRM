@@ -83,6 +83,16 @@ test('organization region and shop template are usable in the manager UI', async
   await shops.getByRole('button', { name: 'Upload shops' }).click();
   await expect(shops.getByText('Project customers (2)')).toBeVisible();
   await expect(shops.getByText('Synthetic second shop')).toBeVisible();
+  await shops.getByLabel('Shop code (optional)').fill('');
+  await shops.getByLabel('Shop name').fill('Synthetic no-code shop');
+  await shops.getByRole('button', { name: 'Save shop' }).click();
+  await expect(shops.getByText('Project customers (3)')).toBeVisible();
+  await expect(shops.getByText('Synthetic no-code shop')).toBeVisible();
+  await expect(shops.getByText(/manual-[0-9a-f]{8}/)).toHaveCount(0);
+  page.once('dialog', dialog => void dialog.accept());
+  await shops.getByRole('button', { name: 'Remove Synthetic no-code shop' }).click();
+  await expect(shops.getByText('Project customers (2)')).toBeVisible();
+  await expect(shops.getByText('Synthetic no-code shop')).toHaveCount(0);
   await shops.evaluate((element) => { element.scrollTop = 0; });
   await page.screenshot({ path: testInfo.outputPath('shops-and-due.png'), fullPage: true });
   await shops.getByRole('button', { name: 'Close' }).click();
@@ -200,13 +210,29 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await projectManager.getByLabel('Sun', { exact: true }).check();
   await projectManager.getByRole('button', { name: 'Save weekdays' }).click();
   await expect(secondary.getByText('Thu, Sun')).toBeVisible();
+  const beforeEdit = Number((await pool.query('select count(*) from field_sales_schedules where organization_id=$1 and project_id=$2', [org, secondProject])).rows[0].count);
+  await secondary.getByRole('button', { name: 'Change future' }).click();
+  await projectManager.getByLabel('Change from date').fill('2027-01-05');
+  await expect(projectManager.getByLabel('Repeat until (optional)')).toHaveValue('');
+  await projectManager.getByLabel('Thu', { exact: true }).uncheck();
+  await projectManager.getByLabel('Tue', { exact: true }).check();
+  await projectManager.getByRole('button', { name: 'Save weekdays' }).click();
+  await expect(secondary.getByText('Tue, Sun')).toBeVisible();
+  expect(Number((await pool.query('select count(*) from field_sales_schedules where organization_id=$1 and project_id=$2', [org, secondProject])).rows[0].count)).toBe(beforeEdit);
   await page.screenshot({ path: testInfo.outputPath('officer-project-weekdays.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: 'Calendar', exact: true }).click();
   await page.getByLabel('Week of', { exact: true }).fill('2027-01-04');
   const officerWeek = page.getByRole('row', { name: /Synthetic salesperson/ });
-  await expect(officerWeek.locator('td').nth(3).getByText('Secondary project')).toBeVisible();
+  await expect(officerWeek.locator('td').nth(1).getByText('Secondary project')).toBeVisible();
   await expect(officerWeek.locator('td').nth(6).getByText('Secondary project')).toBeVisible();
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage projects' }).click();
+  const ending = page.getByRole('dialog').locator('section').filter({ hasText: 'Secondary project' });
+  page.once('dialog', dialog => void dialog.accept());
+  await ending.getByRole('button', { name: 'End assignment now' }).click();
+  await expect(ending.getByText('Not assigned')).toBeVisible();
+  await page.keyboard.press('Escape');
 
   // The administrator's dedicated map uses real scoped GPS rows and an independent date selector.
   const liveSession = randomUUID(), start = new Date(Date.now() - 120000);

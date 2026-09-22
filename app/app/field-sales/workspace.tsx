@@ -77,7 +77,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
     queryFn: () => readJson<TeamPresence>(`/api/v1/field-sales/operations?date=${teamDate}`),
     enabled: data?.installed === true && activeTab === 'team', refetchInterval: 15000, gcTime: 0 });
   const customerRoster = useQuery({ queryKey: ['field-sales-customers', organizationId, customerProjectId],
-    queryFn: () => readJson<Array<{ id: string; customer_code: string; shop_name: string; address: string; balance_cents: string | null; currency: string }>>(`/api/v1/field-sales/customers?project_id=${customerProjectId}`),
+    queryFn: () => readJson<Array<{ id: string; customer_code: string; shop_name: string; address: string; balance_cents: string | null; currency: string; revision: number }>>(`/api/v1/field-sales/customers?project_id=${customerProjectId}`),
     enabled: dialog === 'customers' && Boolean(customerProjectId), gcTime: 0 });
   const formatTime = (instant: string | null | undefined) => instant && timezone
     ? new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(instant)) : '—';
@@ -138,14 +138,15 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
     const form = new FormData(event.currentTarget);
     const weekdays = form.getAll('weekday').map(Number);
     const effectiveDate = String(form.get('effective_date') || teamDate);
+    const endDate = String(form.get('end_date') || '') || null;
+    if (endDate && endDate < effectiveDate) { setError('Repeat-until date must be on or after the change date.'); return; }
     const schedule = { project_id: managedProjectId, employee_id: managedEmployeeId,
-      start_date: effectiveDate, end_date: String(form.get('end_date') || '') || null,
+      start_date: effectiveDate, end_date: endDate,
       start_time: null, end_time: null, end_day_offset: 0, repeat: 'weekly' as const,
       weekdays, instructions: String(form.get('instructions') || '') };
     if (!weekdays.length) { setError('Choose at least one weekday.'); return; }
     void save(editingAssignment
-      ? { operation: 'replace_schedule', id: editingAssignment.id, revision: editingAssignment.revision,
-        new_id: crypto.randomUUID(), effective_date: effectiveDate, schedule }
+      ? { operation: 'edit_schedule', id: editingAssignment.id, revision: editingAssignment.revision, schedule }
       : { operation: 'schedule', id: crypto.randomUUID(), revision: 0, schedule }, false)
       .then(saved => { if (saved) { setManagedProjectId(null); setEditingAssignment(null); } });
   }
@@ -158,7 +159,8 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       const result = await response.json();
       if (!response.ok) throw new Error(result.error?.message ?? 'Shops could not be saved.');
       await cache.invalidateQueries({ queryKey: ['field-sales-customers', organizationId, customerProjectId] });
-      setMessage(`${result.data.saved} shop(s) saved. Imported due amounts replace the current balance for matching codes.`);
+      setMessage(result.data.removed ? 'Shop removed from active lists. Recorded visits and collections remain in history.'
+        : `${result.data.saved} shop(s) saved. Imported due amounts replace the current balance for matching codes.`);
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Shops could not be saved.'); }
     finally { setBusy(false); }
   }
@@ -265,8 +267,13 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <div className="max-h-60 space-y-2 overflow-y-auto"><h3 className="font-medium">Project customers ({customerRoster.data?.length ?? 0})</h3>
           {customerRoster.isPending && <p>Loading shops…</p>}{customerRoster.error && <p role="alert">{customerRoster.error.message}</p>}
           {!customerRoster.data?.length && !customerRoster.isPending && <p className="text-sm text-muted-foreground">No shops added yet.</p>}
-          {customerRoster.data?.map(customer => <div key={customer.id} className="rounded-lg border p-2 text-sm"><strong>{customer.shop_name}</strong> · {customer.customer_code}
-            <p className="text-muted-foreground">{customer.balance_cents === null ? 'Due not specified' : Number(customer.balance_cents) < 0 ? `Advance credit: ${customer.currency} ${(Math.abs(Number(customer.balance_cents)) / 100).toFixed(2)}` : `Due: ${customer.currency} ${(Number(customer.balance_cents) / 100).toFixed(2)}`}</p></div>)}
+          {customerRoster.data?.map(customer => <div key={customer.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"><div className="min-w-0"><strong>{customer.shop_name}</strong>{!/^manual-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customer.customer_code) && <> · {customer.customer_code}</>}
+            <p className="text-muted-foreground">{customer.balance_cents === null ? 'Due not specified' : Number(customer.balance_cents) < 0 ? `Advance credit: ${customer.currency} ${(Math.abs(Number(customer.balance_cents)) / 100).toFixed(2)}` : `Due: ${customer.currency} ${(Number(customer.balance_cents) / 100).toFixed(2)}`}</p></div>
+            <Button type="button" variant="outline" size="sm" disabled={busy} aria-label={`Remove ${customer.shop_name}`} onClick={() => {
+              if (window.confirm(`Remove ${customer.shop_name} from this project? Recorded visits and collections remain in history.`))
+                void saveCustomers(JSON.stringify({ operation: 'remove', project_id: customerProjectId,
+                  customer_id: customer.id, revision: customer.revision }), 'application/json');
+            }}>Remove</Button></div>)}
         </div>
         <form className="space-y-3 rounded-lg border p-3" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget);
           const amount = String(form.get('due') ?? '').trim();
@@ -298,17 +305,17 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               <p>{rule.schedule.repeat === 'weekly' ? rule.schedule.weekdays.map(day => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day - 1]).join(', ') : `Only ${rule.schedule.start_date}`}</p>
               <p className="text-xs text-muted-foreground">From {rule.schedule.start_date}{rule.schedule.end_date ? ` until ${rule.schedule.end_date}` : ' · repeats weekly'}</p>
               <div className="mt-2 flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => { setError(''); setEditingAssignment(rule); setManagedProjectId(project.id); }}>Change future</Button>
-                <form onSubmit={event => { event.preventDefault(); const date = String(new FormData(event.currentTarget).get('effective_date'));
-                  if (window.confirm(`End this assignment from ${date}? Earlier visits and routes stay saved.`)) void save({ operation: 'end_schedule', id: rule.id, revision: rule.revision, effective_date: date }, false); }} className="flex flex-wrap items-center gap-2">
-                  <Input name="effective_date" type="date" aria-label={`End ${project.name} from date`} min={teamDate} defaultValue={addCalendarDays(teamDate, 1)} required className="w-auto"/>
-                  <Button size="sm" variant="outline" disabled={busy}>End assignment</Button>
-                </form></div></div>) : <p className="mt-2 text-xs text-muted-foreground">Not assigned</p>}
+                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
+                  if (window.confirm(`End ${project.name} for this officer now? Earlier visits and routes stay saved.`))
+                    void save({ operation: 'end_schedule', id: rule.id, revision: rule.revision, effective_date: teamDate }, false);
+                }}>End assignment now</Button></div></div>) : <p className="mt-2 text-xs text-muted-foreground">Not assigned</p>}
           </section>;
         })}
         {managedProjectId && <form key={`${managedProjectId}:${editingAssignment?.id ?? 'new'}`} onSubmit={submitManagedAssignment} className="space-y-3 rounded-lg border p-3">
           <h3 className="font-medium">{editingAssignment ? 'Change future weekdays' : 'Assign'} · {projects.find(p => p.id === managedProjectId)?.name}</h3>
           <Field label={editingAssignment ? 'Change from date' : 'Start date'}><Input name="effective_date" type="date" min={teamDate} required defaultValue={editingAssignment ? addCalendarDays(teamDate, 1) : teamDate}/></Field>
-          <Field label="Repeat until (optional)"><Input name="end_date" type="date" defaultValue={editingAssignment?.schedule.end_date ?? ''}/></Field>
+          <Field label="Repeat until (optional)"><Input name="end_date" type="date" min={editingAssignment ? addCalendarDays(teamDate, 1) : teamDate} defaultValue=""/></Field>
+          <p className="text-xs text-muted-foreground">Leave this blank to repeat every selected weekday without an end date.</p>
           <fieldset><legend className="text-sm font-medium">Repeat weekly on</legend><div className="mt-2 flex flex-wrap gap-3">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => <label key={day} className="flex min-h-11 items-center gap-1"><input type="checkbox" name="weekday" value={i + 1} defaultChecked={editingAssignment?.schedule.weekdays.includes(i + 1)}/>{day}</label>)}</div></fieldset>
           <Field label="Instructions (optional)"><Textarea name="instructions" maxLength={4000} defaultValue={editingAssignment?.schedule.instructions ?? ''}/></Field>
           <div className="flex gap-2"><Button disabled={busy}>Save weekdays</Button><Button type="button" variant="ghost" onClick={() => { setManagedProjectId(null); setEditingAssignment(null); }}>Cancel</Button></div>

@@ -17,6 +17,7 @@ export const fieldManagementSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('end_schedule'), ...version, effective_date: localDateSchema }),
   z.strictObject({ operation: z.literal('replace_schedule'), ...version, new_id: z.uuid(), effective_date: localDateSchema,
     schedule: scheduleSchema }),
+  z.strictObject({ operation: z.literal('edit_schedule'), ...version, schedule: scheduleSchema }),
   z.strictObject({ operation: z.literal('reschedule'), ...version, new_id: z.uuid(), date: localDateSchema,
     scope: z.enum(['one', 'future']), schedule: scheduleSchema }),
 ]);
@@ -80,7 +81,26 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
           if (recorded.rowCount) throw new Error('field_history_immutable');
         }
       }
-      if (input.operation === 'end_schedule' || input.operation === 'replace_schedule') {
+      if (input.operation === 'edit_schedule') {
+        if (!old?.active) throw new Error('field_assignment_unavailable');
+        const today = localParts(Date.now(), old.timezone).slice(0, 10);
+        if (input.schedule.start_date < today || input.schedule.employee_id !== old.employee_id)
+          throw new Error('field_invalid_edit_scope');
+        const previous = scheduleSchema.parse(old.rule);
+        if (input.schedule.project_id !== previous.project_id) throw new Error('field_invalid_edit_scope');
+        const used = await db.query(`select 1 from public.field_sales_sessions
+          where organization_id=$1 and schedule_id=$2 limit 1`, [org, input.id]);
+        const visits = await db.query(`select 1 from public.field_sales_visits
+          where organization_id=$1 and schedule_id=$2 limit 1`, [org, input.id]);
+        const exceptions = await db.query(`select 1 from public.field_sales_schedule_exceptions
+          where organization_id=$1 and schedule_id=$2 limit 1`, [org, input.id]);
+        if (used.rowCount || visits.rowCount || exceptions.rowCount) throw new Error('field_history_immutable');
+        expandSchedule({ series_id: input.id, schedule: input.schedule,
+          region: { country_code: old.country_code, timezone: old.timezone },
+          from: input.schedule.start_date, through: addCalendarDays(input.schedule.start_date, 6) });
+        await db.query(`update public.field_sales_schedules set rule=$3::jsonb,revision=revision+1
+          where organization_id=$1 and id=$2`, [org, input.id, JSON.stringify(input.schedule)]);
+      } else if (input.operation === 'end_schedule' || input.operation === 'replace_schedule') {
         if (!old?.active) throw new Error('field_assignment_unavailable');
         const today = localParts(Date.now(), old.timezone).slice(0, 10);
         if (input.effective_date < today) throw new Error('field_history_immutable');

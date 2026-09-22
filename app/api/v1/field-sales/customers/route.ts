@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/auth/require-role';
 import { requireSupportWrite } from '@/lib/impersonate/support';
 import { ok, fail } from '@/lib/api/wrappers';
 import { getRequestPool } from '@/lib/agent-engine/db/request-pool';
-import { manageProjectCustomers, readProjectCustomers, voidCustomerCollection } from '@/lib/field-sales/collections';
+import { manageProjectCustomers, readProjectCustomers, removeProjectCustomer, voidCustomerCollection } from '@/lib/field-sales/collections';
 import { decodificarCsv, parseCsv } from '@/lib/contacts/csv';
 import { readIntegrationJson } from '../../integration-connections/_shared';
 import { fieldError } from '../_shared';
@@ -53,6 +53,8 @@ export async function POST(req: Request) {
     } else input = await readIntegrationJson(req);
     if (input && typeof input === 'object' && 'operation' in input && input.operation === 'void')
       return ok(await voidCustomerCollection(getRequestPool(), auth.org.orgId, auth.user.id, input), { headers });
+    if (input && typeof input === 'object' && 'operation' in input && input.operation === 'remove')
+      return ok(await removeProjectCustomer(getRequestPool(), auth.org.orgId, auth.user.id, input), { headers });
     return ok(await manageProjectCustomers(getRequestPool(), auth.org.orgId, auth.user.id, input), { headers });
   } catch (error) {
     if (error instanceof Error && error.message === 'field_invalid_due_amount')

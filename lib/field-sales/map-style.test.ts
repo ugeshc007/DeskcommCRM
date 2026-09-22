@@ -12,6 +12,8 @@ describe('fieldMapStyle', () => {
       minzoom: 0, maxzoom: 15, bounds: [51, 22, 57, 26.5],
     });
     expect(style.layers.map(layer => layer.id)).toEqual(expect.arrayContaining(['place-names', 'road-names', 'shop-and-landmark-names']));
-    expect(style).not.toHaveProperty('glyphs'); // MapLibre uses device fonts: no remote map/font service.
+    expect(style['font-faces']).toEqual({ 'Field Map Sans': [{ url: 'https://crm.example.test/fonts/field-map/NotoSans.ttf' }] });
+    expect(style.layers.filter(layer => layer.type === 'symbol').every(layer => layer.layout?.['text-font']?.[0] === 'Field Map Sans')).toBe(true);
+    expect(style).not.toHaveProperty('glyphs'); // Font and tiles are both served by this installation.
   });
 });

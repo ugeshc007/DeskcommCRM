@@ -106,6 +106,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:$E2E_PORT
 # A suíte histórica procura os rótulos portugueses de login. O padrão global
 # do produto pode ser inglês, mas este fixture precisa ser explícito.
 APP_LOCALE=pt-BR
+# Exercise subscription enforcement; organizations without a subscription remain unlimited.
+SAAS_DEPLOYMENT_MODE=managed_saas
+SAAS_PUBLIC_SIGNUP_ENABLED=true
 
 # Placeholders: 'next start' roda em NODE_ENV=production, e lib/env.ts exige
 # estas vars em produção. As specs não exercitam os serviços por trás delas.

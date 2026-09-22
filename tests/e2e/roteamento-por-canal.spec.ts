@@ -96,7 +96,7 @@ async function createUser(name: string, password: string): Promise<{ id: string;
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: name },
+    user_metadata: { full_name: name, locale: "pt-BR" },
   });
   if (error || !data.user) throw error ?? new Error("auth_user_missing");
   return { id: data.user.id, email };

@@ -487,7 +487,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
       mime: "image/png",
       bytes: PNG_DA_PLATAFORMA,
     });
-    await expect(page.getByText(/logo atualizado/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo atualizado|logo updated/i)).toBeVisible({ timeout: 15_000 });
 
     // A prévia sobre as DUAS superfícies mostra a imagem real — é o que
     // substituiu o analisador de luminância no servidor.
@@ -563,7 +563,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
       mime: "image/png",
       bytes: PNG_DA_ORGANIZACAO,
     });
-    await expect(page.getByText(/logo atualizado/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo atualizado|logo updated/i)).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/app/inbox");
     const barra = await logoDaBarra(page);

@@ -329,8 +329,8 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
     await page.goto(`/team/accept-invite/${valid}`);
-    await expect(page.getByRole("heading", { name: /Você foi convidado/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Fazer login/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Você foi convidado|You were invited/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Fazer login|Login/i })).toBeVisible();
   });
 
   /**

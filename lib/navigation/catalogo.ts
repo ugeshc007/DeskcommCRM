@@ -111,7 +111,7 @@ export const NAV_CATALOG = [
     group: "crm",
     section: "O dia a dia da venda",
     minRole: "agent",
-    sidebar: true,
+    // Discoverable from the CRM hub and search; keep the full menu within 900px.
   },
   {
     href: "/app/field-sales/live",

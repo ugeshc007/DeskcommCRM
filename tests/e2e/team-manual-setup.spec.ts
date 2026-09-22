@@ -86,14 +86,14 @@ test('admin copies a private invite, employee sets a password without email, and
   await expect(staffPage.getByRole('heading', { name: 'You were invited' })).toBeVisible();
   // The existing-account detour must preserve the invitation (the reported bug).
   await staffPage.getByRole('link', { name: 'Login' }).click();
-  await staffPage.getByRole('link', { name: 'Create account' }).click();
-  await expect(staffPage.getByText('Create your password to enter the company that invited you')).toBeVisible();
-  await expect(staffPage.getByRole('textbox', { name: 'Your name' })).toBeVisible();
-  await staffPage.getByRole('textbox', { name: 'Your name' }).fill('Synthetic Salesperson');
+  await staffPage.getByRole('link', { name: /Create account|Criar conta/i }).click();
+  await expect(staffPage.getByText(/Create your password to enter the company that invited you|Crie sua senha para entrar na empresa que te convidou/)).toBeVisible();
+  await expect(staffPage.getByRole('textbox', { name: /Your name|Seu nome/ })).toBeVisible();
+  await staffPage.getByRole('textbox', { name: /Your name|Seu nome/ }).fill('Synthetic Salesperson');
   await expect(staffPage.getByRole('textbox', { name: 'Email' })).toHaveValue(staffEmail);
-  await staffPage.getByLabel('Password', { exact: true }).fill(password);
-  await staffPage.getByLabel('Confirm password').fill(password);
-  await staffPage.getByRole('button', { name: 'Create account' }).click();
+  await staffPage.getByLabel(/^(Password|Senha)$/).fill(password);
+  await staffPage.getByLabel(/Confirm password|Confirmar senha/).fill(password);
+  await staffPage.getByRole('button', { name: /Create account|Criar conta/i }).click();
   await staffPage.waitForURL(/\/app(?:\/|$)/);
   const membership = await pool.query(
     "select role from user_organizations where organization_id=$1 and user_id=(select id from auth.users where email=$2)",
@@ -124,10 +124,10 @@ test('admin copies a private invite, employee sets a password without email, and
   const revokedPage = await revokedContext.newPage();
   await revokedPage.goto(`${baseURL}${new URL(revokedLink).pathname}`);
   await revokedPage.getByRole('link', { name: "I don't have an account yet" }).click();
-  await revokedPage.getByRole('textbox', { name: 'Your name' }).fill('Rejected Salesperson');
-  await revokedPage.getByLabel('Password', { exact: true }).fill(password);
-  await revokedPage.getByLabel('Confirm password').fill(password);
-  await revokedPage.getByRole('button', { name: 'Create account' }).click();
+  await revokedPage.getByRole('textbox', { name: /Your name|Seu nome/ }).fill('Rejected Salesperson');
+  await revokedPage.getByLabel(/^(Password|Senha)$/).fill(password);
+  await revokedPage.getByLabel(/Confirm password|Confirmar senha/).fill(password);
+  await revokedPage.getByRole('button', { name: /Create account|Criar conta/i }).click();
   await expect(revokedPage.getByText('Invalid or expired invitation')).toBeVisible();
   const revokedUser = await pool.query('select id from auth.users where email=$1', [revokedEmail]);
   expect(revokedUser.rows).toHaveLength(0);

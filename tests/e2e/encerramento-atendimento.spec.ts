@@ -68,7 +68,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
   });
   mkdirSync(evidence, { recursive: true });
   try {
-    const created = await db.auth.admin.createUser({ email, password, email_confirm: true });
+    const created = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { locale: "pt-BR" } });
     if (created.error || !created.data.user) throw created.error;
     user = created.data.user.id;
     org = await insert("organizations", {

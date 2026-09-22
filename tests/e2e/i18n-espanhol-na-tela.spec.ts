@@ -116,6 +116,10 @@ function rotulosDeInterface(textos: string[]): string {
 
 /** Todo texto que a pessoa consegue LER nesta tela, normalizado. */
 async function textosVisiveis(page: Page): Promise<string[]> {
+  if (new URL(page.url()).pathname === "/app/metrics") {
+    await expect(page.getByRole("heading", { name: /^(Atrito|Fricción)$/ })).toBeVisible({ timeout: PRAZO });
+    await expect(page.getByText(/^(Carregando…|Cargando…|Loading…)$/)).toHaveCount(0, { timeout: PRAZO });
+  }
   return page.evaluate(() => {
     const saida: string[] = [];
     const anda = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);

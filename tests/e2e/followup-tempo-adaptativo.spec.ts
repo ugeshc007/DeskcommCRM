@@ -176,7 +176,10 @@ test.describe("nó de espera — o modo Adaptativo tem de decidir de verdade", (
     await page.getByTestId("palette-add-end").click();
 
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    for (let i = 0; i < 5; i++) {
+      if (await zoomOut.isDisabled()) break;
+      await zoomOut.click();
+    }
 
     const triggerId = await page.locator('.react-flow__node[data-id^="trigger-"]').getAttribute("data-id");
     const waitId = await page.locator('.react-flow__node[data-id^="wait-"]').getAttribute("data-id");

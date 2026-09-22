@@ -39,7 +39,7 @@ export function TenantForm({ initial }: Props) {
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    const candidate = { ...form, lost_reasons_extra: reasons };
+    const candidate = { ...form, country_code: form.country_code || undefined, lost_reasons_extra: reasons };
     const parsed = tenantSchema.safeParse(candidate);
     if (!parsed.success) {
       toast.error(t("Dados inválidos."));
@@ -98,7 +98,7 @@ export function TenantForm({ initial }: Props) {
               setForm((current) => ({ ...current, country_code: country,
                 timezone: countryForTimezone(current.timezone) === country ? current.timezone
                   : TIMEZONE_OPTIONS.find((zone) => zone.countryCode === country)?.id ?? current.timezone }));
-            }} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm lg:h-9" required>
+            }} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm lg:h-9">
               <option value="">{t("País ou região")}</option>
               {COUNTRY_OPTIONS.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
             </select>

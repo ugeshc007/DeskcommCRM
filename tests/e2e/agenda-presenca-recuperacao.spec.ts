@@ -33,7 +33,7 @@ async function rpc(name: string, args: Record<string, unknown>) {
 }
 async function fixture() {
   const email = `presenca-${randomUUID()}@invariant.test`;
-  const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
+  const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { locale: "pt-BR" } });
   if (error || !data.user) throw error;
   const user = data.user.id;
   users.push(user);
@@ -916,7 +916,7 @@ test("Radar recorta demandas pela RLS real, al√©m do pool frio, e preserva gest√
   const members: Record<string, { id: string; email: string }> = {};
   for (const role of ["agent", "other", "manager", "viewer"]) {
     const email = `radar-${role}-${randomUUID()}@invariant.test`;
-    const made = await db.auth.admin.createUser({ email, password, email_confirm: true });
+    const made = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { locale: "pt-BR" } });
     if (made.error || !made.data.user) throw made.error;
     const id = made.data.user.id;
     users.push(id);

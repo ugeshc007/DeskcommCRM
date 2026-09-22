@@ -270,7 +270,10 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     }
 
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 6; i++) await zoomOut.click();
+    for (let i = 0; i < 6; i++) {
+      if (await zoomOut.isDisabled()) break;
+      await zoomOut.click();
+    }
     await page.waitForTimeout(300);
 
     const canvasBox = await page.getByTestId("flow-canvas").boundingBox();

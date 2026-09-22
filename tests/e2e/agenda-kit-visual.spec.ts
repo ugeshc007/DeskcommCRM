@@ -253,10 +253,10 @@ test.describe("kit visual da Agenda", () => {
 
     const aviso = painel.getByTestId("aviso-sem-lembrete");
     await expect(aviso).toBeVisible();
-    await expect(aviso).toContainText("pediu para não receber mensagens");
+    await expect(aviso).toContainText(/pediu para não receber mensagens|asked not to receive messages/);
     // Diz o que fazer no lugar — informar a restrição sem dar saída deixa a
     // pessoa parada decidindo sozinha.
-    await expect(aviso).toContainText("combine por telefone");
+    await expect(aviso).toContainText(/combine por telefone|arrange it by phone/);
 
     // E CONFIRMAR CONTINUA ATIVO: aviso, não bloqueio. Se o botão estivesse
     // desabilitado, a tela teria transformado "não recebe mensagem" em "não

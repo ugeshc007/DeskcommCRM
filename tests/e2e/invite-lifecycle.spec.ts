@@ -317,7 +317,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     // mas logamos como o AGENT do seed base (email diferente)
     await login(page, base.users.agent!.email);
     await page.goto(`/team/accept-invite/${valid}`);
-    await expect(page.getByRole("heading", { name: /não corresponde/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /não corresponde|email does not match/i })).toBeVisible();
   });
 
   test("9. não autenticado → CTA de login, não o formulário de aceite", async ({ page }) => {

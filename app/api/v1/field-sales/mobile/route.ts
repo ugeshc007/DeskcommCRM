@@ -10,6 +10,8 @@ import { attendanceCommandSchema, locationBatchSchema } from '@/lib/field-sales/
 import { recordVisit, visitCommandSchema, completeNextAction, completeNextActionSchema } from '@/lib/field-sales/operations';
 import { readFieldJson } from '@/lib/field-sales/request';
 import { photoCommandSchema, saveFieldPhoto } from '@/lib/field-sales/photos';
+import { localParts } from '@/lib/field-sales/schedule';
+import { collectionCommandSchema, readAssignedCustomers, recordCustomerCollection } from '@/lib/field-sales/collections';
 
 export const dynamic = 'force-dynamic';
 const headers = { 'Cache-Control': 'private, no-store' };
@@ -19,6 +21,7 @@ const envelope = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('visit'), command: visitCommandSchema }),
   z.strictObject({ operation: z.literal('complete_next_action'), command: completeNextActionSchema }),
   z.strictObject({ operation: z.literal('photo'), command: photoCommandSchema }),
+  z.strictObject({ operation: z.literal('collection'), command: collectionCommandSchema }),
   z.strictObject({ operation: z.literal('sign_out') }),
 ]);
 async function handle(req: Request, write: boolean) {
@@ -35,6 +38,7 @@ async function handle(req: Request, write: boolean) {
         : input.operation === 'locations' ? await recordLocations(pool, auth.org, auth.actor, input.batch, true)
         : input.operation === 'visit' ? await recordVisit(pool, auth.org, auth.actor, input.command)
         : input.operation === 'photo' ? await saveFieldPhoto(pool, auth.org, auth.actor, input.command)
+        : input.operation === 'collection' ? await recordCustomerCollection(pool, auth.org, auth.actor, input.command)
         : input.operation === 'complete_next_action' ? await completeNextAction(pool, auth.org, auth.actor, input.command)
         : await revokeCurrentFieldDevice(pool, auth.org, auth.actor, auth.deviceId);
       return ok(result, { headers });
@@ -43,8 +47,15 @@ async function handle(req: Request, write: boolean) {
     const calendar = await readFieldCalendar(pool, auth.org, auth.actor, query.get('from') ?? '', query.get('through') ?? '');
     // Even when a manager enrolls themselves, this credential exposes only their own work.
     const occurrences = calendar.occurrences.filter(o => o.employee_id === auth.actor);
-    const projects = await fieldTransaction(pool, auth.org, auth.actor, async db => (await db.query(`select id,name,site_name
-      from public.field_sales_projects where organization_id=$1 and active order by name limit 500`, [auth.org])).rows);
+    const today = localParts(Date.now(), calendar.region?.timezone ?? 'UTC').slice(0, 10);
+    const projects = await fieldTransaction(pool, auth.org, auth.actor, async db => (await db.query(`select distinct p.id,p.name,p.site_name
+      from public.field_sales_projects p join public.field_sales_schedules s
+        on s.organization_id=p.organization_id and s.project_id=p.id
+      where p.organization_id=$1 and s.organization_id=$1 and s.employee_id=$2 and p.active and s.active
+        and (s.rule->>'start_date')::date <= $3::date
+        and (s.rule->>'end_date' is null or (s.rule->>'end_date')::date >= $3::date)
+      order by p.name limit 500`, [auth.org, auth.actor, today])).rows);
+    const customers = await readAssignedCustomers(pool, auth.org, auth.actor, today);
     const sessions = await fieldTransaction(pool, auth.org, auth.actor, async db => (await db.query(`select s.id,s.status,s.punched_in_at,s.punched_out_at,s.last_sequence,
       s.project_id,s.schedule_id,s.local_date::text,p.name as project_name,p.site_name
       from public.field_sales_sessions s left join public.field_sales_projects p on p.organization_id=s.organization_id and p.id=s.project_id
@@ -53,7 +64,7 @@ async function handle(req: Request, write: boolean) {
       from public.field_sales_visits v join public.field_sales_projects p on p.organization_id=v.organization_id and p.id=v.project_id
       where v.organization_id=$1 and p.organization_id=$1 and v.employee_id=$2 and (v.local_date between $3 and $4 or (v.next_action<>'' and v.next_action_completed_at is null and v.next_action_at<=now())) order by v.local_date limit 500`, [auth.org, auth.actor, query.get('from'), query.get('through')])).rows);
     return ok({ identity: { organization_id: auth.org, employee_id: auth.actor }, employee: calendar.employees.find(e => e.user_id === auth.actor), region: calendar.region,
-      settings: calendar.settings, occurrences, projects, sessions, visits }, { headers });
+      settings: calendar.settings, occurrences, projects, customers, sessions, visits }, { headers });
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : '';

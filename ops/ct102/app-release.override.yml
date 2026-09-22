@@ -4,3 +4,4 @@ services:
     pull_policy: never
     environment:
       APP_VERSION: ${CT102_APP_VERSION:?Commit version required}
+      FIELD_VOICE_URL: http://field-voice:8080

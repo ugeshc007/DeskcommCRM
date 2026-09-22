@@ -16,6 +16,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   // Employee-scoped, expiring hash-only device bearer; current membership is
   // revalidated inside the handler. Never exposes management operations.
   /^\/api\/v1\/field-sales\/mobile$/,
+  // Device-bearer-only voice proxy; the handler verifies current membership,
+  // an open work session and service availability before accepting audio.
+  /^\/api\/v1\/field-sales\/voice$/,
   // One-time six-digit pairing is validated, globally throttled and exchanged
   // for a strong bearer inside the handler. No cookie exists on a fresh phone.
   /^\/api\/v1\/field-sales\/pair$/,

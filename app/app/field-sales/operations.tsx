@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Map as LibreMap, GeoJSONSource, Marker } from 'maplibre-gl';
+import type { Map as LibreMap, GeoJSONSource, Marker, Popup } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,13 +11,17 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { localParts, wallTimeToUtc } from '@/lib/field-sales/schedule';
 import { VisitPhotos } from './visit-photos';
 import { fieldMapStyle } from '@/lib/field-sales/map-style';
+import { displayRoute } from '@/lib/field-sales/route-quality';
 
 type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; online: boolean; last_seen_at: string | null };
 type Point = { session_id: string; latitude: number; longitude: number; captured_at: string; accuracy_m: number; mock_location: boolean };
 type Session = { id: string; employee_id: string; display_name: string; project_name: string | null; site_name: string | null; status: string; punched_in_at: string; punched_out_at: string | null; corrected_in: string | null; corrected_out: string | null };
 type Correction = { id: string; employee_id: string; display_name: string; proposed_in: string; proposed_out: string; reason: string; status: string; review_note: string };
 type Visit = { id: string; revision: number; display_name: string; project_name: string; status: string; notes: string; next_action: string; next_action_at: string | null; next_action_completed_at: string | null };
-export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; corrections: Correction[]; points: Point[]; map: { map_tile_path: string | null; map_attribution: string } | null };
+export type ShopCollection = { id: string; employee_id: string; project_id: string; project_customer_id: string; session_id: string;
+  captured_at: string; amount_cents: string | null; balance_after_cents: string | null; currency: string;
+  voided_at: string | null; void_reason: string | null; shop_name: string; customer_code: string | null; project_name: string; latitude: number | null; longitude: number | null; accuracy_m: number | null };
+export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; collections: ShopCollection[]; corrections: Correction[]; points: Point[]; map: { map_tile_path: string | null; map_attribution: string } | null };
 
 export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate }: { data: Operations; selectedEmployeeId: string; onSelectEmployee: (employeeId: string) => void; routeDate: string }) {
   const container = useRef<HTMLDivElement>(null), map = useRef<LibreMap | null>(null), markers = useRef<Marker[]>([]);
@@ -44,43 +48,65 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       resizeObserver = new ResizeObserver(() => instance.resize());
       resizeObserver.observe(container.current);
       instance.addControl(new lib.NavigationControl(), 'top-right');
+      let markerSignature = '';
+      let activePopup: Popup | null = null;
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
-        markers.current.forEach(marker => marker.remove()); markers.current = [];
         const current = latest.current;
-        for (const position of current.latest) {
-          if (position.latitude === null || position.longitude === null) continue;
-          const marker = new lib.Marker({ color: position.mock_location ? '#b45309' : position.employee_id === selection.current ? '#2563eb' : '#166534' })
-            .setLngLat([position.longitude, position.latitude]).setPopup(new lib.Popup().setText(`${position.display_name} — select to view this date's route`)).addTo(instance);
-          const element = marker.getElement(); element.tabIndex = 0; element.setAttribute('role', 'button');
-          element.setAttribute('aria-label', `View ${position.display_name}'s route for this date`);
-          element.addEventListener('click', () => selectEmployee.current(position.employee_id));
-          element.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectEmployee.current(position.employee_id); } });
-          markers.current.push(marker);
-        }
-        const lines: number[][][] = []; let line: number[][] = [];
-        current.points.forEach((point, index) => {
-          const previous = current.points[index - 1];
-          if (point.mock_location || (previous && (point.session_id !== previous.session_id || Date.parse(point.captured_at) - Date.parse(previous.captured_at) > 300000))) {
-            if (line.length > 1) lines.push(line); line = [];
+        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.mock_location]),
+          current.collections.filter(c => c.employee_id === selection.current).map(c => [c.id,c.latitude,c.longitude])]);
+        if (markerSignature !== nextMarkerSignature) {
+          activePopup?.remove(); activePopup = null;
+          markers.current.forEach(marker => marker.remove()); markers.current = [];
+          for (const position of current.latest) {
+            if (position.latitude === null || position.longitude === null) continue;
+            const marker = new lib.Marker({ color: position.mock_location ? '#b45309' : position.employee_id === selection.current ? '#2563eb' : '#166534' })
+              .setLngLat([position.longitude, position.latitude]).addTo(instance);
+            const popup = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 24 }).setText(position.display_name);
+            const element = marker.getElement(); element.tabIndex = 0; element.setAttribute('role', 'button');
+            element.setAttribute('aria-label', `View ${position.display_name}'s route for this date`);
+            element.title = position.display_name;
+            const showName = () => { activePopup?.remove(); popup.setLngLat(marker.getLngLat()).addTo(instance); activePopup = popup; };
+            const hideName = () => { if (activePopup === popup) { popup.remove(); activePopup = null; } };
+            element.addEventListener('mouseenter', showName);
+            element.addEventListener('mouseleave', hideName);
+            element.addEventListener('focus', showName);
+            element.addEventListener('blur', hideName);
+            element.addEventListener('click', () => { popup.remove(); selectEmployee.current(position.employee_id); });
+            element.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); popup.remove(); selectEmployee.current(position.employee_id); } });
+            markers.current.push(marker);
           }
-          if (!point.mock_location) line.push([point.longitude, point.latitude]);
-        });
-        if (line.length > 1) lines.push(line);
+          for (const shop of current.collections.filter(c => c.employee_id === selection.current && !c.voided_at && c.latitude !== null && c.longitude !== null)) {
+            const icon = document.createElement('button'); icon.type = 'button'; icon.textContent = '🏬';
+            icon.className = 'flex size-9 items-center justify-center rounded-full border-2 border-white bg-amber-400 shadow-md';
+            icon.title = shop.shop_name; icon.setAttribute('aria-label', `Shop visit: ${shop.shop_name}`);
+            const marker = new lib.Marker({ element: icon, anchor: 'bottom' }).setLngLat([shop.longitude!, shop.latitude!]).addTo(instance);
+            const popup = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 20 })
+              .setText(`${shop.shop_name} · ${shop.project_name}`);
+            icon.addEventListener('mouseenter', () => { activePopup?.remove(); popup.setLngLat(marker.getLngLat()).addTo(instance); activePopup = popup; });
+            icon.addEventListener('mouseleave', () => { if (activePopup === popup) { popup.remove(); activePopup = null; } });
+            icon.addEventListener('focus', () => { activePopup?.remove(); popup.setLngLat(marker.getLngLat()).addTo(instance); activePopup = popup; });
+            icon.addEventListener('blur', () => { if (activePopup === popup) { popup.remove(); activePopup = null; } });
+            markers.current.push(marker);
+          }
+          markerSignature = nextMarkerSignature;
+        }
+        const { lines, plotted } = displayRoute(current.points);
         const route = { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'MultiLineString' as const, coordinates: lines } }] };
         const source = instance.getSource('route') as GeoJSONSource | undefined;
         if (source) source.setData(route);
         else { instance.addSource('route', { type: 'geojson', data: route }); instance.addLayer({ id: 'recorded-route', type: 'line', source: 'route', paint: { 'line-color': '#2563eb', 'line-width': 4 } }); }
         const selectionKey = `${selection.current}:${day.current}`;
-        if (selection.current && fittedSelection.current !== selectionKey && current.points.length) {
-          const bounds = new lib.LngLatBounds(); current.points.forEach(point => bounds.extend([point.longitude, point.latitude]));
+        if (selection.current && fittedSelection.current !== selectionKey && plotted.length) {
+          const bounds = new lib.LngLatBounds(); plotted.forEach(point => bounds.extend([point.longitude, point.latitude]));
           instance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 250 }); fittedSelection.current = selectionKey;
         }
       };
       instance.on('load', () => {
         instance.resize();
         draw();
-        const points = latest.current.points.length ? latest.current.points : latest.current.latest.filter(p => p.latitude !== null && p.longitude !== null);
+        const plotted = displayRoute(latest.current.points).plotted;
+        const points = plotted.length ? plotted : latest.current.latest.filter(p => p.latitude !== null && p.longitude !== null);
         if (points.length) {
           const bounds = new lib.LngLatBounds(); points.forEach(p => bounds.extend([p.longitude!, p.latitude!]));
           instance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
@@ -99,7 +125,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
     <div ref={container} data-map-ready={mapReady} className="h-[420px] overflow-hidden rounded-xl border" aria-label="Recorded employee positions and selected work route"/>
     {data.map?.map_tile_path && <p className="text-xs text-muted-foreground">{data.map.map_attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></p>}
-    <p className="text-xs text-muted-foreground">Blue lines connect recorded GPS points—not planned road directions. Gaps over five minutes and mock-location points are not joined.</p>
+    <p className="text-xs text-muted-foreground">Blue lines show quality-filtered GPS, not road directions. Poor fixes, implausible jumps, mock locations and gaps over five minutes are omitted from the displayed path; raw records are retained.</p>
   </section>;
 }
 
@@ -152,11 +178,11 @@ export function FieldOperations({ organizationId, userId, date }: { organization
       </section>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Visits and next actions</h2><p className="text-sm text-muted-foreground">Open overdue actions from earlier dates remain here until completed. These are in-app reminders, not automatic messages to customers.</p>{!data.visits.length && <p>No recorded visits for this date.</p>}{data.visits.map(visit => <article key={visit.id} className="rounded-xl border p-4"><h3 className="font-semibold">{visit.project_name} · {visit.display_name}</h3><p>{visit.status}</p><p className="whitespace-pre-wrap text-sm">{visit.notes}</p><VisitPhotos visitId={visit.id}/>{visit.next_action && <div className="mt-2 space-y-2 text-sm"><p>Next: {visit.next_action} · {time(visit.next_action_at)}</p>{visit.next_action_completed_at ? <p>Completed: {time(visit.next_action_completed_at)}</p> : <><p>{visit.next_action_at && Date.parse(visit.next_action_at) <= Date.parse(data.generated_at) ? 'Due — follow up now' : 'Upcoming follow-up'}</p><Button variant="outline" disabled={busy} onClick={() => setComplete(visit)}>Mark next action complete</Button></>}</div>}</article>)}</section>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Attendance correction review</h2>{!data.corrections.length && <p>No correction requests.</p>}{data.corrections.map(correction => <article key={correction.id} className="rounded-xl border p-4"><h3 className="font-semibold">{correction.display_name} · {correction.status}</h3><p>{time(correction.proposed_in)} → {time(correction.proposed_out)}</p><p className="text-sm">{correction.reason}</p>{correction.review_note && <p className="text-sm">Review: {correction.review_note}</p>}{correction.status === 'pending' && data.role !== 'agent' && correction.employee_id !== userId && <Button variant="outline" onClick={() => setReview(correction)}>Review request</Button>}</article>)}</section>
-      {data.role === 'admin' && <form className="max-w-2xl space-y-3 rounded-xl border p-4" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void submit({ operation: 'map_config', tile_path: String(form.get('path') ?? '') || null, attribution: String(form.get('attribution') ?? '') }, '/api/v1/field-sales'); }}>
-        <h2 className="font-semibold">Self-hosted basemap</h2><p className="text-sm text-muted-foreground">Your server administrator must supply approved tiles under /field-map-tiles/. No Google key or third-party tile URL is used. Leave blank to disable roads.</p>
+      {data.role === 'admin' && <details className="max-w-2xl rounded-xl border p-4"><summary className="cursor-pointer font-semibold">Self-hosted basemap settings</summary><form className="mt-4 space-y-3" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void submit({ operation: 'map_config', tile_path: String(form.get('path') ?? '') || null, attribution: String(form.get('attribution') ?? '') }, '/api/v1/field-sales'); }}>
+        <p className="text-sm text-muted-foreground">Your server administrator must supply approved tiles under /field-map-tiles/. No Google key or third-party tile URL is used. Leave blank to disable roads.</p>
         <label className="grid gap-2 text-sm">Tile path<Input name="path" defaultValue={data.map?.map_tile_path ?? ''} placeholder="/field-map-tiles/uae.pmtiles"/></label>
         <label className="grid gap-2 text-sm">Tile-source attribution<Input name="attribution" maxLength={500} defaultValue={data.map?.map_attribution ?? ''}/></label><Button disabled={busy}>Save map configuration</Button>
-      </form>}
+      </form></details>}
     </>}
     <Dialog open={!!request || !!review || !!complete} onOpenChange={open => { if (!open) { setRequest(null); setReview(null); setComplete(null); } }}><DialogContent><DialogHeader><DialogTitle>{complete ? 'Complete next action?' : review ? 'Review attendance correction' : 'Request attendance correction'}</DialogTitle><DialogDescription>{complete ? 'This closes the reminder and keeps its original text and due date in the visit history.' : 'Original punch events and GPS are retained. You cannot approve your own correction.'}</DialogDescription></DialogHeader>
       {complete && <div className="space-y-3"><p>{complete.next_action}</p><Button disabled={busy} onClick={() => void submit({ operation: 'complete_next_action', command: { visit_id: complete.id, revision: complete.revision } })}>Confirm completion</Button></div>}

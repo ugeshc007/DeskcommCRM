@@ -25,6 +25,12 @@ for attempt in $(seq 1 30); do
     && [[ "$(docker inspect "$container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')" == healthy ]] \
     && curl -fsS --max-time 5 http://127.0.0.1:3002/api/v1/health \
       | grep -q "\"version\":\"${previous[1]}\""; then
+    voice_state="$release_dir/new-voice-container.txt"
+    if [[ -f "$voice_state" ]]; then
+      voice_container="$(cat "$voice_state")"
+      [[ "$voice_container" =~ ^[a-f0-9]{64}$ ]] || { echo 'Invalid voice rollback state' >&2; exit 1; }
+      docker stop "$voice_container"
+    fi
     echo "Previous CT102 app restored at ${previous[1]}"
     exit 0
   fi

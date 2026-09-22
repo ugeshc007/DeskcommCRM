@@ -2,7 +2,7 @@ import type pg from 'pg';
 import { z } from 'zod';
 import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldScope } from './authority';
 import { localDateSchema, organizationRegion, projectSchema, scheduleSchema, type FieldSchedule } from './contracts';
-import { expandSchedule, overlappingAssignments, type ScheduleOccurrence } from './schedule';
+import { addCalendarDays, expandSchedule, localParts, overlappingAssignments, type ScheduleOccurrence } from './schedule';
 import { planReschedule } from './reschedule';
 
 const version = { id: z.uuid(), revision: z.number().int().nonnegative() };
@@ -14,6 +14,9 @@ export const fieldManagementSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('project'), ...version, project: projectSchema }),
   z.strictObject({ operation: z.literal('schedule'), ...version, schedule: scheduleSchema }),
   z.strictObject({ operation: z.literal('cancel_occurrence'), ...version, date: localDateSchema }),
+  z.strictObject({ operation: z.literal('end_schedule'), ...version, effective_date: localDateSchema }),
+  z.strictObject({ operation: z.literal('replace_schedule'), ...version, new_id: z.uuid(), effective_date: localDateSchema,
+    schedule: scheduleSchema }),
   z.strictObject({ operation: z.literal('reschedule'), ...version, new_id: z.uuid(), date: localDateSchema,
     scope: z.enum(['one', 'future']), schedule: scheduleSchema }),
 ]);
@@ -68,14 +71,48 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
       const old = (await db.query('select employee_id,revision,rule,timezone,country_code,active from public.field_sales_schedules where organization_id=$1 and id=$2 for update', [org, input.id])).rows[0];
       if ((old?.revision ?? 0) !== input.revision) throw new Error('field_revision_conflict');
       if (old) await requireFieldScope(db, org, actor, role, old.employee_id, true);
-      if (old && (input.operation === 'reschedule' || input.operation === 'cancel_occurrence')) {
+      if (old && (input.operation === 'reschedule' || input.operation === 'cancel_occurrence' || input.operation === 'end_schedule' || input.operation === 'replace_schedule')) {
         if ((await db.query("select to_regclass('public.field_sales_visits') is not null installed")).rows[0].installed) {
           const recorded = await db.query(`select id from public.field_sales_visits where organization_id=$1 and schedule_id=$2
-            and (local_date=$3 or ($4 and local_date>$3)) limit 1`, [org, input.id, input.date, input.operation === 'reschedule' && input.scope === 'future']);
+            and (local_date=$3 or ($4 and local_date>$3)) limit 1`, [org, input.id,
+            input.operation === 'end_schedule' || input.operation === 'replace_schedule' ? input.effective_date : input.date,
+            input.operation === 'end_schedule' || input.operation === 'replace_schedule' || input.operation === 'reschedule' && input.scope === 'future']);
           if (recorded.rowCount) throw new Error('field_history_immutable');
         }
       }
-      if (input.operation === 'cancel_occurrence') {
+      if (input.operation === 'end_schedule' || input.operation === 'replace_schedule') {
+        if (!old?.active) throw new Error('field_assignment_unavailable');
+        const today = localParts(Date.now(), old.timezone).slice(0, 10);
+        if (input.effective_date < today) throw new Error('field_history_immutable');
+        const used = await db.query(`select 1 from public.field_sales_sessions
+          where organization_id=$1 and schedule_id=$2 and local_date >= $3::date limit 1`, [org, input.id, input.effective_date]);
+        if (used.rowCount) throw new Error('field_history_immutable');
+        const rule = scheduleSchema.parse(old.rule);
+        if (rule.end_date && rule.end_date < input.effective_date) throw new Error('field_assignment_unavailable');
+        if (input.operation === 'replace_schedule') {
+          await requireFieldScope(db, org, actor, role, input.schedule.employee_id, true);
+          await requireFieldEmployee(db, org, input.schedule.employee_id);
+          if (input.schedule.start_date !== input.effective_date || input.new_id === input.id)
+            throw new Error('field_invalid_edit_scope');
+          const project = await db.query(`select id from public.field_sales_projects
+            where organization_id=$1 and id=$2 and active for share`, [org, input.schedule.project_id]);
+          if (!project.rowCount) throw new Error('field_project_unavailable');
+          // Validate a week in the original organization's region before splitting the rule.
+          expandSchedule({ series_id: input.new_id, schedule: input.schedule,
+            region: { country_code: old.country_code, timezone: old.timezone },
+            from: input.effective_date, through: addCalendarDays(input.effective_date, 6) });
+        }
+        const deactivate = input.effective_date <= rule.start_date;
+        const endDate = addCalendarDays(input.effective_date, -1);
+        await db.query(`update public.field_sales_schedules set active=$3,rule=$4::jsonb,revision=revision+1
+          where organization_id=$1 and id=$2`, [org, input.id, !deactivate,
+          JSON.stringify(deactivate ? rule : { ...rule, end_date: endDate })]);
+        if (input.operation === 'replace_schedule') {
+          await db.query(`insert into public.field_sales_schedules(organization_id,id,project_id,employee_id,timezone,country_code,rule)
+            values($1,$2,$3,$4,$5,$6,$7::jsonb)`, [org, input.new_id, input.schedule.project_id,
+            input.schedule.employee_id, old.timezone, old.country_code, JSON.stringify(input.schedule)]);
+        }
+      } else if (input.operation === 'cancel_occurrence') {
         if (!old) throw new Error('field_assignment_unavailable');
         const occurrence = expandSchedule({ series_id: input.id, schedule: old.rule, region: { country_code: old.country_code, timezone: old.timezone }, from: input.date, through: input.date })[0];
         if (!old.active || !occurrence) throw new Error('field_assignment_unavailable');
@@ -154,6 +191,10 @@ export async function readFieldCalendar(pool: Pick<pg.Pool, 'connect'>, org: str
     const settings = (await db.query('select revision,enabled,retention_days,notice_text,track_breaks from public.field_sales_settings where organization_id=$1', [org])).rows[0] ?? null;
     const region = organizationRegion((await db.query('select timezone,onboarding_state from public.organizations where id=$1', [org])).rows[0]);
     return { role, employees, projects, settings, region: region.success ? region.data : null,
+      assignments: schedules.map(s => ({ id: s.id as string, project_id: s.project_id as string,
+        employee_id: s.employee_id as string, project_name: s.project_name as string,
+        employee_name: s.employee_name as string, revision: s.revision as number,
+        schedule: scheduleSchema.parse(s.rule) })),
       occurrences: occurrences.sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
       overlaps: overlappingAssignments(occurrences), warnings };
   });

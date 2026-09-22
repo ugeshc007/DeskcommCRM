@@ -14,5 +14,18 @@ export function fieldMapStyle(tile: string | null | undefined, origin: string, a
     { id: 'roads-casing', type: 'line', source: 'basemap', 'source-layer': 'roads', paint: { 'line-color': '#aaa497', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.5, 15, 5] } },
     { id: 'roads', type: 'line', source: 'basemap', 'source-layer': 'roads', paint: { 'line-color': '#fffdf6', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.2, 15, 3] } },
     { id: 'boundaries', type: 'line', source: 'basemap', 'source-layer': 'boundaries', paint: { 'line-color': '#878799', 'line-width': 1, 'line-dasharray': [3, 3] } },
+    { id: 'place-names', type: 'symbol', source: 'basemap', 'source-layer': 'places',
+      layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Arial', 'Noto Sans', 'sans-serif'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 15, 15], 'text-max-width': 10,
+        'symbol-sort-key': ['coalesce', ['get', 'sort_rank'], 1000] },
+      paint: { 'text-color': '#394640', 'text-halo-color': '#fffdf7', 'text-halo-width': 1.5 } },
+    { id: 'road-names', type: 'symbol', source: 'basemap', 'source-layer': 'roads', minzoom: 12,
+      filter: ['has', 'name'], layout: { 'symbol-placement': 'line', 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+        'text-font': ['Arial', 'Noto Sans', 'sans-serif'], 'text-size': 11, 'text-padding': 4 },
+      paint: { 'text-color': '#6b6259', 'text-halo-color': '#fffdf7', 'text-halo-width': 1.5 } },
+    { id: 'shop-and-landmark-names', type: 'symbol', source: 'basemap', 'source-layer': 'pois', minzoom: 15,
+      filter: ['has', 'name'], layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+        'text-font': ['Arial', 'Noto Sans', 'sans-serif'], 'text-size': 11, 'text-max-width': 9,
+        'text-optional': true }, paint: { 'text-color': '#376174', 'text-halo-color': '#fffdf7', 'text-halo-width': 1.5 } },
   ] };
 }

@@ -2,14 +2,33 @@
 
 Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migration 0320 and the matching app image; verify the installed schema and health version before claiming it is available. Evidence, not phase names, determines completion.
 
+## Project shops and optional voice — local development, not deployed
+
+- An administrator manages each project's shop/customer roster individually or by CSV. A field
+  officer sees only shops belonging to projects currently assigned to them. Their Team card
+  manages assigned projects and repeating weekdays; future changes end the old rule rather
+  than rewriting historical visits. The calendar remains the dated overview.
+- A recorded collection represents payment already received; it does not initiate a charge.
+  The optional amount reduces the shop's due balance. An excess is retained as an advance
+  credit (negative balance). A separate manager/admin void records the reason and restores
+  the balance with an audit trail; the original receipt remains visible as voided. Concurrent
+  updates and replay use server-side locks/idempotency.
+- The Android Profile contains Voice settings with an Enable Voice AI switch, off by default.
+  When enabled after punch-in, a pre-generated Kokoro voice prompt asks where the officer is
+  going. The officer explicitly taps Speak answer for a short faster-whisper transcription.
+  Only an unambiguous match among *assigned* projects is proposed for confirmation; touch
+  selection always works. Audio is transient, not a background recording or free-form agent.
+- The speech sidecar is optional and private. If absent or unavailable, the app continues by
+  touch. Its container image must be published by CI before any production enablement.
+
 ## Flexible shift revision — 2026-09-21
 
 - A weekly project assignment may omit both start and end time. An omitted start date means
   today's date in the organization's configured timezone; selected weekdays determine visibility.
   The schedule does not prescribe an employee's working hours.
 - A paired employee punches in before choosing a project. This starts the visible foreground GPS
-  service and elapsed work time. Today's scheduled projects are shown first; another active
-  project in the same organization can be chosen and the override is audited. Project selection
+  service and elapsed work time. Today's scheduled projects are shown first; another assigned
+  project can be chosen and the override is audited. Project selection
   can be changed while the work session remains open.
 - Punch-out stops GPS immediately. Both the Android app and a server cron close a forgotten
   session at exactly 14 hours. Late GPS is rejected, while events captured before the cutoff

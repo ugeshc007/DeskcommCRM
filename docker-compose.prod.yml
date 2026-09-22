@@ -11,6 +11,26 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  field-voice:
+    # Opt-in speech sidecar. It has no published port; only the CRM app can use it.
+    profiles: [field-voice]
+    image: ${FIELD_VOICE_IMAGE:-ghcr.io/melgarafael/deskcomm-field-voice:stable}
+    pull_policy: ${FIELD_VOICE_PULL_POLICY:-always}
+    build:
+      context: ./services/field-voice
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    mem_limit: 1536m
+    environment:
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
   app:
     # Teto de memória — 335 MiB de pico MEDIDO nesta VPS.
     #
@@ -36,6 +56,8 @@ services:
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: unless-stopped
     env_file: .env
+    environment:
+      FIELD_VOICE_URL: ${FIELD_VOICE_URL:-http://field-voice:8080}
     depends_on:
       srh:
         condition: service_started

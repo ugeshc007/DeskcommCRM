@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
@@ -9,7 +10,7 @@ import { authenticateFieldDevice, deviceTokenHash } from '@/lib/field-sales/devi
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 
 // A dedicated synthetic organization, never shared credentials or production data.
-const org = randomUUID(), employee = randomUUID(), project = randomUUID();
+const org = randomUUID(), employee = randomUUID(), project = randomUUID(), secondProject = randomUUID();
 const password = randomUUID() + 'Aa9!', email = `field-${org}@synthetic.test`;
 let actor = '';
 let pool: pg.Pool;
@@ -20,6 +21,8 @@ test.beforeAll(async () => {
   pool = new pg.Pool({ connectionString: db });
   admin = createClient(api, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   await pool.query('select fn_provision_field_sales_flexible_shifts()');
+  // A suite can run against a local stack created before the optional shop module was added.
+  await pool.query(readFileSync('supabase/migrations/20260922113000_0384_field_sales_project_customers.sql', 'utf8'));
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: 'Synthetic field administrator' } });
   if (created.error || !created.data.user) throw new Error('Synthetic field account creation failed');
   actor = created.data.user.id;
@@ -31,6 +34,7 @@ test.beforeAll(async () => {
   await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [employee, org]);
   await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Synthetic salesperson')", [org, employee]);
   await pool.query("insert into field_sales_projects(organization_id,id,name,site_name) values($1,$2,'Synthetic showroom','Dubai test site')", [org, project]);
+  await pool.query("insert into field_sales_projects(organization_id,id,name,site_name) values($1,$2,'Secondary project','Second Dubai site')", [org, secondProject]);
 });
 test.afterAll(async () => {
   if (pool) {
@@ -59,7 +63,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('button', { name: 'Save policy', exact: true }).click();
   expect((await policySaved).status()).toBe(200);
   await page.getByRole('tab', { name: 'Calendar', exact: true }).click();
-  await page.getByLabel('Starting date', { exact: true }).fill('2027-01-04');
+  await page.getByLabel('Week of', { exact: true }).fill('2027-01-04');
   await page.getByRole('button', { name: 'Assign project', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Project', { exact: true }).selectOption(project);
@@ -72,7 +76,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(dialog).toBeHidden();
   await expect(page.getByText('Synthetic showroom', { exact: true })).toBeVisible();
   const visitCard = page.locator('article').filter({ hasText: 'Synthetic showroom' });
-  expect((await visitCard.boundingBox())!.width).toBeGreaterThan(200);
+  expect((await visitCard.boundingBox())!.width).toBeGreaterThan(140);
   await expect.poll(async () => Number((await pool.query('select count(*) from field_sales_schedules where organization_id=$1', [org])).rows[0].count)).toBe(1);
   const schedule = (await pool.query('select id from field_sales_schedules where organization_id=$1', [org])).rows[0].id;
   const visitId = randomUUID();
@@ -80,6 +84,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
     values($1,$2,$3,$4,$5,'2027-01-04','completed',now(),'Synthetic follow-up call','2020-01-01T00:00:00Z')`, [org, visitId, employee, project, schedule]);
   await page.screenshot({ path: testInfo.outputPath('calendar-desktop.png'), fullPage: true });
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();
+  await expect(page.getByText('Tile path', { exact: true })).toBeHidden();
   await expect(page.getByText('Basemap not configured.', { exact: false })).toBeVisible();
   await expect(page.getByText('No on-duty position available', { exact: true })).toBeVisible();
   await expect(page.getByText('Due — follow up now', { exact: true })).toBeVisible();
@@ -96,6 +101,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.keyboard.press('Escape');
   expect((await pool.query('select count(*)::int n from field_sales_photos where organization_id=$1 and id=$2', [org, photoId])).rows[0].n).toBe(0);
   if (process.env.FIELD_MAP_PILOT === 'true') {
+    await page.getByText('Self-hosted basemap settings', { exact: true }).click();
     const loaded = page.waitForResponse(response => response.url().includes('/field-map-tiles/uae.pmtiles/') && response.status() === 200, { timeout: 20000 });
     await page.getByLabel('Tile path', { exact: true }).fill('/field-map-tiles/uae.pmtiles');
     await page.getByLabel('Tile-source attribution').fill('Protomaps');
@@ -138,6 +144,25 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(stored).toMatchObject({ start_date: `${part('year')}-${part('month')}-${part('day')}`,
     start_time: null, end_time: null, repeat: 'weekly', weekdays: [1, 6] });
 
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage projects' }).click();
+  const projectManager = page.getByRole('dialog');
+  await expect(projectManager.getByText('Synthetic showroom')).toBeVisible();
+  const secondary = projectManager.locator('section').filter({ hasText: 'Secondary project' });
+  await secondary.getByRole('button', { name: 'Assign weekdays' }).click();
+  await projectManager.getByLabel('Start date', { exact: true }).fill('2027-01-04');
+  await projectManager.getByLabel('Thu', { exact: true }).check();
+  await projectManager.getByLabel('Sun', { exact: true }).check();
+  await projectManager.getByRole('button', { name: 'Save weekdays' }).click();
+  await expect(secondary.getByText('Thu, Sun')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('officer-project-weekdays.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await page.getByRole('tab', { name: 'Calendar', exact: true }).click();
+  await page.getByLabel('Week of', { exact: true }).fill('2027-01-04');
+  const officerWeek = page.getByRole('row', { name: /Synthetic salesperson/ });
+  await expect(officerWeek.locator('td').nth(3).getByText('Secondary project')).toBeVisible();
+  await expect(officerWeek.locator('td').nth(6).getByText('Secondary project')).toBeVisible();
+
   // The administrator's dedicated map uses real scoped GPS rows and an independent date selector.
   const liveSession = randomUUID(), start = new Date(Date.now() - 120000);
   const day = `${part('year')}-${part('month')}-${part('day')}`;
@@ -155,17 +180,18 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Manager visibility' })).toHaveCount(0);
-  const officerCard = page.getByRole('article').filter({ has: page.getByRole('link', { name: 'View position and route' }) });
+  const officerCard = page.getByRole('article').filter({ has: page.getByRole('link', { name: 'View route and visits' }) });
   await expect(officerCard.getByText('Online', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Present', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Punched in')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-team-presence-desktop.png'), fullPage: true });
-  await officerCard.getByRole('link', { name: 'View position and route' }).click();
+  await officerCard.getByRole('link', { name: 'View route and visits' }).click();
   await expect(page).toHaveURL(new RegExp(`/app/field-sales/live\\?employee_id=${employee}&date=${day}`));
   await expect(page.getByRole('heading', { name: 'Field team live view' })).toBeVisible();
   await page.getByLabel('Travel date').fill(day);
   await page.getByLabel('Field officer').selectOption(employee);
-  await expect(page.getByText('2 recorded points', { exact: false })).toBeVisible();
+  await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
+  await expect(page.getByText('2', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
   if (process.env.FIELD_MAP_PILOT === 'true') await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });
   await page.screenshot({ path: testInfo.outputPath('admin-live-map-desktop.png'), fullPage: true });

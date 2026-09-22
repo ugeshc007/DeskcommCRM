@@ -5,7 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { RouteMap, type Operations } from '../operations';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { RouteMap, type Operations, type ShopCollection } from '../operations';
+import { displayRoute } from '@/lib/field-sales/route-quality';
 
 function localDate(instant: string, timezone: string) {
   const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(instant));
@@ -16,6 +19,8 @@ function localDate(instant: string, timezone: string) {
 export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string }) {
   const [date, setDate] = useState(() => initialDate ?? new Date().toISOString().slice(0, 10));
   const [employeeId, setEmployeeId] = useState(initialEmployeeId ?? '');
+  const [voiding, setVoiding] = useState<ShopCollection | null>(null);
+  const [voidBusy, setVoidBusy] = useState(false), [voidError, setVoidError] = useState('');
   const dateTouched = useRef(Boolean(initialDate));
   const query = useQuery({
     queryKey: ['field-sales-live', organizationId, userId, date, employeeId],
@@ -41,8 +46,27 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
   const selected = data?.latest.find(person => person.employee_id === employeeId);
   const onDuty = data?.latest.filter(person => person.status && person.latitude !== null && person.longitude !== null) ?? [];
   const validPoints = data?.points.filter(point => !point.mock_location) ?? [];
+  const plottedRoute = displayRoute(data?.points ?? []);
   const time = (value: string | null) => value && timezone
     ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'No location yet';
+  const money = (value: string | null, currency: string) => value === null ? 'Not specified'
+    : `${currency} ${(Math.abs(Number(value)) / 100).toFixed(2)}`;
+  const selectedCollections = data?.collections.filter(item => item.employee_id === employeeId) ?? [];
+  async function voidCollection(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!voiding || voidBusy) return;
+    const form = new FormData(event.currentTarget), reason = String(form.get('reason') ?? '').trim();
+    if (reason.length < 5) { setVoidError('Enter at least five characters explaining the correction.'); return; }
+    setVoidBusy(true); setVoidError('');
+    try {
+      const response = await fetch('/api/v1/field-sales/customers', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operation: 'void', collection_id: voiding.id, reason }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? 'Correction could not be saved.');
+      setVoiding(null); await query.refetch();
+    } catch (error) { setVoidError(error instanceof Error ? error.message : 'Correction could not be saved.'); }
+    finally { setVoidBusy(false); }
+  }
 
   return <main className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
@@ -77,9 +101,36 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
       <p className="text-xs text-muted-foreground">Pins show the last reported on-duty position, not a continuously measured position. The blue path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
-        <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
+        <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
         <Button className="mt-3" variant="outline" onClick={() => setEmployeeId('')}>Show all current positions</Button>
       </section>}
+      {employeeId && <section className="space-y-3" aria-label="Officer shop visits and collections">
+        <h2 className="text-lg font-semibold">Shop visits and collections · {date}</h2>
+        <p className="text-sm text-muted-foreground">Recorded payments are money already received, not online charges. A negative remaining balance is advance credit. Shop pins appear only when a nearby, accurate GPS fix is available within the location-retention period.</p>
+        {!selectedCollections.length && <p className="rounded-xl border p-4 text-sm">No shop visit or collection recorded for this officer on this date.</p>}
+        <div className="grid gap-3 md:grid-cols-2">{selectedCollections.map(item => <article key={item.id} className={`rounded-xl border bg-card p-4 ${item.voided_at ? 'opacity-70' : ''}`}>
+          <h3 className="font-semibold">{item.shop_name}</h3>
+          <p className="text-sm text-muted-foreground">{item.project_name} · {time(item.captured_at)}</p>
+          <p className="mt-2 text-sm">{item.amount_cents === null ? 'Shop visit · no amount entered' : `Received: ${money(item.amount_cents, item.currency)}`}</p>
+          {item.voided_at ? <p className="text-sm text-destructive">Voided {time(item.voided_at)} · {item.void_reason}</p>
+            : <p className="text-sm">{item.balance_after_cents === null ? 'Due not specified' : Number(item.balance_after_cents) < 0 ? `Advance credit: ${money(item.balance_after_cents, item.currency)}` : `Due after visit: ${money(item.balance_after_cents, item.currency)}`}</p>}
+          <p className="mt-1 text-xs text-muted-foreground">{item.latitude === null ? 'No reliable shop map pin for this visit' : `Shop pin · accuracy ±${Math.round(item.accuracy_m ?? 0)} m`}</p>
+          {!item.voided_at && item.employee_id !== userId && (data.role === 'admin' || data.role === 'manager') &&
+            <Button className="mt-2" variant="outline" onClick={() => { setVoidError(''); setVoiding(item); }}>Correct mistaken record</Button>}
+        </article>)}</div>
+      </section>}
+      <Dialog open={Boolean(voiding)} onOpenChange={open => { if (!open && !voidBusy) setVoiding(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Void mistaken shop record?</DialogTitle>
+          <DialogDescription>The original record stays in history. A payment void adds its amount back to the current due balance; later imports may require manual reconciliation.</DialogDescription>
+        </DialogHeader>
+          <form onSubmit={voidCollection} className="space-y-3">
+            <p className="text-sm">{voiding?.shop_name} · {voiding?.amount_cents === null ? 'Visit only' : money(voiding?.amount_cents ?? null, voiding?.currency ?? '')}</p>
+            <label className="grid gap-2 text-sm font-medium">Reason<Textarea name="reason" required minLength={5} maxLength={500}/></label>
+            {voidError && <p role="alert" className="text-sm text-destructive">{voidError}</p>}
+            <Button disabled={voidBusy}>Void and restore balance</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Field officers</h2>
         {!data.latest.length && <p className="rounded-xl border p-4">No field officers enrolled yet. Enroll staff under Field Sales → Team.</p>}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{data.latest.map(person => <article className={`rounded-xl border bg-card p-4 ${employeeId === person.employee_id ? 'border-primary' : ''}`} key={person.employee_id}>

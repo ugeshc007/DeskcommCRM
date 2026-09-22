@@ -11,5 +11,7 @@ describe('fieldMapStyle', () => {
       tiles: ['https://crm.example.test/field-map-tiles/uae.pmtiles/{z}/{x}/{y}'],
       minzoom: 0, maxzoom: 15, bounds: [51, 22, 57, 26.5],
     });
+    expect(style.layers.map(layer => layer.id)).toEqual(expect.arrayContaining(['place-names', 'road-names', 'shop-and-landmark-names']));
+    expect(style).not.toHaveProperty('glyphs'); // MapLibre uses device fonts: no remote map/font service.
   });
 });

@@ -8,6 +8,7 @@ import { authenticateFieldDevice, deviceTokenHash, issueFieldDevice, issueOffice
 import { completeNextAction, manageCorrection, readFieldOperations, recordVisit } from '@/lib/field-sales/operations';
 import { manageFieldSales, readFieldCalendar } from '@/lib/field-sales/management';
 import { saveFieldPhoto, readFieldPhoto, listFieldPhotos, deleteFieldPhoto } from '@/lib/field-sales/photos';
+import { manageProjectCustomers, readProjectCustomers, readAssignedCustomers, recordCustomerCollection, voidCustomerCollection } from '@/lib/field-sales/collections';
 import sharp from 'sharp';
 
 if (!process.env.TEST_DB_CONTAINER) throw new Error('Run through scripts/test-db.sh');
@@ -24,6 +25,7 @@ beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_photos()');
   await pool.query('select fn_provision_field_sales_devices()');
   await pool.query('select fn_provision_field_sales_pairing()');
+  await pool.query('select fn_provision_field_sales_project_customers()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_lifecycle()');
@@ -247,6 +249,23 @@ describe('optional field-sales foundation', () => {
     expect(calendar.occurrences).toHaveLength(1); expect(calendar.occurrences[0]!.starts_at).toBe('2099-01-01T07:00:00.000Z');
     await expect(manageFieldSales(pool, f.org, f.manager, edit)).rejects.toThrow('field_revision_conflict');
   });
+  it('changes an officer’s future weekdays and ends the assignment without erasing earlier dates', async () => {
+    const f = await fixture(), a = await assignment(f, '2099-01-01'), replacement = randomUUID();
+    const weekly = { ...a.rule, start_date: '2099-01-02', end_date: null,
+      start_time: null, end_time: null, repeat: 'weekly', weekdays: [5, 7] };
+    const edit = { operation: 'replace_schedule', id: a.schedule, revision: 1, new_id: replacement,
+      effective_date: '2099-01-02', schedule: weekly };
+    await manageFieldSales(pool, f.org, f.manager, edit);
+    const before = await readFieldCalendar(pool, f.org, f.actor, '2099-01-01', '2099-01-09');
+    expect(before.occurrences.some(o => o.date === '2099-01-01' && o.project_id === a.project)).toBe(true);
+    expect(before.occurrences.some(o => o.date === '2099-01-02' && o.project_id === a.project)).toBe(true);
+    await expect(manageFieldSales(pool, f.org, f.manager, edit)).rejects.toThrow('field_revision_conflict');
+    await manageFieldSales(pool, f.org, f.manager, { operation: 'end_schedule', id: replacement,
+      revision: 1, effective_date: '2099-01-09' });
+    const after = await readFieldCalendar(pool, f.org, f.actor, '2099-01-01', '2099-01-16');
+    expect(after.occurrences.some(o => o.date === '2099-01-02')).toBe(true);
+    expect(after.occurrences.some(o => o.date >= '2099-01-09' && o.occurrence_key.startsWith(replacement))).toBe(false);
+  });
   it('expires GPS using each organization policy while preserving attendance and auditing only deletions', async () => {
     const captured = new Date(Date.now() - 2 * 86400000).toISOString();
     const a = await fixture(captured), b = await fixture(captured);
@@ -354,6 +373,63 @@ describe('optional field-sales foundation', () => {
     expect((await pool.query('select project_id,schedule_id from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0])
       .toEqual({ project_id: f.project, schedule_id: null });
     expect((await pool.query("select metadata->>'override' as override from api_audit_log where organization_id=$1 and action='field_sales.select_project'", [f.org])).rows[0].override).toBe('true');
+  });
+  it('limits manual project choice to this officer’s active assignments, regardless of weekday', async () => {
+    const f = await fixture();
+    const otherProject = randomUUID(), otherSchedule = randomUUID(), anotherOfficer = randomUUID();
+    await pool.query('insert into auth.users(id,email) values($1,$2)', [anotherOfficer, `${anotherOfficer}@synthetic.test`]);
+    await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'field_officer',now())", [anotherOfficer, f.org]);
+    await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Another officer')", [f.org, anotherOfficer]);
+    await pool.query("insert into field_sales_projects(organization_id,id,name,site_name) values($1,$2,'Another project','Another site')", [f.org, otherProject]);
+    const nextWeekday = (new Date(f.localDate + 'T00:00:00Z').getUTCDay() % 7) + 1;
+    const rule = { project_id: otherProject, employee_id: anotherOfficer, start_date: f.localDate,
+      end_date: null, start_time: null, end_time: null, end_day_offset: 0,
+      repeat: 'weekly', weekdays: [nextWeekday], instructions: '' };
+    await pool.query("insert into field_sales_schedules(organization_id,id,employee_id,project_id,timezone,country_code,rule) values($1,$2,$3,$4,'Asia/Dubai','AE',$5)",
+      [f.org, otherSchedule, anotherOfficer, otherProject, JSON.stringify(rule)]);
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, project_id: undefined, schedule_id: undefined });
+    const choose = { event_id: randomUUID(), session_id: f.session, action: 'select_project', sequence: 1,
+      captured_at: new Date().toISOString(), project_id: otherProject, schedule_id: null, local_date: f.localDate };
+    await expect(recordAttendance(pool, f.org, f.actor, choose)).rejects.toThrow('field_assignment_unavailable');
+    const assignedRule = { ...rule, employee_id: f.actor };
+    await pool.query("insert into field_sales_schedules(organization_id,id,employee_id,project_id,timezone,country_code,rule) values($1,$2,$3,$4,'Asia/Dubai','AE',$5)",
+      [f.org, randomUUID(), f.actor, otherProject, JSON.stringify(assignedRule)]);
+    await recordAttendance(pool, f.org, f.actor, choose);
+    expect((await pool.query('select project_id from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0].project_id).toBe(otherProject);
+  });
+  it('keeps project shops inside the organization and posts overpayments exactly once as advance credit', async () => {
+    const f = await fixture(), foreign = await fixture(), code = 'SHOP-01';
+    await manageProjectCustomers(pool, f.org, f.manager, { operation: 'add', project_id: f.project,
+      customer: { customer_code: code, shop_name: 'Synthetic shop', address: '', balance_cents: 10_000 } });
+    const customer = (await readProjectCustomers(pool, f.org, f.manager, f.project))[0];
+    expect(customer.shop_name).toBe('Synthetic shop');
+    expect((await readAssignedCustomers(pool, f.org, f.actor, f.localDate)).map(row => row.id)).toContain(customer.id);
+    await expect(readProjectCustomers(pool, foreign.org, foreign.manager, f.project)).resolves.toEqual([]);
+    await recordAttendance(pool, f.org, f.actor, f.command);
+    const payment = { collection_id: randomUUID(), project_customer_id: customer.id, project_id: f.project,
+      session_id: f.session, captured_at: new Date().toISOString(), amount_cents: 15_000 };
+    await expect(recordCustomerCollection(pool, foreign.org, foreign.actor, payment)).rejects.toThrow();
+    expect((await recordCustomerCollection(pool, f.org, f.actor, payment)).replayed).toBe(false);
+    expect((await recordCustomerCollection(pool, f.org, f.actor, payment)).replayed).toBe(true);
+    await expect(recordCustomerCollection(pool, f.org, f.actor, { ...payment, amount_cents: 20_000 })).rejects.toThrow('field_idempotency_conflict');
+    expect((await readProjectCustomers(pool, f.org, f.manager, f.project))[0].balance_cents).toBe('-5000');
+    const visit = { ...payment, collection_id: randomUUID(), amount_cents: null };
+    await recordCustomerCollection(pool, f.org, f.actor, visit);
+    expect((await readProjectCustomers(pool, f.org, f.manager, f.project))[0].balance_cents).toBe('-5000');
+    const activity = await readFieldOperations(pool, f.org, f.manager, f.localDate, null, f.actor);
+    expect(activity.collections).toHaveLength(2);
+    expect(activity.collections[0].shop_name).toBe('Synthetic shop');
+    expect(activity.collections[0].latitude).toBeNull();
+    expect((await pool.query('select count(*)::int n from field_sales_customer_collections where organization_id=$1', [f.org])).rows[0].n).toBe(2);
+    expect((await pool.query('select count(*)::int n from field_sales_customer_collections where organization_id=$1', [foreign.org])).rows[0].n).toBe(0);
+    const correction = { operation: 'void', collection_id: payment.collection_id, reason: 'Duplicate receipt recorded during test' };
+    await expect(voidCustomerCollection(pool, foreign.org, foreign.manager, correction)).rejects.toThrow('field_customer_unavailable');
+    await expect(voidCustomerCollection(pool, f.org, f.actor, correction)).rejects.toThrow('field_forbidden');
+    expect((await voidCustomerCollection(pool, f.org, f.manager, correction)).replayed).toBe(false);
+    expect((await voidCustomerCollection(pool, f.org, f.manager, correction)).replayed).toBe(true);
+    expect((await readProjectCustomers(pool, f.org, f.manager, f.project))[0].balance_cents).toBe('10000');
+    const history = await readFieldOperations(pool, f.org, f.manager, f.localDate, null, f.actor);
+    expect(history.collections.find(row => row.id === payment.collection_id).void_reason).toBe(correction.reason);
   });
   it('closes forgotten sessions at exactly fourteen hours and rejects later GPS', async () => {
     const start = new Date(Date.now() - 15 * 3600000).toISOString();

@@ -29,6 +29,17 @@ export async function requireFieldEmployee(db: FieldDb, org: string, employee: s
   if (!row.rowCount) throw new Error('field_employee_unavailable');
 }
 
+/** An active assignment grants project choice, even on a different weekday. */
+export async function requireFieldProjectAccess(db: FieldDb, org: string, employee: string, project: string, localDate: string) {
+  const allowed = await db.query(`select 1 from public.field_sales_schedules s
+    join public.field_sales_projects p on p.organization_id=s.organization_id and p.id=s.project_id
+    where s.organization_id=$1 and s.employee_id=$2 and s.project_id=$3 and s.active and p.active
+      and (s.rule->>'start_date')::date <= $4::date
+      and (s.rule->>'end_date' is null or (s.rule->>'end_date')::date >= $4::date)
+    limit 1 for share of s,p`, [org, employee, project, localDate]);
+  if (!allowed.rowCount) throw new Error('field_assignment_unavailable');
+}
+
 export async function requireFieldScope(db: FieldDb, org: string, actor: string, role: FieldRole, employee: string, write = false) {
   // A manager's device key is still an employee-only credential, never a management token.
   if (deviceScope.getStore() && actor !== employee) throw new Error('field_forbidden');

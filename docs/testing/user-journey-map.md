@@ -2043,13 +2043,33 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
   local organization; screenshot in `.superpowers/evidence/field-sales-flexible-shifts-20260921/`.
 - [P0] An employee's paired Android phone stays signed in until explicit sign-out. Punch in
   starts work time and GPS before project choice; today's scheduled projects appear first,
-  followed by other active projects in the same organization. Punch out stops GPS immediately.
+  followed by other projects explicitly assigned to that officer. Punch out stops GPS immediately.
 - [P0] At 14 hours, the phone and server independently stop the shift at the exact cutoff;
   later GPS is rejected. Offline queued attendance before the cutoff can still replay after
   server auto-close. Database proof: `tests/invariants/field-sales.test.ts` (24 passing).
 - Android build/unit, focused contracts, TypeScript, lint, local baseline INSTALL/UPDATE and
   focused browser E2E pass. A real-device locked-screen/battery pilot is still needed before
   claiming field reliability; no production deployment is implied by these local tests.
+
+### Field Sales shops, collections and optional voice — 2026-09-22 (local development)
+
+- [P0] Team card can assign a project with repeating weekdays, reschedule future occurrences,
+  or end the rule without rewriting past attendance or visits. Calendar shows the actual days.
+- [P0] Admin imports/adds a project shop; an assigned officer records a visit or received
+  payment offline. Replay is idempotent, due decreases, overpayment becomes an advance,
+  and a different manager can void a mistaken receipt with a reason. Other organizations,
+  unassigned officers and expired sessions cannot read or write it.
+- [P1] Officer card shows recent shop, time and collection; individual route page includes
+  date-scoped shop history and distinct shop pins. No precise marker is shown without a
+  sufficiently accurate, retained GPS sample.
+- [P1] Profile → Voice settings is off by default. Enabling it speaks a private prebuilt
+  prompt after punch-in; the officer must tap to record a short reply. Transcription may
+  propose only an assigned project and requires confirmation. Disabled/unavailable voice
+  leaves all touch controls available and never starts background microphone capture.
+- Local evidence: Android assemble/unit/lint, speech sidecar image and AAC request, focused
+  database invariants, focused unit tests, and synthetic browser Field Sales E2E passed.
+  Production image publication, full regression gates and real-device voice usability remain
+  separate release checks. Nothing in this entry asserts a deployment.
 
 ### Managed SaaS control plane
 

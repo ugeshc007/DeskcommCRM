@@ -15,6 +15,7 @@ import android.widget.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.math.BigDecimal;
 import org.json.*;
 
 /** A deliberately small field workflow: punch in, choose a project, punch out. */
@@ -26,6 +27,7 @@ public final class MainActivity extends Activity {
     private LinearLayout content;
     private Spinner projectPicker;
     private final ArrayList<JSONObject> projectChoices = new ArrayList<>();
+    private VoiceAssistant voiceAssistant;
     private final Handler clock = new Handler(Looper.getMainLooper());
     private final Runnable refreshClock = new Runnable() {
         @Override public void run() { render(); sync(); clock.postDelayed(this, 60000); }
@@ -34,6 +36,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        voiceAssistant = new VoiceAssistant(this);
         SyncJobService.schedule(this);
         render();
     }
@@ -41,7 +44,7 @@ public final class MainActivity extends Activity {
         super.onResume(); try { Attendance.autoPunchOut(this); } catch (Exception ignored) { }
         render(); sync(); clock.removeCallbacks(refreshClock); clock.postDelayed(refreshClock, 60000);
     }
-    @Override public void onPause() { clock.removeCallbacks(refreshClock); super.onPause(); }
+    @Override public void onPause() { clock.removeCallbacks(refreshClock); voiceAssistant.cancel(); super.onPause(); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private GradientDrawable shape(int color, int radius) {
         GradientDrawable drawable = new GradientDrawable(); drawable.setColor(color); drawable.setCornerRadius(dp(radius)); return drawable;
@@ -154,11 +157,18 @@ public final class MainActivity extends Activity {
         }
         if (choices.isEmpty()) add(panel, label("No active projects are available. Ask your manager; GPS and working time continue until punch-out.", 15, RED, false), 12);
         else {
+            if (state.optBoolean("voice_enabled")) {
+                add(panel, label("Where are we going now?", 19, INK, true), 16);
+                Button speak = action("Speak destination", BRAND);
+                speak.setOnClickListener(v -> showDestinationPrompt()); add(panel, speak, 10);
+                add(panel, label("Voice is optional. Confirm the recognized project before it changes your work session.", 13, MUTED, false), 5);
+            }
             projectPicker = new Spinner(this); projectPicker.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, choices));
             projectPicker.setMinimumHeight(dp(56)); add(panel, projectPicker, 12);
             Button choose = action(state.optString("active_project_id").isEmpty() ? "Choose project" : "Change project", BRAND);
             choose.setOnClickListener(v -> chooseProject()); add(panel, choose, 10);
         }
+        if (!state.optString("active_project_id").isEmpty()) showProjectCustomers(state);
         Button out = action("Punch out", RED); out.setOnClickListener(v -> confirmPunchOut()); add(panel, out, 22); add(content, panel, 16);
         if (!TrackingService.running) startTracking();
     }
@@ -170,7 +180,10 @@ public final class MainActivity extends Activity {
             new AlertDialog.Builder(this).setTitle("Start your work session?")
                 .setMessage(policy.optString("notice_text") + "\n\nGPS starts now and stops at punch-out or after 14 hours. Choose a project after punching in.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Agree and punch in", (dialog, which) -> {
-                    try { Attendance.punchIn(this); startTracking(); render(); } catch (Exception failure) { alert("Punch in not saved", "Refresh and try again."); }
+                    try {
+                        Attendance.punchIn(this); startTracking(); render();
+                        if (SecureState.read(this).optBoolean("voice_enabled")) showDestinationPrompt();
+                    } catch (Exception failure) { alert("Punch in not saved", "Refresh and try again."); }
                 }).show();
         } catch (Exception failure) { alert("Policy unavailable", "Refresh assignments before punching in."); }
     }
@@ -178,6 +191,131 @@ public final class MainActivity extends Activity {
         if (projectPicker == null || projectChoices.isEmpty()) return;
         try { Attendance.selectProject(this, projectChoices.get(projectPicker.getSelectedItemPosition())); render(); }
         catch (Exception failure) { alert("Project not saved", "Your work session and GPS remain active. Sync and try again."); }
+    }
+    private void showDestinationPrompt() {
+        if (projectChoices.isEmpty()) { alert("No project available", "Ask your manager to assign a project. Your work session continues."); return; }
+        voiceAssistant.playPrompt();
+        new AlertDialog.Builder(this).setTitle("Where are we going now?")
+            .setMessage("Speak an assigned project name, or choose it from the list on this screen. GPS and working time are already in progress.")
+            .setNegativeButton("Choose by touch", null)
+            .setPositiveButton("Speak answer", (dialog, which) -> startVoiceInput()).show();
+    }
+    private void startVoiceInput() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 12);
+            alert("Microphone permission", "Allow microphone access, then tap Speak destination again. Project buttons still work.");
+            return;
+        }
+        try { voiceAssistant.start(); }
+        catch (Exception failure) { alert("Microphone unavailable", "Choose a project by touch."); return; }
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Listening")
+            .setMessage("Say the name of one assigned project. Tap Stop when finished. Recording stops automatically after seven seconds.")
+            .setNegativeButton("Cancel", (d, w) -> voiceAssistant.cancel())
+            .setPositiveButton("Stop and transcribe", null).create();
+        final Runnable[] autoStop = new Runnable[1];
+        dialog.setOnDismissListener(d -> {
+            if (autoStop[0] != null) clock.removeCallbacks(autoStop[0]);
+            if (voiceAssistant.isRecording()) voiceAssistant.cancel();
+        });
+        dialog.setOnShowListener(shown -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            if (autoStop[0] != null) clock.removeCallbacks(autoStop[0]);
+            voiceAssistant.stop(new VoiceAssistant.Result() {
+                public void received(String text) { runOnUiThread(() -> confirmVoiceProject(text)); }
+                public void unavailable() { runOnUiThread(() -> alert("Voice unavailable", "Choose a project by touch. Nothing was changed.")); }
+            });
+            dialog.dismiss();
+        }));
+        dialog.show();
+        autoStop[0] = () -> { if (dialog.isShowing() && voiceAssistant.isRecording()) dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick(); };
+        clock.postDelayed(autoStop[0], 7000);
+    }
+    private void confirmVoiceProject(String transcript) {
+        try {
+            if (!WorkState.collecting(SecureState.read(this).optString("status", "off_duty"))) return;
+            ArrayList<String> names = new ArrayList<>();
+            for (JSONObject project : projectChoices) names.add(project.optString("project_name"));
+            int match = ProjectVoiceMatcher.uniqueMatch(transcript, names);
+            if (match < 0) { alert("Project not recognized", "Heard: “" + transcript + "”. Choose your project from the list; no project was changed."); return; }
+            JSONObject project = projectChoices.get(match);
+            new AlertDialog.Builder(this).setTitle("Confirm destination")
+                .setMessage("Heard: “" + transcript + "”\n\nUse assigned project: " + project.optString("project_name") + "?")
+                .setNegativeButton("No, choose by touch", null)
+                .setPositiveButton("Confirm project", (d, w) -> {
+                    try { Attendance.selectProject(this, project); render(); }
+                    catch (Exception failure) { alert("Project not saved", "Your work session continues. Sync and choose the project by touch."); }
+                }).show();
+        } catch (Exception failure) { alert("Project unavailable", "Choose a project by touch."); }
+    }
+    private void showProjectCustomers(JSONObject state) throws Exception {
+        JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray roster = snapshot == null ? null : snapshot.optJSONArray("customers");
+        if (roster == null) return;
+        ArrayList<JSONObject> customers = new ArrayList<>(); ArrayList<String> labels = new ArrayList<>();
+        String projectId = state.getString("active_project_id");
+        for (int i = 0; i < roster.length(); i++) {
+            JSONObject shop = roster.getJSONObject(i);
+            if (!projectId.equals(shop.optString("project_id"))) continue;
+            customers.add(shop); labels.add(shop.optString("shop_name") + " · " + shop.optString("customer_code"));
+        }
+        LinearLayout panel = card(); add(panel, label("Project shops", 18, INK, true), 0);
+        if (customers.isEmpty()) add(panel, label("No shops assigned to this project yet. Ask your manager to add or import them in CRM → Projects.", 14, MUTED, false), 8);
+        else {
+            add(panel, label("Search for a shop, then record a visit or payment received.", 14, MUTED, false), 8);
+            AutoCompleteTextView picker = new AutoCompleteTextView(this); picker.setThreshold(1); picker.setSingleLine(true);
+            picker.setHint("Search shop name or code"); picker.setTextSize(16); picker.setMinHeight(dp(54));
+            picker.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, labels));
+            final JSONObject[] selected = { null };
+            picker.setOnItemClickListener((parent, view, position, id) -> {
+                String choice = String.valueOf(parent.getItemAtPosition(position));
+                int index = labels.indexOf(choice); selected[0] = index < 0 ? null : customers.get(index);
+            });
+            picker.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+                public void onTextChanged(CharSequence s, int start, int before, int count) { selected[0] = null; }
+                public void afterTextChanged(android.text.Editable s) { }
+            });
+            add(panel, picker, 12);
+            Button record = action("Record shop visit / collection", BRAND);
+            record.setOnClickListener(v -> {
+                JSONObject shop = selected[0];
+                if (shop == null) { alert("Select a shop", "Choose one of the listed shops before recording a visit."); return; }
+                openCollectionDialog(state, shop);
+            }); add(panel, record, 10);
+        }
+        add(content, panel, 16);
+    }
+    private void openCollectionDialog(JSONObject state, JSONObject shop) {
+        try {
+            LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(20), dp(6), dp(20), 0);
+            String currency = shop.optString("currency", "");
+            String due = shop.isNull("balance_cents") ? "Due not specified" :
+                new BigDecimal(shop.getString("balance_cents")).movePointLeft(2).signum() < 0
+                  ? "Advance credit: " + currency + " " + new BigDecimal(shop.getString("balance_cents")).abs().movePointLeft(2).toPlainString()
+                  : "Due: " + currency + " " + new BigDecimal(shop.getString("balance_cents")).movePointLeft(2).toPlainString();
+            add(form, label(due, 14, MUTED, false), 0);
+            EditText amount = field("Amount received (optional)", false);
+            amount.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            add(form, amount, 10);
+            new AlertDialog.Builder(this).setTitle(shop.getString("shop_name"))
+                .setMessage("Leave the amount blank to record a visit only. A payment is a record of money already received, not an online charge.")
+                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save", (dialog, which) -> {
+                    try {
+                        String value = amount.getText().toString().trim();
+                        Object cents = JSONObject.NULL;
+                        if (!value.isEmpty()) {
+                            BigDecimal parsed = new BigDecimal(value);
+                            long minor = parsed.movePointRight(2).longValueExact();
+                            if (minor <= 0 || minor > 1_000_000_000_000L) throw new IllegalArgumentException();
+                            cents = minor;
+                        }
+                        JSONObject command = new JSONObject().put("collection_id", UUID.randomUUID().toString())
+                            .put("project_customer_id", shop.getString("id")).put("project_id", shop.getString("project_id"))
+                            .put("session_id", state.getString("session_id"))
+                            .put("captured_at", Instant.now().toString()).put("amount_cents", cents);
+                        SyncEngine.collection(this, command, () -> runOnUiThread(this::render));
+                        Toast.makeText(this, "Shop record queued for sync", Toast.LENGTH_SHORT).show();
+                    } catch (Exception failure) { alert("Not saved", "Enter a positive amount with up to two decimal places, or leave it blank for a visit."); }
+                }).show();
+        } catch (Exception failure) { alert("Shop unavailable", "Refresh the project customer list and try again."); }
     }
     private void confirmPunchOut() {
         new AlertDialog.Builder(this).setTitle("Punch out now?").setMessage("GPS tracking will stop immediately. Pending records will continue syncing safely.")
@@ -199,9 +337,28 @@ public final class MainActivity extends Activity {
             JSONObject state = SecureState.read(this), snapshot = state.optJSONObject("snapshot"); JSONObject employee = snapshot == null ? null : snapshot.optJSONObject("employee");
             String name = employee == null ? "Sales person" : employee.optString("display_name", "Sales person");
             AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Profile").setMessage(name + "\nOrganization time zone: " + state.optString("timezone", "UTC"))
-                .setNegativeButton("Close", null).setPositiveButton("Sign out", null).create();
-            dialog.setOnShowListener(x -> { Button signOut = dialog.getButton(AlertDialog.BUTTON_POSITIVE); signOut.setTextColor(RED); signOut.setOnClickListener(v -> signOut(dialog)); }); dialog.show();
+                .setNegativeButton("Close", null).setNeutralButton("Voice settings", null).setPositiveButton("Sign out", null).create();
+            dialog.setOnShowListener(x -> {
+                Button signOut = dialog.getButton(AlertDialog.BUTTON_POSITIVE); signOut.setTextColor(RED); signOut.setOnClickListener(v -> signOut(dialog));
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> { dialog.dismiss(); showVoiceSettings(); });
+            }); dialog.show();
         } catch (Exception failure) { alert("Profile unavailable", "Secure profile data could not be opened."); }
+    }
+    private void showVoiceSettings() {
+        try {
+            Switch enabled = new Switch(this); enabled.setText("Enable Voice AI"); enabled.setTextSize(17);
+            enabled.setChecked(SecureState.read(this).optBoolean("voice_enabled"));
+            LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(24), dp(8), dp(24), dp(8));
+            add(panel, enabled, 0);
+            add(panel, label("Off by default. When on, the app speaks its destination prompt and records only while you tap Speak answer. The short recording goes to your CRM's private speech service and is deleted after transcription. Project buttons always remain available.", 14, MUTED, false), 12);
+            new AlertDialog.Builder(this).setTitle("Voice settings").setView(panel)
+                .setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+                    try {
+                        SecureState.mutate(this, state -> state.put("voice_enabled", enabled.isChecked()));
+                        if (!enabled.isChecked()) voiceAssistant.cancel(); render();
+                    } catch (Exception failure) { alert("Settings not saved", "Try again; touch controls remain available."); }
+                }).show();
+        } catch (Exception failure) { alert("Settings unavailable", "Try again after reopening the app."); }
     }
     private void signOut(AlertDialog profile) {
         try {

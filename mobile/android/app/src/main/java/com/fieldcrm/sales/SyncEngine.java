@@ -136,6 +136,19 @@ public final class SyncEngine {
                         if (pending != null && pending.length() > 0 && pending.getJSONObject(0).getString("command_id").equals(visit.getString("command_id"))) pending.remove(0);
                     });
                 }
+                for (int i = 0; i < 100; i++) {
+                    state = SecureState.read(context);
+                    JSONArray collections = state.optJSONArray("pending_collections");
+                    if (collections == null || collections.length() == 0) break;
+                    JSONObject collection = collections.getJSONObject(0);
+                    try { request(state, "POST", "", new JSONObject().put("operation", "collection").put("command", collection)); }
+                    catch (SecurityException denied) { throw denied; }
+                    catch (Exception failure) { completionProblem = "Shop visits or collections are pending. Keep this phone connected and retry."; break; }
+                    SecureState.mutate(context, current -> {
+                        JSONArray pending = current.optJSONArray("pending_collections");
+                        if (pending != null && pending.length() > 0 && pending.getJSONObject(0).getString("collection_id").equals(collection.getString("collection_id"))) pending.remove(0);
+                    });
+                }
                 for (int i = 0; i < 20; i++) {
                     state = SecureState.read(context);
                     JSONArray completions = state.optJSONArray("pending_completions");
@@ -245,6 +258,7 @@ public final class SyncEngine {
         return state.optJSONArray("events") != null && state.optJSONArray("events").length() > 0
             || state.optJSONArray("points") != null && state.optJSONArray("points").length() > 0
             || state.optJSONArray("pending_visits") != null && state.optJSONArray("pending_visits").length() > 0
+            || state.optJSONArray("pending_collections") != null && state.optJSONArray("pending_collections").length() > 0
             || state.optJSONArray("pending_completions") != null && state.optJSONArray("pending_completions").length() > 0
             || state.optJSONArray("pending_photos") != null && state.optJSONArray("pending_photos").length() > 0;
     }
@@ -291,6 +305,20 @@ public final class SyncEngine {
         sync(context, after);
     }
 
+    /** One durable identifier per shop visit/payment; a retry can never reduce due twice. */
+    public static void collection(Context rawContext, JSONObject command, Runnable after) throws Exception {
+        Context context = rawContext.getApplicationContext();
+        SecureState.mutate(context, current -> {
+            JSONArray pending = current.optJSONArray("pending_collections");
+            if (pending == null) pending = new JSONArray();
+            if (pending.length() >= 100) throw new IllegalStateException("Sync queued shop records before adding more.");
+            pending.put(command); current.put("pending_collections", pending);
+            current.put("sync_error", "Shop record saved on this phone; awaiting server confirmation.");
+        });
+        if (after != null) after.run();
+        sync(context, after);
+    }
+
     /** Validate a replacement key before changing account scope or touching any pending records. */
     public static synchronized void reconnect(Context rawContext, String base, String token, Runnable after) {
         if (queued) return; queued = true;
@@ -306,6 +334,7 @@ public final class SyncEngine {
                     boolean pending = WorkState.collecting(current.getString("status")) || current.getJSONArray("events").length() > 0 || current.getJSONArray("points").length() > 0 || current.has("pending_visit")
                         || (current.optJSONArray("pending_completions") != null && current.getJSONArray("pending_completions").length() > 0)
                         || (current.optJSONArray("pending_visits") != null && current.getJSONArray("pending_visits").length() > 0)
+                        || (current.optJSONArray("pending_collections") != null && current.getJSONArray("pending_collections").length() > 0)
                         || (current.optJSONArray("pending_photos") != null && current.getJSONArray("pending_photos").length() > 0);
                     boolean same = old != null && old.getString("organization_id").equals(identity.getString("organization_id"))
                         && old.getString("employee_id").equals(identity.getString("employee_id")) && current.optString("server").equals(candidate.getString("server"));

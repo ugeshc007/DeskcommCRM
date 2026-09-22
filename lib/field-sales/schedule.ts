@@ -6,6 +6,12 @@ export function addCalendarDays(date: string, days: number): string {
   return new Date(Date.parse(date + 'T00:00:00Z') + days * DAY).toISOString().slice(0, 10);
 }
 
+export function mondayOfWeek(date: string): string {
+  localDateSchema.parse(date);
+  const day = new Date(date + 'T00:00:00Z').getUTCDay() || 7;
+  return addCalendarDays(date, 1 - day);
+}
+
 export function localParts(epoch: number, timezone: string): string {
   const p = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year: 'numeric',
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })

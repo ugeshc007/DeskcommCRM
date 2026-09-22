@@ -22,6 +22,7 @@ export async function POST(req: Request) {
       if (!actor.rowCount) throw new Error('forbidden');
       await db.query('select public.fn_provision_field_sales_flexible_shifts()');
       await db.query('select public.fn_provision_field_sales_pairing()');
+      await db.query('select public.fn_provision_field_sales_project_customers()');
       await db.query(`insert into public.api_audit_log(actor_user_id,action,resource_type,metadata,bypassed_rls,acting_as_platform_admin)
         values($1,'field_sales.module_installed','field_sales_module','{"version":1}',true,true)`, [auth.user.id]);
       await db.query('commit'); return ok({ installed: true, tracking_activated: false });

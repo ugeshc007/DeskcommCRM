@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
 import { attendanceCommandSchema, locationBatchSchema, sampleWithinSession, transitionAttendance, MAX_FIELD_SHIFT_MS, type WorkStatus } from './contracts';
-import { fieldAudit, fieldTransaction, requireFieldEmployee, type FieldDb } from './authority';
+import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldProjectAccess, type FieldDb } from './authority';
 import { expandSchedule, localParts } from './schedule';
 
 export function fieldFingerprint(value: unknown) {
@@ -68,6 +68,7 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
       const project = await db.query('select id from public.field_sales_projects where organization_id=$1 and id=$2 and active for share', [org, command.project_id]);
       if (!project.rowCount) throw new Error('field_assignment_unavailable');
       if (command.local_date !== String(session.local_date).slice(0, 10)) throw new Error('field_assignment_unavailable');
+      await requireFieldProjectAccess(db, org, actor, command.project_id, command.local_date);
       if (command.schedule_id) {
         const schedule = (await db.query(`select employee_id,project_id,timezone,country_code,rule,active from public.field_sales_schedules
           where organization_id=$1 and id=$2 for share`, [org, command.schedule_id])).rows[0];

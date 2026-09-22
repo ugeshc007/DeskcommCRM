@@ -49,6 +49,10 @@ jobs:
           digest="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')"
           [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/deskcommcrm@$digest" >> "$GITHUB_OUTPUT"
+          voice_tag="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/deskcomm-field-voice:sha-$GITHUB_SHA"
+          voice_digest="$(docker buildx imagetools inspect "$voice_tag" --format '{{.Manifest.Digest}}')"
+          [[ "$voice_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "voice_ref=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/deskcomm-field-voice@$voice_digest" >> "$GITHUB_OUTPUT"
 
       - name: Configure pinned SSH host and deploy key
         env:
@@ -68,6 +72,7 @@ jobs:
           CT102_HOST: ${{ secrets.CT102_HOST }}
           CT102_USER: ${{ secrets.CT102_USER }}
           IMAGE: ${{ steps.pinned.outputs.ref }}
+          VOICE_IMAGE: ${{ steps.pinned.outputs.voice_ref }}
         run: |
           set -euo pipefail
           [[ -n "$CT102_HOST" && "$CT102_USER" == root ]] || { echo 'CT102 host or deployment user is not configured' >&2; exit 1; }
@@ -77,14 +82,18 @@ jobs:
           ssh -o StrictHostKeyChecking=yes "$target" "install -m 700 -d '$stage' && pct exec 102 -- mkdir -p '$destination'"
           scp -o StrictHostKeyChecking=yes \
             supabase/migrations/20260921210000_0383_field_sales_device_presence.sql \
+            supabase/migrations/20260922113000_0384_field_sales_project_customers.sql \
             ops/ct102/deploy.sh ops/ct102/rollback.sh ops/ct102/app-release.override.yml \
+            ops/ct102/field-voice.override.yml \
             "$target:$stage/"
           ssh -o StrictHostKeyChecking=yes "$target" \
             "pct push 102 '$stage/20260921210000_0383_field_sales_device_presence.sql' '$destination/20260921210000_0383_field_sales_device_presence.sql' && \
+             pct push 102 '$stage/20260922113000_0384_field_sales_project_customers.sql' '$destination/20260922113000_0384_field_sales_project_customers.sql' && \
              pct push 102 '$stage/deploy.sh' '$destination/deploy.sh' && \
              pct push 102 '$stage/rollback.sh' '$destination/rollback.sh' && \
              pct push 102 '$stage/app-release.override.yml' '$destination/app-release.override.yml' && \
-             pct exec 102 -- bash '$destination/deploy.sh' '$IMAGE' '$GITHUB_SHA' '$destination/20260921210000_0383_field_sales_device_presence.sql'"
+             pct push 102 '$stage/field-voice.override.yml' '$destination/field-voice.override.yml' && \
+             pct exec 102 -- bash '$destination/deploy.sh' '$IMAGE' '$GITHUB_SHA' '$destination/20260921210000_0383_field_sales_device_presence.sql' '$destination/20260922113000_0384_field_sales_project_customers.sql' '$VOICE_IMAGE'"
 
       - name: Public post-release smoke
         run: |

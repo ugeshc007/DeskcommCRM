@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { attendanceCommandSchema, collectsLocation, latestSample, locationSampleSchema, organizationRegion, projectSchema,
   sampleWithinSession, scheduleSchema, transitionAttendance } from './contracts';
-import { expandSchedule, overlappingAssignments, wallTimeToUtc, localParts } from './schedule';
+import { expandSchedule, overlappingAssignments, wallTimeToUtc, localParts, mondayOfWeek } from './schedule';
 
 const session = '00000000-0000-4000-8000-000000000001';
 const project = '00000000-0000-4000-8000-000000000002';
@@ -69,6 +69,10 @@ describe('field sales authority-independent contracts', () => {
 });
 
 describe('organization-local recurring project schedule', () => {
+  it('shows a Monday-to-Sunday planning week', () => {
+    expect(mondayOfWeek('2026-09-22')).toBe('2026-09-21');
+    expect(mondayOfWeek('2026-09-27')).toBe('2026-09-21');
+  });
   const input = { series_id: session, schedule: rule, region: { country_code: 'AE', timezone: 'Asia/Dubai' },
     from: '2026-09-21', through: '2026-09-27' };
   it('expands weekly selected weekdays in the CRM timezone with stable keys', () => {

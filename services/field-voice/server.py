@@ -16,6 +16,7 @@ from threading import BoundedSemaphore
 MAX_AUDIO_BYTES = 512_000
 MODEL_DIR = os.environ.get("FIELD_VOICE_MODEL_DIR", "/opt/field-voice/model")
 PROMPT_FILE = Path(os.environ.get("FIELD_VOICE_PROMPT_FILE", "/opt/field-voice/where-going.wav"))
+NEXT_PROMPT_FILE = Path(os.environ.get("FIELD_VOICE_NEXT_PROMPT_FILE", "/opt/field-voice/next-shop.wav"))
 SECRET = os.environ.get("INTERNAL_SECRET", "")
 _model = None
 _model_lock = Lock()
@@ -58,16 +59,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/healthz":
-            ready = PROMPT_FILE.is_file() and Path(MODEL_DIR).is_dir() and bool(SECRET)
+            ready = PROMPT_FILE.is_file() and NEXT_PROMPT_FILE.is_file() and Path(MODEL_DIR).is_dir() and bool(SECRET)
             self.respond(200 if ready else 503, b'{"ready":true}' if ready else b'{"ready":false}')
             return
-        if self.path != "/prompt" or not self.authorized():
+        if self.path not in ("/prompt", "/prompt-next") or not self.authorized():
             self.respond(404, b'{}')
             return
-        if not PROMPT_FILE.is_file():
+        prompt = NEXT_PROMPT_FILE if self.path == "/prompt-next" else PROMPT_FILE
+        if not prompt.is_file():
             self.respond(503, b'{}')
             return
-        self.respond(200, PROMPT_FILE.read_bytes(), "audio/wav")
+        self.respond(200, prompt.read_bytes(), "audio/wav")
 
     def do_POST(self):
         if self.path != "/transcribe" or not self.authorized():

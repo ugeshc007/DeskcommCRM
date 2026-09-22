@@ -158,10 +158,9 @@ public final class MainActivity extends Activity {
         if (choices.isEmpty()) add(panel, label("No active projects are available. Ask your manager; GPS and working time continue until punch-out.", 15, RED, false), 12);
         else {
             if (state.optBoolean("voice_enabled")) {
-                add(panel, label("Where are we going now?", 19, INK, true), 16);
-                Button speak = action("Speak destination", BRAND);
-                speak.setOnClickListener(v -> showDestinationPrompt()); add(panel, speak, 10);
-                add(panel, label("Voice is optional. Confirm the recognized project before it changes your work session.", 13, MUTED, false), 5);
+                add(panel, label("Voice AI asks for the next shop after you choose a project or save a shop visit.", 14, MUTED, false), 16);
+                Button speak = action("Ask AI for next shop", BRAND);
+                speak.setOnClickListener(v -> startDestinationConversation(false)); add(panel, speak, 10);
             }
             projectPicker = new Spinner(this); projectPicker.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, choices));
             projectPicker.setMinimumHeight(dp(56)); add(panel, projectPicker, 12);
@@ -181,14 +180,7 @@ public final class MainActivity extends Activity {
                 .setMessage(policy.optString("notice_text") + "\n\nGPS starts now and stops at punch-out or after 14 hours. Choose a project after punching in.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Agree and punch in", (dialog, which) -> {
                     try {
-                        Attendance.punchIn(this, () -> runOnUiThread(() -> {
-                            try {
-                                JSONObject current = SecureState.read(this);
-                                if (current.optBoolean("voice_enabled")
-                                    && WorkState.collecting(current.optString("status", "off_duty"))
-                                    && current.getJSONArray("events").length() == 0) showDestinationPrompt();
-                            } catch (Exception ignored) { /* The touch controls remain available. */ }
-                        }));
+                        Attendance.punchIn(this);
                         startTracking(); render();
                     } catch (Exception failure) { alert("Punch in not saved", "Refresh and try again."); }
                 }).show();
@@ -196,27 +188,45 @@ public final class MainActivity extends Activity {
     }
     private void chooseProject() {
         if (projectPicker == null || projectChoices.isEmpty()) return;
-        try { Attendance.selectProject(this, projectChoices.get(projectPicker.getSelectedItemPosition())); render(); }
+        try { Attendance.selectProject(this, projectChoices.get(projectPicker.getSelectedItemPosition()), () -> runOnUiThread(() -> {
+            try {
+                JSONObject current = SecureState.read(this);
+                if (current.optBoolean("voice_enabled") && WorkState.collecting(current.optString("status", "off_duty"))
+                    && current.getJSONArray("events").length() == 0 && !current.optString("active_project_id").isEmpty())
+                    startDestinationConversation(false);
+            } catch (Exception ignored) { /* The touch controls remain available. */ }
+        })); render(); }
         catch (Exception failure) { alert("Project not saved", "Your work session and GPS remain active. Sync and try again."); }
     }
-    private void showDestinationPrompt() {
-        if (projectChoices.isEmpty()) { alert("No project available", "Ask your manager to assign a project. Your work session continues."); return; }
-        voiceAssistant.playPrompt();
-        new AlertDialog.Builder(this).setTitle("Where are we going now?")
-            .setMessage("Speak an assigned project name, or choose it from the list on this screen. GPS and working time are already in progress.")
-            .setNegativeButton("Choose by touch", null)
-            .setPositiveButton("Speak answer", (dialog, which) -> startVoiceInput()).show();
+    private void startDestinationConversation(boolean nextShop) {
+        try {
+            JSONObject state = SecureState.read(this);
+            if (!state.optBoolean("voice_enabled") || !WorkState.collecting(state.optString("status", "off_duty"))
+                || state.optString("active_project_id").isEmpty()) return;
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 12);
+                alert("Microphone permission", "Allow microphone access, then tap Ask AI for next shop. You can always use the shop list by touch.");
+                return;
+            }
+            voiceAssistant.playPrompt(nextShop, this::startVoiceInput,
+                () -> alert("Voice unavailable", "Use the shop list by touch. Your work session remains active."));
+        } catch (Exception failure) { alert("Voice unavailable", "Use the shop list by touch."); }
     }
     private void startVoiceInput() {
+        try {
+            JSONObject current = SecureState.read(this);
+            if (!current.optBoolean("voice_enabled") || !WorkState.collecting(current.optString("status", "off_duty"))
+                || current.optString("active_project_id").isEmpty()) return;
+        } catch (Exception ignored) { return; }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 12);
-            alert("Microphone permission", "Allow microphone access, then tap Speak destination again. Project buttons still work.");
+            alert("Microphone permission", "Allow microphone access, then tap Ask AI for next shop. The shop list still works by touch.");
             return;
         }
         try { voiceAssistant.start(); }
-        catch (Exception failure) { alert("Microphone unavailable", "Choose a project by touch."); return; }
+        catch (Exception failure) { alert("Microphone unavailable", "Choose a shop by touch."); return; }
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Listening")
-            .setMessage("Say the name of one assigned project. Tap Stop when finished. Recording stops automatically after seven seconds.")
+            .setMessage("Tell me where you are going or what you are doing. Tap Stop when finished. Recording stops automatically after seven seconds.")
             .setNegativeButton("Cancel", (d, w) -> voiceAssistant.cancel())
             .setPositiveButton("Stop and transcribe", null).create();
         final Runnable[] autoStop = new Runnable[1];
@@ -227,8 +237,8 @@ public final class MainActivity extends Activity {
         dialog.setOnShowListener(shown -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             if (autoStop[0] != null) clock.removeCallbacks(autoStop[0]);
             voiceAssistant.stop(new VoiceAssistant.Result() {
-                public void received(String text) { runOnUiThread(() -> confirmVoiceProject(text)); }
-                public void unavailable() { runOnUiThread(() -> alert("Voice unavailable", "Choose a project by touch. Nothing was changed.")); }
+                public void received(String text) { runOnUiThread(() -> confirmVoiceActivity(text)); }
+                public void unavailable() { runOnUiThread(() -> alert("Voice unavailable", "Choose a shop by touch. Nothing was changed.")); }
             });
             dialog.dismiss();
         }));
@@ -236,22 +246,61 @@ public final class MainActivity extends Activity {
         autoStop[0] = () -> { if (dialog.isShowing() && voiceAssistant.isRecording()) dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick(); };
         clock.postDelayed(autoStop[0], 7000);
     }
-    private void confirmVoiceProject(String transcript) {
+    private void confirmVoiceActivity(String transcript) {
         try {
-            if (!WorkState.collecting(SecureState.read(this).optString("status", "off_duty"))) return;
+            JSONObject state = SecureState.read(this);
+            if (!WorkState.collecting(state.optString("status", "off_duty")) || state.optString("active_project_id").isEmpty()) return;
+            JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray roster = snapshot == null ? null : snapshot.optJSONArray("customers");
+            ArrayList<JSONObject> customers = new ArrayList<>(); ArrayList<String> labels = new ArrayList<>();
             ArrayList<String> names = new ArrayList<>();
-            for (JSONObject project : projectChoices) names.add(project.optString("project_name"));
+            if (roster != null) for (int i = 0; i < roster.length(); i++) {
+                JSONObject shop = roster.getJSONObject(i);
+                if (!state.getString("active_project_id").equals(shop.optString("project_id"))) continue;
+                customers.add(shop); names.add(shop.optString("shop_name"));
+                labels.add(shop.optString("shop_name") + " · " + shop.optString("customer_code"));
+            }
             int match = ProjectVoiceMatcher.uniqueMatch(transcript, names);
-            if (match < 0) { alert("Project not recognized", "Heard: “" + transcript + "”. Choose your project from the list; no project was changed."); return; }
-            JSONObject project = projectChoices.get(match);
-            new AlertDialog.Builder(this).setTitle("Confirm destination")
-                .setMessage("Heard: “" + transcript + "”\n\nUse assigned project: " + project.optString("project_name") + "?")
-                .setNegativeButton("No, choose by touch", null)
-                .setPositiveButton("Confirm project", (d, w) -> {
-                    try { Attendance.selectProject(this, project); render(); }
-                    catch (Exception failure) { alert("Project not saved", "Your work session continues. Sync and choose the project by touch."); }
-                }).show();
-        } catch (Exception failure) { alert("Project unavailable", "Choose a project by touch."); }
+            final JSONObject[] selected = { match < 0 ? null : customers.get(match) };
+            LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); form.setPadding(dp(20), dp(8), dp(20), 0);
+            EditText note = field("Confirm or correct what you said", false); note.setText(transcript);
+            note.setFilters(new InputFilter[]{ new InputFilter.LengthFilter(1000) }); add(form, note, 0);
+            if (!customers.isEmpty()) {
+                AutoCompleteTextView picker = new AutoCompleteTextView(this); picker.setThreshold(1); picker.setSingleLine(true);
+                picker.setHint("Link an assigned shop (optional)"); picker.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, labels));
+                if (match >= 0) picker.setText(labels.get(match), false);
+                picker.setOnItemClickListener((parent, view, position, id) -> {
+                    int index = labels.indexOf(String.valueOf(parent.getItemAtPosition(position)));
+                    selected[0] = index < 0 ? null : customers.get(index);
+                });
+                picker.addTextChangedListener(new android.text.TextWatcher() {
+                    public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+                    public void onTextChanged(CharSequence s, int start, int before, int count) { selected[0] = null; }
+                    public void afterTextChanged(android.text.Editable s) { }
+                });
+                add(form, picker, 12);
+            }
+            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Confirm activity note")
+                .setMessage(match < 0 ? "No unique shop was recognized. Correct the note and choose a shop if needed; no payment will be recorded." :
+                    "Review the recognized activity and shop. No payment will be recorded.")
+                .setView(form).setNegativeButton("Discard", null).setPositiveButton("Save activity", null).create();
+            dialog.setOnShowListener(shown -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                try {
+                    String confirmed = note.getText().toString().trim();
+                    if (confirmed.isEmpty() || confirmed.length() > 1000) { note.setError("Enter an activity note"); return; }
+                    JSONObject current = SecureState.read(this);
+                    if (!WorkState.collecting(current.optString("status", "off_duty")) || !state.getString("session_id").equals(current.optString("session_id"))
+                        || !state.getString("active_project_id").equals(current.optString("active_project_id")))
+                        throw new IllegalStateException();
+                    JSONObject command = new JSONObject().put("activity_id", UUID.randomUUID().toString())
+                        .put("session_id", current.getString("session_id")).put("project_id", current.getString("active_project_id"))
+                        .put("project_customer_id", selected[0] == null ? JSONObject.NULL : selected[0].getString("id"))
+                        .put("note", confirmed).put("source", "voice").put("captured_at", Instant.now().toString());
+                    SyncEngine.activity(this, command, () -> runOnUiThread(this::render));
+                    dialog.dismiss(); Toast.makeText(this, "Activity saved; syncing to CRM", Toast.LENGTH_SHORT).show();
+                } catch (Exception failure) { alert("Activity not saved", "Check the work session and try again. No payment was recorded."); }
+            }));
+            dialog.show();
+        } catch (Exception failure) { alert("Activity unavailable", "Use the shop list by touch."); }
     }
     private void showProjectCustomers(JSONObject state) throws Exception {
         JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray roster = snapshot == null ? null : snapshot.optJSONArray("customers");
@@ -320,6 +369,7 @@ public final class MainActivity extends Activity {
                             .put("captured_at", Instant.now().toString()).put("amount_cents", cents);
                         SyncEngine.collection(this, command, () -> runOnUiThread(this::render));
                         Toast.makeText(this, "Shop record queued for sync", Toast.LENGTH_SHORT).show();
+                        startDestinationConversation(true);
                     } catch (Exception failure) { alert("Not saved", "Enter a positive amount with up to two decimal places, or leave it blank for a visit."); }
                 }).show();
         } catch (Exception failure) { alert("Shop unavailable", "Refresh the project customer list and try again."); }
@@ -334,7 +384,8 @@ public final class MainActivity extends Activity {
         try {
             JSONObject state = SecureState.read(this); int events = state.optJSONArray("events") == null ? 0 : state.getJSONArray("events").length();
             int points = state.optJSONArray("points") == null ? 0 : state.getJSONArray("points").length(); String issue = state.optString("sync_error");
-            String message = "Last sync: " + state.optString("last_sync", "Not synced yet") + "\nPending attendance: " + events + "\nPending GPS records: " + points;
+            int activities = state.optJSONArray("pending_activities") == null ? 0 : state.getJSONArray("pending_activities").length();
+            String message = "Last sync: " + state.optString("last_sync", "Not synced yet") + "\nPending attendance: " + events + "\nPending GPS records: " + points + "\nPending activity notes: " + activities;
             if (!issue.isEmpty()) message += "\n\nNeeds attention: " + issue;
             new AlertDialog.Builder(this).setTitle("Notifications").setMessage(message).setNegativeButton("Close", null).setPositiveButton("Sync now", (d, w) -> sync()).show();
         } catch (Exception failure) { alert("Notifications unavailable", "Secure status could not be opened."); }
@@ -357,7 +408,7 @@ public final class MainActivity extends Activity {
             enabled.setChecked(SecureState.read(this).optBoolean("voice_enabled"));
             LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(24), dp(8), dp(24), dp(8));
             add(panel, enabled, 0);
-            add(panel, label("Off by default. When on, the app speaks its destination prompt and records only while you tap Speak answer. The short recording goes to your CRM's private speech service and is deleted after transcription. Project buttons always remain available.", 14, MUTED, false), 12);
+            add(panel, label("Off by default. When on, the app asks where you are going after project selection and each saved shop visit. It listens for up to seven seconds while the app is open, then asks you to review the note. You can cancel, switch voice off, or use the shop list by touch. Temporary audio is deleted after transcription.", 14, MUTED, false), 12);
             new AlertDialog.Builder(this).setTitle("Voice settings").setView(panel)
                 .setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
                     try {

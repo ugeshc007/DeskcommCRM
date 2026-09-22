@@ -9,6 +9,7 @@ import { completeNextAction, manageCorrection, readFieldOperations, recordVisit 
 import { manageFieldSales, readFieldCalendar } from '@/lib/field-sales/management';
 import { saveFieldPhoto, readFieldPhoto, listFieldPhotos, deleteFieldPhoto } from '@/lib/field-sales/photos';
 import { manageProjectCustomers, readProjectCustomers, readAssignedCustomers, recordCustomerCollection, voidCustomerCollection } from '@/lib/field-sales/collections';
+import { recordFieldActivity } from '@/lib/field-sales/activity';
 import sharp from 'sharp';
 
 if (!process.env.TEST_DB_CONTAINER) throw new Error('Run through scripts/test-db.sh');
@@ -26,6 +27,7 @@ beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_devices()');
   await pool.query('select fn_provision_field_sales_pairing()');
   await pool.query('select fn_provision_field_sales_project_customers()');
+  await pool.query('select fn_provision_field_sales_activity_notes()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_lifecycle()');
@@ -57,6 +59,34 @@ async function fixture(startAt?: string) {
 }
 
 describe('optional field-sales foundation', () => {
+  it('keeps confirmed activity idempotent, within a work session, and isolated by organization', async () => {
+    const f = await fixture(), other = await fixture();
+    await recordAttendance(pool, f.org, f.actor, f.command);
+    const input = { activity_id: randomUUID(), session_id: f.session, project_id: f.project,
+      project_customer_id: null, note: 'Going to the next shop', source: 'voice' as const,
+      captured_at: new Date(Date.parse(f.start) + 1000).toISOString() };
+    expect((await recordFieldActivity(pool, f.org, f.actor, input)).replayed).toBe(false);
+    expect((await recordFieldActivity(pool, f.org, f.actor, input)).replayed).toBe(true);
+    await expect(recordFieldActivity(pool, f.org, f.actor, { ...input, note: 'Changed' }))
+      .rejects.toThrow('field_idempotency_conflict');
+    await expect(recordFieldActivity(pool, other.org, other.actor, { ...input, activity_id: randomUUID() }))
+      .rejects.toThrow('field_work_session_required');
+    await expect(recordFieldActivity(pool, f.org, f.manager, { ...input, activity_id: randomUUID() }))
+      .rejects.toThrow('field_employee_unavailable');
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claim.sub',$1,true)", [f.actor]);
+      await expect(db.query('select * from public.field_sales_activity_notes')).rejects.toThrow();
+    } finally { await db.query('rollback'); db.release(); }
+    const listed = await readFieldOperations(pool, f.org, f.actor, f.localDate, null, f.actor);
+    expect(listed.activities).toMatchObject([{ note: input.note, employee_id: f.actor }]);
+    const closedAt = new Date(Date.parse(f.start) + 120000).toISOString();
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 1, captured_at: closedAt });
+    await expect(recordFieldActivity(pool, f.org, f.actor, { ...input, activity_id: randomUUID(), captured_at: new Date(Date.parse(closedAt) + 1000).toISOString() }))
+      .rejects.toThrow('field_work_session_required');
+  });
   it('keeps Field Officer below viewer and binds admin-issued keys to one employee and organization', async () => {
     const f = await fixture(), other = await fixture(), officer = randomUUID(), admin = randomUUID();
     for (const [id, role] of [[officer, 'field_officer'], [admin, 'admin']]) {

@@ -17,29 +17,33 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONObject;
 
-/** Tap-to-talk only. Temporary audio is private and removed after a response or cancellation. */
+/** Foreground-only, bounded speech. Temporary audio is removed after a response or cancellation. */
 public final class VoiceAssistant {
     public interface Result { void received(String text); void unavailable(); }
     private final Context context;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private MediaRecorder recorder;
+    private MediaPlayer promptPlayer;
+    private volatile int promptGeneration;
     private File recording;
     public VoiceAssistant(Context context) { this.context = context.getApplicationContext(); }
 
-    private HttpURLConnection open(String method) throws Exception {
+    private HttpURLConnection open(String method, String suffix) throws Exception {
         JSONObject state = SecureState.read(context);
         String base = SyncEngine.validateBase(state.getString("server"));
-        HttpURLConnection connection = (HttpURLConnection) new URI(base + "/api/v1/field-sales/voice").toURL().openConnection();
+        HttpURLConnection connection = (HttpURLConnection) new URI(base + "/api/v1/field-sales/voice" + suffix).toURL().openConnection();
         connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(10000); connection.setReadTimeout(30000);
         connection.setRequestMethod(method); connection.setRequestProperty("Authorization", "Bearer " + state.getString("token"));
         return connection;
     }
-    public void playPrompt() {
+    private HttpURLConnection open(String method) throws Exception { return open(method, ""); }
+    public void playPrompt(boolean nextShop, Runnable completed, Runnable unavailable) {
+        int generation = ++promptGeneration;
         executor.execute(() -> {
             File prompt = null; HttpURLConnection connection = null;
             try {
-                connection = open("GET");
-                if (connection.getResponseCode() != 200) return;
+                connection = open("GET", nextShop ? "?kind=next" : "");
+                if (connection.getResponseCode() != 200) throw new IllegalStateException();
                 prompt = File.createTempFile("field-prompt-", ".wav", context.getCacheDir());
                 try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(prompt)) {
                     byte[] buffer = new byte[8192]; int count, size = 0;
@@ -50,16 +54,30 @@ public final class VoiceAssistant {
                 }
                 File playback = prompt;
                 new Handler(Looper.getMainLooper()).post(() -> {
+                    if (generation != promptGeneration) { playback.delete(); return; }
                     MediaPlayer player = new MediaPlayer();
                     try {
                         player.setDataSource(playback.getAbsolutePath()); player.prepare();
-                        player.setOnCompletionListener(done -> { done.release(); playback.delete(); });
-                        player.setOnErrorListener((failed, what, extra) -> { failed.release(); playback.delete(); return true; });
+                        promptPlayer = player;
+                        player.setOnCompletionListener(done -> {
+                            promptPlayer = null; done.release(); playback.delete();
+                            if (generation == promptGeneration) completed.run();
+                        });
+                        player.setOnErrorListener((failed, what, extra) -> {
+                            promptPlayer = null; failed.release(); playback.delete();
+                            if (generation == promptGeneration) unavailable.run();
+                            return true;
+                        });
                         player.start();
-                    } catch (Exception failure) { player.release(); playback.delete(); }
+                    } catch (Exception failure) {
+                        promptPlayer = null; player.release(); playback.delete();
+                        if (generation == promptGeneration) unavailable.run();
+                    }
                 });
                 prompt = null;
-            } catch (Exception ignored) { /* Text prompt and buttons remain available. */ }
+            } catch (Exception ignored) {
+                new Handler(Looper.getMainLooper()).post(() -> { if (generation == promptGeneration) unavailable.run(); });
+            }
             finally { if (connection != null) connection.disconnect(); if (prompt != null) prompt.delete(); }
         });
     }
@@ -79,12 +97,14 @@ public final class VoiceAssistant {
     }
     public void stop(Result callback) {
         if (recorder == null || recording == null) { callback.unavailable(); return; }
+        int generation = promptGeneration;
         File clip = recording; recording = null;
         try { recorder.stop(); recorder.release(); recorder = null; }
         catch (Exception failure) { recorder.release(); recorder = null; clip.delete(); callback.unavailable(); return; }
         executor.execute(() -> {
             HttpURLConnection connection = null;
             try {
+                if (generation != promptGeneration) return;
                 byte[] bytes = Files.readAllBytes(clip.toPath());
                 if (bytes.length < 128 || bytes.length > 512_000) throw new IllegalStateException();
                 connection = open("POST"); connection.setDoOutput(true);
@@ -99,13 +119,15 @@ public final class VoiceAssistant {
                         if (reply.size() > 2048) throw new IllegalStateException();
                     }
                     String text = new JSONObject(new String(reply.toByteArray(), StandardCharsets.UTF_8)).getJSONObject("data").getString("text");
-                    callback.received(text);
+                    if (generation == promptGeneration) callback.received(text);
                 }
-            } catch (Exception ignored) { callback.unavailable(); }
+            } catch (Exception ignored) { if (generation == promptGeneration) callback.unavailable(); }
             finally { if (connection != null) connection.disconnect(); clip.delete(); }
         });
     }
     public void cancel() {
+        promptGeneration++;
+        if (promptPlayer != null) { promptPlayer.release(); promptPlayer = null; }
         if (recorder != null) { try { recorder.stop(); } catch (Exception ignored) { } recorder.release(); recorder = null; }
         if (recording != null) { recording.delete(); recording = null; }
     }

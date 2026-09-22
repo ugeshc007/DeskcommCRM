@@ -1,10 +1,22 @@
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import server
 
 
 class SpeechServiceTests(unittest.TestCase):
+    def test_next_shop_prompt_is_a_distinct_private_audio_asset(self):
+        handler = object.__new__(server.Handler)
+        handler.path = "/prompt-next"
+        with tempfile.TemporaryDirectory() as directory:
+            asset = Path(directory) / "next.wav"
+            asset.write_bytes(b"synthetic-next-shop-prompt")
+            with patch.object(server, "NEXT_PROMPT_FILE", asset), patch.object(handler, "authorized", return_value=True), patch.object(handler, "respond") as respond:
+                handler.do_GET()
+            respond.assert_called_once_with(200, b"synthetic-next-shop-prompt", "audio/wav")
+
     def test_authentication_requires_secret(self):
         handler = object.__new__(server.Handler)
         handler.headers = {"X-Internal-Secret": "demo"}

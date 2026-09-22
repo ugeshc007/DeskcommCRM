@@ -21,7 +21,9 @@ type Visit = { id: string; revision: number; display_name: string; project_name:
 export type ShopCollection = { id: string; employee_id: string; project_id: string; project_customer_id: string; session_id: string;
   captured_at: string; amount_cents: string | null; balance_after_cents: string | null; currency: string;
   voided_at: string | null; void_reason: string | null; shop_name: string; customer_code: string | null; project_name: string; latitude: number | null; longitude: number | null; accuracy_m: number | null };
-export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; collections: ShopCollection[]; corrections: Correction[]; points: Point[]; map: { map_tile_path: string | null; map_attribution: string } | null };
+export type FieldActivity = { id: string; employee_id: string; session_id: string; project_id: string; project_customer_id: string | null;
+  note: string; source: 'voice' | 'typed'; captured_at: string; project_name: string; shop_name: string | null };
+export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; collections: ShopCollection[]; activities: FieldActivity[]; corrections: Correction[]; points: Point[]; map: { map_tile_path: string | null; map_attribution: string } | null };
 
 export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate }: { data: Operations; selectedEmployeeId: string; onSelectEmployee: (employeeId: string) => void; routeDate: string }) {
   const container = useRef<HTMLDivElement>(null), map = useRef<LibreMap | null>(null), markers = useRef<Marker[]>([]);

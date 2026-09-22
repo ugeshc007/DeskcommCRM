@@ -104,6 +104,15 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
         <Button className="mt-3" variant="outline" onClick={() => setEmployeeId('')}>Show all current positions</Button>
       </section>}
+      {employeeId && <section className="space-y-3" aria-label="Officer activity notes">
+        <h2 className="text-lg font-semibold">Activity notes · {date}</h2>
+        {!data.activities.some(item => item.employee_id === employeeId) && <p className="rounded-xl border p-4 text-sm">No confirmed activity notes for this date.</p>}
+        {data.activities.filter(item => item.employee_id === employeeId).map(item => <article key={item.id} className="rounded-xl border bg-card p-4">
+          <p className="text-sm font-medium">{item.shop_name ?? item.project_name} · {time(item.captured_at)}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm">{item.note}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Confirmed by the officer · {item.source === 'voice' ? 'spoken then reviewed' : 'typed'}</p>
+        </article>)}
+      </section>}
       {employeeId && <section className="space-y-3" aria-label="Officer shop visits and collections">
         <h2 className="text-lg font-semibold">Shop visits and collections · {date}</h2>
         <p className="text-sm text-muted-foreground">Recorded payments are money already received, not online charges. A negative remaining balance is advance credit. Shop pins appear only when a nearby, accurate GPS fix is available within the location-retention period.</p>

@@ -10,12 +10,15 @@ import java.nio.charset.StandardCharsets;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 
 public final class SyncEngine {
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static volatile boolean queued;
+    private static boolean syncAgain;
+    private static final ArrayList<Runnable> afterNextSync = new ArrayList<>();
     public static String validateBase(String input) throws Exception {
         URI uri = new URI(input.trim());
         boolean development = BuildConfig.DEBUG && "http".equals(uri.getScheme()) && ("127.0.0.1".equals(uri.getHost()) || "10.0.2.2".equals(uri.getHost()));
@@ -96,7 +99,12 @@ public final class SyncEngine {
         } finally { connection.disconnect(); }
     }
     public static synchronized boolean sync(Context rawContext, Runnable after) {
-        if (queued) return false; queued = true;
+        if (queued) {
+            syncAgain = true;
+            if (after != null) afterNextSync.add(after);
+            return false;
+        }
+        queued = true;
         Context context = rawContext.getApplicationContext();
         executor.execute(() -> {
             try {
@@ -123,6 +131,19 @@ public final class SyncEngine {
                 state = SecureState.read(context);
                 if (state.getJSONArray("events").length() > 0) throw new IllegalStateException("Attendance sync is still pending.");
                 String completionProblem = "";
+                for (int i = 0; i < 100; i++) {
+                    state = SecureState.read(context);
+                    JSONArray activities = state.optJSONArray("pending_activities");
+                    if (activities == null || activities.length() == 0) break;
+                    JSONObject activity = activities.getJSONObject(0);
+                    try { request(state, "POST", "", new JSONObject().put("operation", "activity").put("command", activity)); }
+                    catch (SecurityException denied) { throw denied; }
+                    catch (Exception failure) { completionProblem = "Activity notes are pending. Keep this phone connected and retry."; break; }
+                    SecureState.mutate(context, current -> {
+                        JSONArray pending = current.optJSONArray("pending_activities");
+                        if (pending != null && pending.length() > 0 && pending.getJSONObject(0).getString("activity_id").equals(activity.getString("activity_id"))) pending.remove(0);
+                    });
+                }
                 for (int i = 0; i < 100; i++) {
                     state = SecureState.read(context);
                     JSONArray visits = state.optJSONArray("pending_visits");
@@ -250,7 +271,21 @@ public final class SyncEngine {
             } catch (Exception failure) {
                 // No credentials, GPS payloads or server response bodies in logs or crash reports.
                 try { SecureState.mutate(context, current -> current.put("sync_error", failure instanceof IllegalStateException ? failure.getMessage() : "Offline or server unavailable. Pending records are retained.")); } catch (Exception ignored) { }
-            } finally { queued = false; if (after != null) after.run(); }
+            } finally {
+                boolean again; ArrayList<Runnable> callbacks;
+                synchronized (SyncEngine.class) {
+                    queued = false; again = syncAgain; syncAgain = false;
+                    callbacks = new ArrayList<>(afterNextSync); afterNextSync.clear();
+                }
+                try { if (after != null) after.run(); }
+                finally {
+                    if (again) sync(context, () -> {
+                        for (Runnable callback : callbacks) {
+                            try { callback.run(); } catch (RuntimeException ignored) { /* Other callbacks still run. */ }
+                        }
+                    });
+                }
+            }
         });
         return true;
     }
@@ -259,6 +294,7 @@ public final class SyncEngine {
             || state.optJSONArray("points") != null && state.optJSONArray("points").length() > 0
             || state.optJSONArray("pending_visits") != null && state.optJSONArray("pending_visits").length() > 0
             || state.optJSONArray("pending_collections") != null && state.optJSONArray("pending_collections").length() > 0
+            || state.optJSONArray("pending_activities") != null && state.optJSONArray("pending_activities").length() > 0
             || state.optJSONArray("pending_completions") != null && state.optJSONArray("pending_completions").length() > 0
             || state.optJSONArray("pending_photos") != null && state.optJSONArray("pending_photos").length() > 0;
     }
@@ -314,6 +350,20 @@ public final class SyncEngine {
             if (pending.length() >= 100) throw new IllegalStateException("Sync queued shop records before adding more.");
             pending.put(command); current.put("pending_collections", pending);
             current.put("sync_error", "Shop record saved on this phone; awaiting server confirmation.");
+        });
+        if (after != null) after.run();
+        sync(context, after);
+    }
+
+    /** Only confirmed text is queued. Raw microphone audio never enters durable state. */
+    public static void activity(Context rawContext, JSONObject command, Runnable after) throws Exception {
+        Context context = rawContext.getApplicationContext();
+        SecureState.mutate(context, current -> {
+            JSONArray pending = current.optJSONArray("pending_activities");
+            if (pending == null) pending = new JSONArray();
+            if (pending.length() >= 100) throw new IllegalStateException("Sync queued activity notes before adding more.");
+            pending.put(command); current.put("pending_activities", pending);
+            current.put("sync_error", "Activity note saved on this phone; awaiting server confirmation.");
         });
         if (after != null) after.run();
         sync(context, after);

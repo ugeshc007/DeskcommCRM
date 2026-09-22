@@ -1,6 +1,6 @@
 # Field Officer voice activity loop — implementation contract
 
-Status: planned on `codex/field-voice-activity`; not implemented or deployed.
+Status: implemented locally on `codex/field-voice-activity`; test and release gates pending; not deployed.
 
 ## Confirmed behavior
 
@@ -16,6 +16,7 @@ Status: planned on `codex/field-voice-activity`; not implemented or deployed.
 - Transcription is a proposal, not an authoritative CRM mutation. The officer confirms or edits the activity and the shop association. Speech never records a collection amount or changes a due balance without the existing payment form's explicit save.
 - The server must authenticate the employee's device, verify the active session and project/customer ownership inside the organization, validate and deduplicate activity commands, and show the saved activity to authorized managers. Other organizations must not be able to read or write it.
 - Audio remains temporary and is deleted after transcription or cancellation. The encrypted offline queue retains only the officer-confirmed text and identifiers, not audio.
+- Confirmed activity notes follow visit/payment business-history retention, not the shorter raw-GPS coordinate retention (user-confirmed).
 
 ## Required implementation before an APK or live claim
 
@@ -24,4 +25,4 @@ Status: planned on `codex/field-voice-activity`; not implemented or deployed.
 3. Foreground spoken prompt and bounded listening after project selection and each saved collection, with microphone consent, correction, and touch fallback. Add a distinct next-shop prompt to the private speech service.
 4. Android unit/instrumentation tests and a consented real-device pilot; browser, database, image, and full release gates green for the exact commit. Rebuild/sign/distribute the APK separately from the CT102 web deployment.
 
-This new workflow must not be confused with the current optional project-name transcription, which is not an activity ledger and is not live on CT102.
+The voice prompt, review screen, organization-scoped activity ledger, offline text queue, and manager history are part of this change. The current CT102 app has not received it.

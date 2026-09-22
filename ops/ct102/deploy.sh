@@ -7,7 +7,8 @@ image="${1:?image digest required}"
 revision="${2:?full commit SHA required}"
 migration="${3:?migration path required}"
 customers_migration="${4:?customer migration path required}"
-voice_image="${5:?voice image digest required}"
+activity_migration="${5:?activity migration path required}"
+voice_image="${6:?voice image digest required}"
 release_override="$(cd "$(dirname "$0")" && pwd)/app-release.override.yml"
 release_dir="$(cd "$(dirname "$0")" && pwd)"
 voice_override="$release_dir/field-voice.override.yml"
@@ -18,7 +19,8 @@ project=/opt/deskcommcrm
 [[ "$revision" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid commit SHA' >&2; exit 2; }
 [[ "$migration" == "$project"/releases/"$revision"/20260921210000_0383_field_sales_device_presence.sql ]] || { echo 'Unexpected migration path' >&2; exit 2; }
 [[ "$customers_migration" == "$project"/releases/"$revision"/20260922113000_0384_field_sales_project_customers.sql ]] || { echo 'Unexpected customer migration path' >&2; exit 2; }
-[[ -f "$migration" && -f "$customers_migration" && -f "$release_override" && -f "$voice_override" ]] || { echo 'Release files missing' >&2; exit 2; }
+[[ "$activity_migration" == "$project"/releases/"$revision"/20260922160000_0385_field_sales_activity_notes.sql ]] || { echo 'Unexpected activity migration path' >&2; exit 2; }
+[[ -f "$migration" && -f "$customers_migration" && -f "$activity_migration" && -f "$release_override" && -f "$voice_override" ]] || { echo 'Release files missing' >&2; exit 2; }
 cd "$project"
 [[ -f .env && -f docker-compose.prod.yml && -f docker-compose.ct102.yml && -f docker-compose.ct102.map.yml ]] || { echo 'CT102 compose files missing' >&2; exit 2; }
 [[ -s field-map-tiles/uae.pmtiles ]] || { echo 'Self-hosted map archive missing' >&2; exit 2; }
@@ -72,9 +74,10 @@ voice_revision="$(docker image inspect "$voice_image" --format '{{index .Config.
 [[ "$voice_revision" == "$revision" ]] || { echo 'Voice image revision does not match release commit' >&2; exit 1; }
 
 docker run --rm -v "$migration:/release-migration.sql:ro" \
-  -v "$customers_migration:/customers-migration.sql:ro" postgres:17-alpine \
+  -v "$customers_migration:/customers-migration.sql:ro" \
+  -v "$activity_migration:/activity-migration.sql:ro" postgres:17-alpine \
   psql "$(url_do_schema)" -1 -q -v ON_ERROR_STOP=1 \
-  -f /release-migration.sql -f /customers-migration.sql
+  -f /release-migration.sql -f /customers-migration.sql -f /activity-migration.sql
 
 # Retain the exact prior image for the runner's external public-health rollback.
 printf '%s\n%s\n' "$previous_image" "$previous_version" > "$release_dir/previous-app.txt"

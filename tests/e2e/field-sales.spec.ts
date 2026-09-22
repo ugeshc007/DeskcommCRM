@@ -23,6 +23,7 @@ test.beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_flexible_shifts()');
   // A suite can run against a local stack created before the optional shop module was added.
   await pool.query(readFileSync('supabase/migrations/20260922113000_0384_field_sales_project_customers.sql', 'utf8'));
+  await pool.query(readFileSync('supabase/migrations/20260922160000_0385_field_sales_activity_notes.sql', 'utf8'));
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: 'Synthetic field administrator' } });
   if (created.error || !created.data.user) throw new Error('Synthetic field account creation failed');
   actor = created.data.user.id;
@@ -168,6 +169,10 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   const day = `${part('year')}-${part('month')}-${part('day')}`;
   await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,status,punched_in_at,last_event_at)
     values($1,$2,$3,'working',$4,$4)`, [org, liveSession, employee, start]);
+  await pool.query(`insert into field_sales_activity_notes
+    (organization_id,id,employee_id,session_id,project_id,note,source,captured_at,fingerprint)
+    values($1,$2,$3,$4,$5,$6,'voice',$7,$8)`, [org, randomUUID(), employee, liveSession, project,
+    'Going to Synthetic showroom', new Date(start.getTime() + 15000), 'b'.repeat(64)]);
   for (const [sequence, latitude, longitude] of [[0, 25.2048, 55.2708], [1, 25.2100, 55.2800]] as const) {
     await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
       values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), liveSession, sequence, new Date(start.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
@@ -193,6 +198,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
   await expect(page.getByText('2', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
+  await expect(page.getByRole('heading', { name: `Activity notes · ${day}` })).toBeVisible();
+  await expect(page.getByText('Going to Synthetic showroom', { exact: true })).toBeVisible();
   if (process.env.FIELD_MAP_PILOT === 'true') await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });
   await page.screenshot({ path: testInfo.outputPath('admin-live-map-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

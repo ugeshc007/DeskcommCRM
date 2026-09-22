@@ -12,6 +12,7 @@ import { readFieldJson } from '@/lib/field-sales/request';
 import { photoCommandSchema, saveFieldPhoto } from '@/lib/field-sales/photos';
 import { localParts } from '@/lib/field-sales/schedule';
 import { collectionCommandSchema, readAssignedCustomers, recordCustomerCollection } from '@/lib/field-sales/collections';
+import { fieldActivityCommandSchema, recordFieldActivity } from '@/lib/field-sales/activity';
 
 export const dynamic = 'force-dynamic';
 const headers = { 'Cache-Control': 'private, no-store' };
@@ -22,6 +23,7 @@ const envelope = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('complete_next_action'), command: completeNextActionSchema }),
   z.strictObject({ operation: z.literal('photo'), command: photoCommandSchema }),
   z.strictObject({ operation: z.literal('collection'), command: collectionCommandSchema }),
+  z.strictObject({ operation: z.literal('activity'), command: fieldActivityCommandSchema }),
   z.strictObject({ operation: z.literal('sign_out') }),
 ]);
 async function handle(req: Request, write: boolean) {
@@ -39,6 +41,7 @@ async function handle(req: Request, write: boolean) {
         : input.operation === 'visit' ? await recordVisit(pool, auth.org, auth.actor, input.command)
         : input.operation === 'photo' ? await saveFieldPhoto(pool, auth.org, auth.actor, input.command)
         : input.operation === 'collection' ? await recordCustomerCollection(pool, auth.org, auth.actor, input.command)
+        : input.operation === 'activity' ? await recordFieldActivity(pool, auth.org, auth.actor, input.command)
         : input.operation === 'complete_next_action' ? await completeNextAction(pool, auth.org, auth.actor, input.command)
         : await revokeCurrentFieldDevice(pool, auth.org, auth.actor, auth.deviceId);
       return ok(result, { headers });

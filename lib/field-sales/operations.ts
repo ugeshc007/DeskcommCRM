@@ -164,9 +164,16 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
       where c.organization_id=$1 and shop.organization_id=$1 and p.organization_id=$1
         and c.employee_id=any($2::uuid[]) and c.captured_at>=$3 and c.captured_at<$4
       order by c.captured_at desc,c.id limit 501`, [org, ids, start, end])).rows;
+    const activities = (await db.query(`select a.id,a.employee_id,a.session_id,a.project_id,a.project_customer_id,
+      a.note,a.source,a.captured_at,p.name as project_name,shop.shop_name
+      from public.field_sales_activity_notes a
+      join public.field_sales_projects p on p.organization_id=a.organization_id and p.id=a.project_id
+      left join public.field_sales_project_customers shop on shop.organization_id=a.organization_id and shop.id=a.project_customer_id
+      where a.organization_id=$1 and a.employee_id=any($2::uuid[]) and a.captured_at>=$3 and a.captured_at<$4
+      order by a.captured_at desc,a.id limit 501`, [org, ids, start, end])).rows;
     const corrections = (await db.query(`select c.*,e.display_name from public.field_sales_corrections c join public.field_sales_employees e on e.organization_id=c.organization_id and e.user_id=c.employee_id
       where c.organization_id=$1 and e.organization_id=$1 and c.employee_id=any($2::uuid[]) and (c.status='pending' or c.created_at>=$3) order by c.created_at desc limit 501`, [org, ids, start])).rows;
-    if (visits.length > 500 || corrections.length > 500 || collections.length > 500) throw new Error('field_operations_too_large');
+    if (visits.length > 500 || corrections.length > 500 || collections.length > 500 || activities.length > 500) throw new Error('field_operations_too_large');
     let points: Array<{ session_id: string; latitude: number; longitude: number; captured_at: Date; accuracy_m: number; mock_location: boolean }> = [];
     if (sessionId || employeeId) {
       if (employeeId && !ids.includes(employeeId)) throw new Error('field_forbidden');
@@ -184,6 +191,6 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
       await fieldAudit(db, org, actor, 'field_sales.route_viewed', sessionId || employeeId!, { date });
     }
     const map = (await db.query('select map_tile_path,map_attribution from public.field_sales_settings where organization_id=$1', [org])).rows[0] ?? null;
-    return { role, region: region.data, people, sessions, latest, visits, collections, corrections, points, map, generated_at: new Date().toISOString() };
+    return { role, region: region.data, people, sessions, latest, visits, collections, activities, corrections, points, map, generated_at: new Date().toISOString() };
   });
 }

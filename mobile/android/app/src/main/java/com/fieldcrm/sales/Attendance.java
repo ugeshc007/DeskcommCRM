@@ -32,6 +32,9 @@ public final class Attendance {
         SyncEngine.sync(context, afterSync);
     }
     public static void selectProject(Context context, JSONObject project) throws Exception {
+        selectProject(context, project, null);
+    }
+    public static void selectProject(Context context, JSONObject project, Runnable afterSync) throws Exception {
         SecureState.mutate(context, state -> {
             if (!WorkState.collecting(state.optString("status", "off_duty"))) throw new IllegalStateException("Punch in first.");
             if (state.getJSONArray("events").length() >= 1000) throw new IllegalStateException("Attendance queue is full.");
@@ -48,7 +51,7 @@ public final class Attendance {
                 .put("active_schedule_id", scheduleId).put("active_project_name", project.optString("project_name", "Project"))
                 .put("active_site_name", project.optString("site_name", ""));
         });
-        SyncEngine.sync(context, null);
+        SyncEngine.sync(context, afterSync);
     }
     public static void act(Context context, String action) throws Exception {
         actAt(context, action, Instant.now());

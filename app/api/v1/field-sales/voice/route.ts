@@ -30,7 +30,8 @@ async function handle(req: Request, prompt: boolean) {
         if (!active.rowCount) throw new Error('field_work_session_required');
       });
       const audio = prompt ? undefined : await readFieldVoiceAudio(req);
-      const upstream = await fetch(`${service}/${prompt ? 'prompt' : 'transcribe'}`, {
+      const nextShop = prompt && new URL(req.url).searchParams.get('kind') === 'next';
+      const upstream = await fetch(`${service}/${prompt ? nextShop ? 'prompt-next' : 'prompt' : 'transcribe'}`, {
         method: prompt ? 'GET' : 'POST', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(25_000),
         headers: { 'X-Internal-Secret': env.INTERNAL_SECRET, ...(audio ? { 'Content-Type': 'audio/mp4' } : {}) },
         body: audio ? Uint8Array.from(audio).buffer : undefined,

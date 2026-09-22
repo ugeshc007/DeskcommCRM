@@ -86,13 +86,16 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
       if (at < (session.last_event_at as Date).getTime()) throw new Error('field_device_clock_reversed');
       const cutoff = (session.punched_in_at as Date).getTime() + MAX_FIELD_SHIFT_MS;
       const autoClosed = session.status === 'off_duty' && (session.punched_out_at as Date)?.getTime() === cutoff;
+      // Um stop repetido avança a fila, mas nunca estende/reabre o intervalo já fechado.
+      const repeatedStop = command.action === 'punch_out' && session.status === 'off_duty' && !!session.punched_out_at;
       if (at >= cutoff && command.action !== 'punch_out') throw new Error('field_outside_work_session');
-      const next = autoClosed ? 'off_duty'
+      const next = autoClosed || repeatedStop ? 'off_duty'
         : transitionAttendance(session.status as WorkStatus, command.action);
-      const effectiveAt = command.action === 'punch_out' && at > cutoff ? new Date(cutoff).toISOString() : command.captured_at;
+      const effectiveAt = repeatedStop ? (session.punched_out_at as Date).toISOString()
+        : command.action === 'punch_out' && at > cutoff ? new Date(cutoff).toISOString() : command.captured_at;
       await db.query(`update public.field_sales_sessions set status=$3,last_event_at=$4,last_sequence=$5,
         punched_out_at=case when $6::boolean then punched_out_at when $3='off_duty' then $4::timestamptz else null end where organization_id=$1 and id=$2`,
-      [org, command.session_id, next, effectiveAt, command.sequence, autoClosed]);
+      [org, command.session_id, next, repeatedStop ? command.captured_at : effectiveAt, command.sequence, autoClosed || repeatedStop]);
       if (next === 'off_duty') {
         // An offline stop can arrive after newer samples: remove those outside its work interval.
         await db.query('delete from public.field_sales_locations where organization_id=$1 and session_id=$2 and captured_at >= $3', [org, command.session_id, effectiveAt]);

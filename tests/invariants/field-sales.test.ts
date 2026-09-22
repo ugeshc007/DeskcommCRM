@@ -486,6 +486,30 @@ describe('optional field-sales foundation', () => {
     expect((await readFieldOperations(pool, f.org, f.manager, f.localDate, null, f.actor)).collections).toHaveLength(2);
     expect((await pool.query('select active from field_sales_project_customers where organization_id=$1 and id=$2', [f.org, customer.id])).rows[0].active).toBe(false);
   });
+  it('drains a repeated stop without extending attendance, accepting off-duty GPS, or blocking the next shift', async () => {
+    const f = await fixture(), other = await fixture();
+    const at = (seconds: number) => new Date(Date.parse(f.start) + seconds * 1000).toISOString();
+    await recordAttendance(pool, f.org, f.actor, f.command);
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 1, captured_at: at(60) });
+    const stop = { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 2, captured_at: at(120) };
+    await expect(recordAttendance(pool, other.org, other.actor, stop)).rejects.toThrow('field_sync_out_of_order');
+    await expect(recordAttendance(pool, f.org, f.actor, { ...stop, sequence: 3 })).rejects.toThrow('field_sync_out_of_order');
+    expect((await recordAttendance(pool, f.org, f.actor, stop)).replayed).toBe(false);
+    expect((await recordAttendance(pool, f.org, f.actor, stop)).replayed).toBe(true);
+    const saved = (await pool.query('select status,punched_out_at,last_event_at,last_sequence from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0];
+    expect(saved.status).toBe('off_duty'); expect(saved.punched_out_at.toISOString()).toBe(at(60));
+    expect(saved.last_event_at.toISOString()).toBe(at(120)); expect(saved.last_sequence).toBe(2);
+    await expect(recordAttendance(pool, f.org, f.actor, { ...stop, event_id: randomUUID(), sequence: 3, action: 'break_start' })).rejects.toThrow('field_invalid_transition');
+    await expect(recordAttendance(pool, f.org, f.actor, { ...stop, event_id: randomUUID(), sequence: 3, captured_at: at(90) })).rejects.toThrow('field_device_clock_reversed');
+    const gps = { sample_id: randomUUID(), session_id: f.session, sequence: 0, captured_at: at(90), latitude: 25, longitude: 55, accuracy_m: 10, mock_location: false };
+    await expect(recordLocations(pool, f.org, f.actor, { samples: [gps] })).rejects.toThrow('field_outside_work_session');
+    const next = { ...f.command, event_id: randomUUID(), session_id: randomUUID(), captured_at: at(180) };
+    await recordAttendance(pool, f.org, f.actor, next);
+    const live = await readFieldOperations(pool, f.org, f.manager, f.localDate, null, f.actor);
+    expect(live.latest.find(person => person.employee_id === f.actor)?.status).toBe('working');
+    expect((await pool.query('select captured_at from field_sales_attendance_events where organization_id=$1 and id=$2', [f.org, stop.event_id])).rows[0].captured_at.toISOString()).toBe(at(120));
+    expect((await pool.query("select count(*)::int n from api_audit_log where organization_id=$1 and action='field_sales.punch_out'", [f.org])).rows[0].n).toBe(2);
+  });
   it('closes forgotten sessions at exactly fourteen hours and rejects later GPS', async () => {
     const start = new Date(Date.now() - 15 * 3600000).toISOString();
     const f = await fixture(start);

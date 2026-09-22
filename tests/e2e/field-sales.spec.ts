@@ -304,4 +304,14 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   if (process.env.FIELD_MAP_PILOT === 'true') await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('admin-live-map-mobile.png'), fullPage: true });
+  await routeDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await pool.query("update field_sales_sessions set status='off_duty',punched_out_at=now() where organization_id=$1 and id=$2", [org, liveSession]);
+  await authenticateFieldDevice(pool, 'Bearer ' + deviceToken);
+  await page.getByRole('tab', { name: 'Live view', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Online · no active work session', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'On-duty officers · 0', exact: true })).toBeVisible();
+  await expect(page.getByText(/Check attendance sync on the phone if it shows working/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Officer duty status' }).getByRole('article')
+    .filter({ has: page.getByRole('heading', { name: 'Synthetic salesperson', exact: true }) })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('online-officer-without-confirmed-shift.png'), fullPage: true });
 });

@@ -44,6 +44,10 @@ It intentionally refuses to run against an already-connected employee installati
    rejects points at/after that limit and a minute-level worker closes forgotten shifts.
    Punch-out requests local service shutdown before disk/network
    operations. Offline attendance and sample IDs survive retries without duplicate inserts.
+   A delayed sync response cannot replace attendance changed while the request was in flight.
+   Repeated punch-out events remain audited and ordered without moving the original stop time.
+   A confirmed closed session stops local tracking; pending records remain encrypted for sync.
+   Pending attendance is shown on the home screen as not yet confirmed by the CRM.
 6. The paired device remains connected until employee sign-out or administrator revocation.
    Revocation is revalidated inside server transactions.
 

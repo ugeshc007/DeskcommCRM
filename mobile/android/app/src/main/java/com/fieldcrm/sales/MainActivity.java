@@ -120,6 +120,8 @@ public final class MainActivity extends Activity {
         LinearLayout hero = card(); hero.setBackground(shape(working ? Color.rgb(228, 249, 240) : Color.rgb(235, 232, 255), 20));
         add(hero, label(working ? "You are punched in" : "Ready for today's work", 23, working ? Color.rgb(7, 105, 74) : BRAND_DARK, true), 0);
         add(hero, label(working ? "Your work session is in progress. Punch out when finished or after the 14-hour limit." : "Punch in to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
+        if (state.getJSONArray("events").length() > 0)
+            add(hero, label("Attendance not yet confirmed by CRM. Open Notifications for sync details.", 15, RED, true), 10);
         if (working) activeShift(state); else offDuty(state);
     }
     private void offDuty(JSONObject state) throws Exception {

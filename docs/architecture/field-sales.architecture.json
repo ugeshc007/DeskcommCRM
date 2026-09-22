@@ -9,7 +9,7 @@
     { "id": "team", "lane": "ui", "col": 0, "type": "service", "label": "Team member access", "sublabel": "Field Officer role; five-minute six-digit pairing; revoked invite archive" },
     { "id": "pairing", "lane": "runtime", "col": 1, "type": "service", "label": "One-time pairing", "sublabel": "Global attempt limit; HMAC code; atomic exchange for 256-bit bearer" },
     { "id": "mobile", "lane": "ui", "col": 1, "type": "service", "label": "Android work app", "sublabel": "Punch in before assigned project choice; shops and payments; optional tap-to-talk; visible GPS; local 14-hour stop" },
-    { "id": "queue", "lane": "data", "col": 1, "type": "database", "label": "Keystore-encrypted queue", "sublabel": "Stable IDs; network-only retry; account-bound reconnect" },
+    { "id": "queue", "lane": "data", "col": 1, "type": "database", "label": "Keystore-encrypted queue", "sublabel": "Stable IDs; guarded snapshot reconciliation; repeated stops preserve original work interval; account-bound retry" },
     { "id": "authority", "lane": "runtime", "col": 2, "type": "service", "label": "Current membership and device locks", "sublabel": "Organization + employee from authentication; raw authenticated SQL access denied" },
     { "id": "records", "lane": "data", "col": 3, "type": "database", "label": "Optional field tables", "sublabel": "Work intervals, scoped schedules and GPS; default disabled" },
     { "id": "customers", "lane": "data", "col": 3, "type": "database", "label": "Project shops and collection ledger", "sublabel": "Org-scoped roster, due/advance balance, immutable receipts and compensating voids" },

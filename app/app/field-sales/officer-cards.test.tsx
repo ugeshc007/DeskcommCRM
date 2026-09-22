@@ -20,7 +20,7 @@ describe('duty cards when GPS is missing', () => {
 
   it('counts a break as on duty and keeps off-duty history available separately', async () => {
     const user = userEvent.setup();
-    render(<OfficerCards people={[{ ...officer, status: 'break' }, { ...officer, employee_id: 'officer-b', display_name: 'Finished officer', status: null }]}
+    render(<OfficerCards people={[{ ...officer, status: 'on_break' }, { ...officer, employee_id: 'officer-b', display_name: 'Finished officer', status: null, online: false }]}
       timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
     expect(screen.getByText('On duty · on break')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'On-duty officers · 1' })).toBeVisible();
@@ -28,5 +28,13 @@ describe('duty cards when GPS is missing', () => {
     const card = screen.getByRole('heading', { name: 'Finished officer' }).closest('article')!;
     expect(within(card).getByText('Off duty', { exact: true })).toBeVisible();
     expect(within(card).getByRole('button', { name: 'View route and visits' })).toBeVisible();
+  });
+  it('shows a connected officer without an open session without hiding them in collapsed history', () => {
+    render(<OfficerCards people={[{ ...officer, status: null }]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
+    expect(screen.getByRole('heading', { name: 'Online · no active work session' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: officer.display_name })).toBeVisible();
+    expect(screen.getByText(/Online · App last checked in/)).toBeVisible();
+    expect(screen.getByText('Off duty', { exact: true })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'On-duty officers · 0' })).toBeVisible();
   });
 });

@@ -39,6 +39,8 @@ public final class SmokeInstrumentation extends Instrumentation {
         Bundle result = new Bundle(); Activity activity = null; String stage = "fresh-state";
         try {
             if (SecureState.read(getTargetContext()).has("token")) throw new IllegalStateException("Use a fresh test installation, not a connected employee device.");
+            stage = "session-snapshot-races";
+            SessionSnapshotTest.run();
             stage = "launch";
             activity = startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitForIdleSync(); Activity screen = activity;
@@ -89,6 +91,9 @@ public final class SmokeInstrumentation extends Instrumentation {
             Activity first = activity; runOnMainSync(first::finish);
             String date = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString(), project = java.util.UUID.randomUUID().toString(), schedule = java.util.UUID.randomUUID().toString();
             SecureState.mutate(getTargetContext(), current -> {
+                current.getJSONArray("events").put(new org.json.JSONObject().put("event_id", java.util.UUID.randomUUID())
+                    .put("session_id", java.util.UUID.randomUUID()).put("sequence", 1).put("action", "punch_out")
+                    .put("captured_at", java.time.Instant.now().toString()));
                 current.put("token", "fld_" + new String(new char[64]).replace('\0', 'a')).put("server", "https://synthetic.invalid").put("timezone", "UTC")
                     .put("identity", new org.json.JSONObject().put("organization_id", java.util.UUID.randomUUID()).put("employee_id", java.util.UUID.randomUUID()))
                     .put("snapshot", new org.json.JSONObject().put("settings", new org.json.JSONObject().put("enabled", true).put("notice_text", "Test notice"))
@@ -104,6 +109,9 @@ public final class SmokeInstrumentation extends Instrumentation {
                 && described(connected.getWindow().getDecorView(), "Profile and sign out") && !contains(connected.getWindow().getDecorView(), "Sync now")
                 && !contains(connected.getWindow().getDecorView(), "Start break") && !contains(connected.getWindow().getDecorView(), "Attach visit photo"));
             if (!simple[0]) throw new AssertionError("Connected home is not the simplified project/punch workflow");
+            final boolean[] pendingVisible = {false};
+            runOnMainSync(() -> pendingVisible[0] = contains(connected.getWindow().getDecorView(), "Attendance not yet confirmed by CRM. Open Notifications for sync details."));
+            if (!pendingVisible[0]) throw new AssertionError("Pending attendance must be visible on the home screen");
             SecureState.clear(getTargetContext());
             result.putString("stream", "PASS: connection screen; simplified connected project/Punch In home; notification/profile controls; off-duty GPS; Android Keystore round trip; no plaintext preferences; offline attendance retained. Isolated synthetic records only; no credentials or GPS collected.\n");
             finish(Activity.RESULT_OK, result);

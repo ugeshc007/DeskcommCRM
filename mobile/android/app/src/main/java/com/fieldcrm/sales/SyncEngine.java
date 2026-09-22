@@ -235,6 +235,7 @@ public final class SyncEngine {
                 LocalDate from = shiftDate.isEmpty() ? today : LocalDate.parse(shiftDate);
                 if (from.isAfter(today)) from = today;
                 if (from.isBefore(today.minusDays(1))) from = today.minusDays(1);
+                final JSONObject requestedState = state;
                 JSONObject snapshot = request(state, "GET", "?from=" + from + "&through=" + today.plusDays(6), null);
                 final String pendingCompletionMessage = completionProblem;
                 SecureState.mutate(context, current -> {
@@ -242,25 +243,11 @@ public final class SyncEngine {
                     current.put("identity", snapshot.getJSONObject("identity"));
                     JSONObject region = snapshot.optJSONObject("region");
                     if (region != null) current.put("timezone", region.getString("timezone"));
-                    JSONArray sessions = snapshot.optJSONArray("sessions");
-                    if (sessions != null) for (int index = 0; index < sessions.length(); index++) {
-                        JSONObject session = sessions.getJSONObject(index);
-                        if (!session.isNull("punched_out_at")) continue;
-                        long serverStart = java.time.Instant.parse(session.getString("punched_in_at")).toEpochMilli();
-                        boolean sameSession = session.getString("id").equals(current.optString("session_id"));
-                        if ((!sameSession || current.optLong("session_start_ms") <= 0) && current.getJSONArray("events").length() == 0) {
-                            current.put("session_start_ms", serverStart).put("event_sequence", session.getInt("last_sequence"));
-                        }
-                        current.put("session_id", session.getString("id")).put("status", session.optString("status", "working"))
-                            .put("active_project_id", session.isNull("project_id") ? "" : session.getString("project_id"))
-                            .put("active_schedule_id", session.isNull("schedule_id") ? "" : session.getString("schedule_id"))
-                            .put("active_local_date", session.optString("local_date"))
-                            .put("active_project_name", session.isNull("project_name") ? "Choose a project below" : session.getString("project_name"))
-                            .put("active_site_name", session.optString("site_name", ""));
-                        break;
-                    }
+                    SessionSnapshot.apply(current, requestedState, snapshot.optJSONArray("sessions"));
                 });
                 JSONObject policy = snapshot.optJSONObject("settings");
+                if (!WorkState.collecting(SecureState.read(context).optString("status")))
+                    context.stopService(new Intent(context, TrackingService.class));
                 if (policy == null || !policy.optBoolean("enabled")) {
                     context.stopService(new Intent(context, TrackingService.class));
                     SecureState.mutate(context, current -> current.put("sync_error", "Tracking is disabled by your organization. Punch out to close the session."));

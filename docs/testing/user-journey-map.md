@@ -2086,3 +2086,15 @@ Produto `7f1d0f3e`, integrado à main `ca895850`: as dez specs de organizações
 Evidência local preservada em `.superpowers/evidence/comunidade-360/final-qa-targeted-r4/` e log `.superpowers/sdd/comunidade-360/final-qa-targeted-r4.log`. A rodada inclui atualização concorrente da interface sem perder formulário, sugestão obsoleta sem confirmação antiga de sucesso e encerramento de suporte com retorno ao contexto original.
 
 Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos aprovados + 1 falha esperada; 184 arquivos de banco / 1.466 casos aprovados + 1 falha esperada e 1 ignorado, com INSTALL e UPDATE; tipos, lint (0 erros, 344 avisos) e build aprovados. `lint:channels`, validadores shell e conferência de release também passaram. Os checks remotos continuam sendo condição do merge pelo revisor da PR #613.
+
+### Field Sales delayed attendance synchronization — 2026-09-22
+
+- Confirmed code defect: an in-flight mobile snapshot could overwrite a newer local punch-out,
+  restoring a closed session as working. The mobile snapshot now checks queued attendance and
+  the session/sequence/status captured before the request; a confirmed closure stops tracking.
+- Synthetic Android instrumentation covers pending and already-acknowledged punch-out races,
+  a new shift, changed project, confirmed closure with retained GPS, and initial session restore.
+- Database regression covers an ordered repeated punch-out: preserve original closure and raw
+  event time, audit once per event, reject late GPS and invalid breaks, and accept the next shift.
+- Connected officers without a confirmed open session remain visible in Live view, with an
+  attendance-sync explanation. This does not mark them on duty or create a location.

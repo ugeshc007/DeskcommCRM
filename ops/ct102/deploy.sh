@@ -9,6 +9,8 @@ migration="${3:?migration path required}"
 customers_migration="${4:?customer migration path required}"
 activity_migration="${5:?activity migration path required}"
 voice_image="${6:?voice image digest required}"
+voice_mode="${7:-create}"
+[[ "$voice_mode" == create || "$voice_mode" == reuse-existing ]] || { echo 'Invalid voice deployment mode' >&2; exit 2; }
 release_override="$(cd "$(dirname "$0")" && pwd)/app-release.override.yml"
 release_dir="$(cd "$(dirname "$0")" && pwd)"
 voice_override="$release_dir/field-voice.override.yml"
@@ -30,6 +32,16 @@ compose() {
     -f docker-compose.ct102.map.yml -f "$release_override" \
     -f "$voice_override" --env-file .env "$@"
 }
+export CT102_APP_IMAGE="$image" CT102_APP_VERSION="${revision:0:7}" CT102_VOICE_IMAGE="$voice_image"
+export COMPOSE_PROFILES=field-voice
+existing_voice="$(compose ps -a -q field-voice)"
+if [[ "$voice_mode" == reuse-existing ]]; then
+  [[ "$existing_voice" =~ ^[a-f0-9]{64}$ ]] || { echo 'Existing voice sidecar required' >&2; exit 2; }
+  [[ "$(docker inspect "$existing_voice" --format '{{.Config.Image}}')" == "$voice_image" ]] || { echo 'Existing voice image does not match reviewed digest' >&2; exit 2; }
+  [[ "$(docker inspect "$existing_voice" --format '{{.State.Health.Status}}')" == healthy ]] || { echo 'Existing voice sidecar is not healthy' >&2; exit 2; }
+else
+  [[ -z "$existing_voice" ]] || { echo 'A voice sidecar already exists; manual review is required before replacing it' >&2; exit 2; }
+fi
 app_container="$(docker compose -f docker-compose.prod.yml -f docker-compose.ct102.yml --env-file .env ps -q app)"
 [[ -n "$app_container" ]] || { echo 'Running app not found' >&2; exit 2; }
 previous_image="$(docker inspect "$app_container" --format '{{.Config.Image}}')"
@@ -67,11 +79,13 @@ BACKUP_DIR="$backup_dir" bash hostgator-setup-kit/backup.sh
 [[ -n "$(find "$backup_dir" -maxdepth 1 -name 'db-*.sql.gz' -size +0c -print -quit)" ]] || { echo 'Database backup missing' >&2; exit 1; }
 
 docker pull "$image"
-docker pull "$voice_image"
+if [[ "$voice_mode" == create ]]; then docker pull "$voice_image"; fi
 image_revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
 [[ "$image_revision" == "$revision" ]] || { echo 'Image revision does not match release commit' >&2; exit 1; }
-voice_revision="$(docker image inspect "$voice_image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
-[[ "$voice_revision" == "$revision" ]] || { echo 'Voice image revision does not match release commit' >&2; exit 1; }
+if [[ "$voice_mode" == create ]]; then
+  voice_revision="$(docker image inspect "$voice_image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+  [[ "$voice_revision" == "$revision" ]] || { echo 'Voice image revision does not match release commit' >&2; exit 1; }
+fi
 
 docker run --rm -v "$migration:/release-migration.sql:ro" \
   -v "$customers_migration:/customers-migration.sql:ro" \
@@ -86,14 +100,16 @@ chmod 600 "$release_dir/previous-app.txt"
 export CT102_APP_IMAGE="$image" CT102_APP_VERSION="${revision:0:7}" CT102_VOICE_IMAGE="$voice_image"
 export COMPOSE_PROFILES=field-voice
 compose config --quiet
-existing_voice="$(compose ps -a -q field-voice)"
-[[ -z "$existing_voice" ]] || { echo 'A voice sidecar already exists; manual review is required before replacing it' >&2; exit 1; }
+if [[ "$voice_mode" == create ]]; then
 voice_started=1
 compose up -d --no-deps field-voice
 voice_container="$(compose ps -q field-voice)"
 [[ "$voice_container" =~ ^[a-f0-9]{64}$ ]] || { echo 'Voice sidecar did not start' >&2; exit 1; }
 printf '%s\n' "$voice_container" > "$release_dir/new-voice-container.txt"
 chmod 600 "$release_dir/new-voice-container.txt"
+else
+  voice_container="$existing_voice"
+fi
 voice_healthy=0
 for attempt in $(seq 1 30); do
   if [[ "$(docker inspect "$voice_container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')" == healthy ]]; then

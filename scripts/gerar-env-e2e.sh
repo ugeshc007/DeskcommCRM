@@ -60,6 +60,7 @@ ler() { printf '%s\n' "$ENVOUT" | grep "^$1=" | cut -d= -f2- | tr -d '"'; }
 API_URL="$(ler API_URL)"
 ANON="$(ler ANON_KEY)"
 SERVICE="$(ler SERVICE_ROLE_KEY)"
+DB_URL="$(ler DB_URL)"
 
 if [ -z "$API_URL" ] || [ -z "$ANON" ] || [ -z "$SERVICE" ]; then
   echo "==> Não consegui ler as chaves do stack local (API_URL/ANON_KEY/SERVICE_ROLE_KEY)." >&2
@@ -76,6 +77,10 @@ case "$API_URL" in
     echo "==> RECUSADO: o stack local respondeu com uma URL que não é local: $API_URL" >&2
     exit 1
     ;;
+esac
+case "$DB_URL" in
+  postgresql://*@127.0.0.1:*/*|postgresql://*@localhost:*/*) ;;
+  *) echo '==> RECUSADO: conexão do banco de teste ausente ou não local.' >&2; exit 1 ;;
 esac
 
 # Mesmo default do `playwright.config.ts` (PORT = process.env.E2E_PORT ??
@@ -98,7 +103,7 @@ cat > .env.e2e <<EOF
 NEXT_PUBLIC_SUPABASE_URL=$API_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON
 SUPABASE_SERVICE_ROLE_KEY=$SERVICE
-SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+SUPABASE_DB_URL=$DB_URL
 
 # Precisa bater com o baseURL real do Playwright (ver comentário acima).
 NEXT_PUBLIC_APP_URL=http://localhost:$E2E_PORT

@@ -53,6 +53,13 @@ release workflow.
 This Field Sales release also pins and starts the private speech sidecar before
 switching the app. Its health is checked locally; it has no published port. The
 release refuses to replace an existing voice container without manual review.
+For an app-only correction after that first release, an operator may pass
+`reuse-existing` as the seventh `deploy.sh` argument after reviewing that the
+voice source and override are unchanged. Argument six must be the **currently
+running pinned voice digest**. This mode requires that exact container to be
+healthy, leaves it running, and still verifies the new app's exact commit,
+takes a fresh backup, and retains app rollback. The default workflow does not
+opt into this mode automatically.
 If the release fails, the newly started voice container is stopped along with
 restoring the previous app image. Confirm CT102 memory headroom for the 1536 MiB
 container limit before approving the production environment.

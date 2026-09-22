@@ -102,7 +102,7 @@ test('organization region and shop template are usable in the manager UI', async
 });
 
 test('weekly project assignment, scoped activity and narrow-screen layout', async ({ page }, testInfo) => {
-  test.setTimeout(90000);
+  test.setTimeout(120000);
   await page.goto('/login');
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(password);
@@ -141,6 +141,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();
   await expect(page.getByText('Tile path', { exact: true })).toBeHidden();
   await expect(page.getByText('Basemap not configured.', { exact: false })).toBeVisible();
+  await page.getByLabel('Activity date', { exact: true }).fill('2027-01-04');
+  await page.getByText('Off-duty officers · 1', { exact: true }).click();
   await expect(page.getByText('No on-duty position available', { exact: true })).toBeVisible();
   await expect(page.getByText('Due — follow up now', { exact: true })).toBeVisible();
   const image = await sharp({ create: { width: 24, height: 24, channels: 3, background: '#26a269' } }).jpeg().toBuffer();
@@ -243,6 +245,16 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   const day = `${part('year')}-${part('month')}-${part('day')}`;
   await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,status,punched_in_at,last_event_at)
     values($1,$2,$3,'working',$4,$4)`, [org, liveSession, employee, start]);
+  await page.goto('/app/field-sales');
+  await page.getByLabel('Week of').fill('2027-01-04');
+  await page.getByRole('tab', { name: 'Live view', exact: true }).click();
+  await expect(page.getByLabel('Activity date')).toHaveValue(day);
+  await expect(page.getByRole('heading', { name: 'On-duty officers · 1' })).toBeVisible();
+  await expect(page.getByText(/waiting for the phone to send a GPS position/)).toBeVisible();
+  await page.getByRole('button', { name: 'View route and visits', exact: true }).click();
+  const emptyRoute = page.getByRole('dialog', { name: 'Route and visits', exact: true });
+  await expect(emptyRoute.getByText('No recorded route for this date within the retention period.')).toBeVisible();
+  await emptyRoute.getByRole('button', { name: 'Close', exact: true }).click();
   await pool.query(`insert into field_sales_activity_notes
     (organization_id,id,employee_id,session_id,project_id,note,source,captured_at,fingerprint)
     values($1,$2,$3,$4,$5,$6,'voice',$7,$8)`, [org, randomUUID(), employee, liveSession, project,
@@ -251,6 +263,13 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
     await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
       values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), liveSession, sequence, new Date(start.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
   }
+  const visitedShop = randomUUID();
+  await pool.query(`insert into field_sales_project_customers(organization_id,id,project_id,shop_name,currency)
+    values($1,$2,$3,'Synthetic visited shop','AED')`, [org, visitedShop, project]);
+  await pool.query(`insert into field_sales_customer_collections
+    (organization_id,id,project_customer_id,project_id,employee_id,session_id,captured_at,currency,fingerprint)
+    values($1,$2,$3,$4,$5,$6,$7,'AED',$8)`, [org, randomUUID(), visitedShop, project, employee, liveSession,
+    new Date(start.getTime() + 30000), 'c'.repeat(64)]);
   const deviceToken = 'fld_' + randomBytes(32).toString('hex');
   await pool.query(`insert into field_sales_devices(organization_id,id,employee_id,label,token_hash,expires_at)
     values($1,$2,$3,'Synthetic Android',$4,null)`, [org, randomUUID(), employee, deviceTokenHash(deviceToken)]);
@@ -259,21 +278,26 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Manager visibility' })).toHaveCount(0);
-  const officerCard = page.getByRole('article').filter({ has: page.getByRole('link', { name: 'View route and visits' }) });
+  const officerCard = page.getByRole('article').filter({ has: page.getByRole('button', { name: 'View route and visits' }) });
   await expect(officerCard.getByText('Online', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Present', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Punched in')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-team-presence-desktop.png'), fullPage: true });
-  await officerCard.getByRole('link', { name: 'View route and visits' }).click();
-  await expect(page).toHaveURL(new RegExp(`/app/field-sales/live\\?employee_id=${employee}&date=${day}`));
-  await expect(page.getByRole('heading', { name: 'Field team live view' })).toBeVisible();
+  await officerCard.getByRole('button', { name: 'View route and visits' }).click();
+  await expect(page).toHaveURL(/\/app\/field-sales$/);
+  const routeDialog = page.getByRole('dialog', { name: 'Route and visits', exact: true });
+  await expect(routeDialog).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Route and visits', exact: true })).toBeVisible();
   await page.getByLabel('Travel date').fill(day);
-  await page.getByLabel('Field officer').selectOption(employee);
+  await routeDialog.getByLabel('Field officer').selectOption(employee);
   await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
   await expect(page.getByText('2', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
   await expect(page.getByRole('heading', { name: `Activity notes · ${day}` })).toBeVisible();
   await expect(page.getByText('Going to Synthetic showroom', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Synthetic visited shop', exact: true })).toBeVisible();
+  await expect(page.getByText('Shop visit · no amount entered', { exact: true })).toBeVisible();
+  await expect(page.getByText('Shop pin · accuracy ±12 m', { exact: true })).toBeVisible();
   if (process.env.FIELD_MAP_PILOT === 'true') await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });
   await page.screenshot({ path: testInfo.outputPath('admin-live-map-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

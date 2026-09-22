@@ -37,6 +37,9 @@ It intentionally refuses to run against an already-connected employee installati
    time and GPS start immediately. Today's scheduled project is suggested afterward, but the
    employee may choose another active project in the same organization. The override is audited.
    Precise location and visible notification permissions are requested explicitly.
+   While on duty, the foreground service listens to enabled Android satellite and network
+   location providers, so indoor use does not depend only on a satellite fix. It preserves
+   reported accuracy and mock flags, and does not read cached pre-session locations.
 5. Breaks continue tracking. The phone stops GPS at punch-out or the 14-hour limit; the server
    rejects points at/after that limit and a minute-level worker closes forgotten shifts.
    Punch-out requests local service shutdown before disk/network

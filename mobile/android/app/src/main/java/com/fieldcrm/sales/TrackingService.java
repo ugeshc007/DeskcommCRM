@@ -57,8 +57,13 @@ public final class TrackingService extends Service implements LocationListener {
                 .setContentIntent(open).setOngoing(true).addAction(new Notification.Action.Builder(null, "Punch out", stop).build()).build());
             locations = getSystemService(LocationManager.class);
             locations.removeUpdates(this);
-            if (!locations.isProviderEnabled(LocationManager.GPS_PROVIDER)) throw new IllegalStateException("Turn on phone location to resume tracking.");
-            locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 30000L, 20f, this);
+            boolean gps = locations.isProviderEnabled(LocationManager.GPS_PROVIDER);
+            boolean network = locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+            if (!gps && !network) throw new IllegalStateException("Turn on phone location to resume tracking.");
+            if (gps) locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 30000L, 20f, this);
+            // Satellite fixes may be unavailable indoors. Use Android's enabled network provider too;
+            // preserve its accuracy and mock flag and never reuse a pre-session cached location.
+            if (network) locations.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 30000L, 20f, this);
             running = true;
             handler.removeCallbacks(cutoff);
             handler.postDelayed(cutoff, Math.max(0, state.optLong("session_start_ms") + Attendance.MAX_SHIFT_MS - System.currentTimeMillis()));
@@ -92,6 +97,8 @@ public final class TrackingService extends Service implements LocationListener {
         }
     }
     @Override public void onProviderDisabled(String provider) {
+        if (locations != null && (locations.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            || locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER))) return;
         try { SecureState.mutate(this, state -> state.put("sync_error", "Phone location is disabled. Enable it and resume tracking.")); } catch (Exception ignored) { }
         stopSelf();
     }

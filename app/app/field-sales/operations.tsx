@@ -12,6 +12,7 @@ import { localParts, wallTimeToUtc } from '@/lib/field-sales/schedule';
 import { VisitPhotos } from './visit-photos';
 import { fieldMapStyle } from '@/lib/field-sales/map-style';
 import { displayRoute } from '@/lib/field-sales/route-quality';
+import { OfficerCards } from './officer-cards';
 
 type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; online: boolean; last_seen_at: string | null };
 type Point = { session_id: string; latitude: number; longitude: number; captured_at: string; accuracy_m: number; mock_location: boolean };
@@ -105,6 +106,13 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
         const source = instance.getSource('route') as GeoJSONSource | undefined;
         if (source) source.setData(route);
         else { instance.addSource('route', { type: 'geojson', data: route }); instance.addLayer({ id: 'recorded-route', type: 'line', source: 'route', paint: { 'line-color': '#2563eb', 'line-width': 4 } }); }
+        // Isolated fixes remain visible without inventing a path across missing GPS.
+        const samples = { type: 'FeatureCollection' as const, features: plotted.map(point => ({ type: 'Feature' as const,
+          properties: {}, geometry: { type: 'Point' as const, coordinates: [point.longitude, point.latitude] } })) };
+        const sampleSource = instance.getSource('route-samples') as GeoJSONSource | undefined;
+        if (sampleSource) sampleSource.setData(samples);
+        else { instance.addSource('route-samples', { type: 'geojson', data: samples }); instance.addLayer({ id: 'recorded-route-samples', type: 'circle', source: 'route-samples',
+          paint: { 'circle-radius': 4, 'circle-color': '#2563eb', 'circle-stroke-width': 1, 'circle-stroke-color': '#ffffff' } }); }
         const selectionKey = `${selection.current}:${day.current}`;
         if (selection.current && fittedSelection.current !== selectionKey && plotted.length) {
           const bounds = new lib.LngLatBounds(); plotted.forEach(point => bounds.extend([point.longitude, point.latitude]));
@@ -138,7 +146,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
   </section>;
 }
 
-export function FieldOperations({ organizationId, userId, date }: { organizationId: string; userId: string; date: string }) {
+export function FieldOperations({ organizationId, userId, date, onOpenRoute }: { organizationId: string; userId: string; date: string; onOpenRoute: (employeeId: string) => void }) {
   const [sessionId, setSessionId] = useState(''), [employeeId, setEmployeeId] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [request, setRequest] = useState<Session | null>(null), [review, setReview] = useState<Correction | null>(null);
   const [complete, setComplete] = useState<Visit | null>(null);
@@ -177,8 +185,8 @@ export function FieldOperations({ organizationId, userId, date }: { organization
     {data && <>
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-semibold">Daily attendance and visit report</h2><p className="text-sm text-muted-foreground">Includes breaks; not a payroll calculation. GPS coordinates and visit notes are excluded.</p></div><Button variant="outline" disabled={busy} onClick={() => void exportReport()}>Export daily CSV</Button></section>
       {employeeId && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"><p><strong>{data.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Selected salesperson'}</strong> · complete recorded route for {date}</p><Button variant="outline" onClick={() => setEmployeeId('')}>Show all live positions</Button></div>}
-      <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={id => { setSessionId(''); setEmployeeId(id); }}/>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{data.latest.map(person => <article className={`rounded-xl border p-4 ${employeeId === person.employee_id ? 'border-primary bg-primary/5' : ''}`} key={person.employee_id}><h3 className="font-semibold">{person.display_name}</h3><p>{person.status?.replaceAll('_', ' ') ?? 'Off duty'}</p><p className="text-sm">Last recorded: {time(person.captured_at)}</p><p className="text-sm text-muted-foreground">{person.latitude === null ? 'No on-duty position available' : `Accuracy ±${Math.round(person.accuracy_m ?? 0)} m${person.mock_location ? ' · Mock location flagged' : ''}`}</p>{person.latitude !== null && <Button className="mt-3" variant="outline" onClick={() => { setSessionId(''); setEmployeeId(person.employee_id); }}>View today&apos;s route</Button>}</article>)}</div>
+      <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
+      <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={onOpenRoute}/>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Attendance and route history</h2>
         <p className="text-sm text-muted-foreground">Session spans include breaks. Approved corrections are shown separately and never rewrite raw GPS or original punch records.</p>
         {(sessionId || employeeId) && <Button variant="outline" onClick={() => { setSessionId(''); setEmployeeId(''); }}>Return to current positions</Button>}

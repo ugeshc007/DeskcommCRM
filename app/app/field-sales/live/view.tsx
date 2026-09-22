@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RouteMap, type Operations, type ShopCollection } from '../operations';
 import { displayRoute } from '@/lib/field-sales/route-quality';
+import { OfficerCards } from '../officer-cards';
 
 function localDate(instant: string, timezone: string) {
   const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(instant));
@@ -16,7 +17,7 @@ function localDate(instant: string, timezone: string) {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
-export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string }) {
+export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate, embedded = false }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string; embedded?: boolean }) {
   const [date, setDate] = useState(() => initialDate ?? new Date().toISOString().slice(0, 10));
   const [employeeId, setEmployeeId] = useState(initialEmployeeId ?? '');
   const [voiding, setVoiding] = useState<ShopCollection | null>(null);
@@ -44,7 +45,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
     setDate(localDate(data.generated_at, data.region.timezone));
   }, [data]);
   const selected = data?.latest.find(person => person.employee_id === employeeId);
-  const onDuty = data?.latest.filter(person => person.status && person.latitude !== null && person.longitude !== null) ?? [];
+  const onDuty = data?.latest.filter(person => person.status) ?? [];
   const validPoints = data?.points.filter(point => !point.mock_location) ?? [];
   const plottedRoute = displayRoute(data?.points ?? []);
   const time = (value: string | null) => value && timezone
@@ -68,13 +69,14 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
     finally { setVoidBusy(false); }
   }
 
-  return <main className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
-    <header className="flex flex-wrap items-start justify-between gap-4">
+  const Container = embedded ? 'section' : 'main';
+  return <Container className={embedded ? 'min-w-0 space-y-5' : 'mx-auto max-w-[1600px] space-y-5 p-4 md:p-6'}>
+    {!embedded && <header className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="mb-1 text-sm text-muted-foreground">CRM / Field Sales</p>
         <h1 className="text-2xl font-semibold">Field team live view</h1>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">See each on-duty officer&apos;s last reported location. Select an officer and date to review the complete recorded GPS path for that day.</p></div>
       <Button asChild variant="outline"><Link href="/app/field-sales">Back to Field Sales</Link></Button>
-    </header>
+    </header>}
     <section className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4" aria-label="Map filters">
       <label className="grid gap-2 text-sm font-medium">Travel date
         <Input type="date" value={date} onChange={event => { if (event.target.value) { dateTouched.current = true; setDate(event.target.value); } }}/>
@@ -93,15 +95,19 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
     {query.error && <p role="alert" className="rounded-lg border border-destructive p-3">{query.error.message}</p>}
     {data && <>
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{onDuty.length}</strong><p className="text-sm text-muted-foreground">On-duty officers with a reported position</p></div>
+        <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{onDuty.length}</strong><p className="text-sm text-muted-foreground">On-duty officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{data.latest.length}</strong><p className="text-sm text-muted-foreground">Enrolled field officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{employeeId ? validPoints.length : '—'}</strong><p className="text-sm text-muted-foreground">Recorded GPS points for selected date</p></div>
       </div>
+      {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} selectedEmployeeId={employeeId} onSelect={setEmployeeId}/>}
       <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={setEmployeeId}/>
       <p className="text-xs text-muted-foreground">Pins show the last reported on-duty position, not a continuously measured position. The blue path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
+        {plottedRoute.plotted.length > 0 && !plottedRoute.lines.length && <p className="mt-2 text-sm">Only isolated GPS fixes are available. Blue dots show recorded positions; there are not enough continuous fixes to draw a travel path.</p>}
+        {!!data.points.length && !plottedRoute.plotted.length && <p className="mt-2 text-sm">The recorded fixes did not pass map quality checks. No reliable travel path is available.</p>}
+        {!data.points.length && selected?.status && <p className="mt-2 text-sm">The work session is active, but no GPS records are available for this date. Check location and pending GPS records in the phone app’s Notifications.</p>}
         <Button className="mt-3" variant="outline" onClick={() => setEmployeeId('')}>Show all current positions</Button>
       </section>}
       {employeeId && <section className="space-y-3" aria-label="Officer activity notes">
@@ -140,17 +146,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
           </form>
         </DialogContent>
       </Dialog>
-      <section className="space-y-3"><h2 className="text-lg font-semibold">Field officers</h2>
-        {!data.latest.length && <p className="rounded-xl border p-4">No field officers enrolled yet. Enroll staff under Field Sales → Team.</p>}
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{data.latest.map(person => <article className={`rounded-xl border bg-card p-4 ${employeeId === person.employee_id ? 'border-primary' : ''}`} key={person.employee_id}>
-          <h3 className="font-semibold">{person.display_name}</h3>
-          <p className="text-sm">{person.online ? 'Online' : 'Offline'} · App last checked in: {time(person.last_seen_at)}</p>
-          <p className="text-sm">{person.status?.replaceAll('_', ' ') ?? 'Off duty'}</p>
-          <p className="text-sm text-muted-foreground">Last reported: {time(person.captured_at)}</p>
-          {person.mock_location && <p className="text-sm text-amber-700">Mock location flagged</p>}
-          <Button className="mt-3" variant="outline" onClick={() => setEmployeeId(person.employee_id)}>View travel path for {date}</Button>
-        </article>)}</div>
-      </section>
+
     </>}
-  </main>;
+  </Container>;
 }

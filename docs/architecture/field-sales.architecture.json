@@ -16,7 +16,7 @@
     { "id": "voice", "lane": "runtime", "col": 2, "type": "service", "label": "Private speech sidecar", "sublabel": "Optional Kokoro prompt and faster-whisper transcription; transient audio only" },
     { "id": "retention", "lane": "runtime", "col": 4, "type": "service", "label": "Existing daily retention cron", "sublabel": "Per-organization expiry; bounded deletes; no coordinates in audit" },
     { "id": "auto-close", "lane": "runtime", "col": 3, "type": "service", "label": "14-hour auto-close cron", "sublabel": "Closes forgotten sessions at exact cutoff; removes later GPS" },
-    { "id": "operations", "lane": "ui", "col": 3, "type": "service", "label": "Map, visits and approvals", "sublabel": "Authorized positions; routes; due follow-ups with preserved completion history; independent corrections" },
+    { "id": "operations", "lane": "ui", "col": 3, "type": "service", "label": "Map, visits and approvals", "sublabel": "On-duty cards without GPS; embedded team routes and visits; isolated fixes as dots; independent activity date; due follow-ups and corrections" },
     { "id": "audit", "lane": "ui", "col": 4, "type": "service", "label": "Existing audit view / device sync errors", "sublabel": "Audited mutations; rejection receipts visible without expired coordinates" },
     { "id": "reports", "lane": "ui", "col": 4, "type": "service", "label": "Daily CSV export", "sublabel": "Scoped attendance and visits; excludes GPS and notes; formula-safe cells" },
     { "id": "tiles", "lane": "runtime", "col": 4, "type": "service", "label": "Local map assets", "sublabel": "Read-only raster or PMTiles dataset; authenticated bounded reads; no external fallback" }

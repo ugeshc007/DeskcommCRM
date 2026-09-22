@@ -8,12 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { addCalendarDays, mondayOfWeek } from '@/lib/field-sales/schedule';
 import { FieldOperations, type ShopCollection } from './operations';
+import { FieldLiveView } from './live/view';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
 
@@ -66,6 +67,8 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('calendar');
+  const [activityDate, setActivityDate] = useState('');
+  const [routeSelection, setRouteSelection] = useState<{ employeeId: string; date: string } | null>(null);
   const [editing, setEditing] = useState<Occurrence | null>(null);
   const [editScope, setEditScope] = useState<'one' | 'future'>('one');
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
@@ -192,7 +195,11 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       {!timezone && <p role="alert" className="rounded-lg border p-4">Configure the organization country and time zone before scheduling.</p>}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
-        <TabsContent value="activity"><FieldOperations organizationId={organizationId} userId={userId} date={start}/></TabsContent>
+        <TabsContent value="activity" className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3"><Field label="Activity date"><Input type="date" value={activityDate || teamDate} onChange={event => { if (event.target.value) setActivityDate(event.target.value); }}/></Field>
+            <Button variant="outline" onClick={() => setActivityDate('')}>Today</Button></div>
+          <FieldOperations organizationId={organizationId} userId={userId} date={activityDate || teamDate} onOpenRoute={employeeId => setRouteSelection({ employeeId, date: activityDate || teamDate })}/>
+        </TabsContent>
         <TabsContent value="calendar" className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <Button variant="outline" aria-label="Previous period" onClick={() => setStart(addCalendarDays(start, view === 'week' ? -7 : -1))}><CaretLeft aria-hidden/></Button>
@@ -243,7 +250,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
                 <p className="mt-1 text-xs text-muted-foreground">App last checked in: {formatTime(position?.last_seen_at)}</p>
                 <p className="mt-2 text-sm">{latestShop ? `Latest shop: ${latestShop.shop_name} · ${formatTime(latestShop.captured_at)}${latestShop.amount_cents === null ? ' · visit only' : ` · received ${latestShop.currency} ${(Number(latestShop.amount_cents) / 100).toFixed(2)}`}` : 'No shop visits recorded today'}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {manager && <Button asChild variant="outline"><Link href={`/app/field-sales/live?employee_id=${encodeURIComponent(person.user_id)}&date=${teamDate}`}>View route and visits</Link></Button>}
+                  {manager && <Button variant="outline" onClick={() => setRouteSelection({ employeeId: person.user_id, date: teamDate })}>View route and visits</Button>}
                   {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>
@@ -343,6 +350,12 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <Field label="Visit instructions"><Textarea name="instructions" maxLength={4000} defaultValue={editing?.schedule.instructions}/></Field><Button disabled={busy}>Save assignment</Button>
       </form>}
     </DialogContent></Dialog>
+    <Dialog open={routeSelection !== null} onOpenChange={open => { if (!open) setRouteSelection(null); }}>
+      <DialogContent className="max-h-[92dvh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto p-4 md:p-6">
+        <DialogHeader><DialogTitle>Route and visits</DialogTitle><DialogDescription>Review recorded travel, shop visits and activity without leaving your team.</DialogDescription></DialogHeader>
+        {routeSelection && <FieldLiveView embedded organizationId={organizationId} userId={userId} initialEmployeeId={routeSelection.employeeId} initialDate={routeSelection.date}/>}
+      </DialogContent>
+    </Dialog>
     <AlertDialog open={endingAssignment !== null} onOpenChange={open => { if (!open) setEndingAssignment(null); }}>
       <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>End this project assignment?</AlertDialogTitle>
         <AlertDialogDescription>{endingAssignment?.project_name} will disappear from this officer’s active assignments now. Earlier visits and routes remain saved.</AlertDialogDescription>

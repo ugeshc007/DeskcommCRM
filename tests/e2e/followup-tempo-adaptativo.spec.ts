@@ -100,10 +100,17 @@ async function login(page: Page, email: string): Promise<void> {
  * do arrasto; então a conexão vira precondição robusta em vez de asserção frágil.
  */
 async function connectHandles(page: Page, sourceNodeId: string, targetNodeId: string): Promise<void> {
+  // Adicionar um bloco foca o último nó e abre o painel. Só diminuir o zoom
+  // deixa o primeiro handle atrás da paleta: reenquadre pela UI antes do gesto.
+  await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+  await page.locator(".react-flow__controls-fitview").click();
+  await page.waitForTimeout(350);
   const TENTATIVAS = 4;
   const source = page.locator(`.react-flow__node[data-id="${sourceNodeId}"] .react-flow__handle.source`);
   const target = page.locator(`.react-flow__node[data-id="${targetNodeId}"] .react-flow__handle.target`);
   const antes = await page.locator(".react-flow__edge").count();
+  await source.click({ trial: true });
+  await target.click({ trial: true });
 
   for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
     const sBox = await source.boundingBox();

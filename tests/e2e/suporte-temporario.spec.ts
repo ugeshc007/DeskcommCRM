@@ -115,7 +115,8 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
   await login(page,email);await acknowledgeKnownAction(page,"/login");
   const sameTab=await page.context().newPage();await sameTab.goto("/app/inbox");
   await expect(sameTab.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
-  second=await browser.newContext();observeRequests(second);const other=await second.newPage();observeAuth(other);await login(other,email);await acknowledgeKnownAction(other,"/login");
+  second=await browser.newContext();observeRequests(second);const other=await second.newPage();observeAuth(other);await login(other,email);await acknowledgeKnownAction(other,"/login");await other.goto("/app/inbox");
+  await expect(other.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
   await start(page,orgs[1]!);
   await expect(sameTab.getByTestId("tenant-switcher")).toContainText(`Suporte B ${suffix}`);
   await expect(sameTab.locator("[data-conversation-id]").getByText(`Contato B ${suffix}`,{exact:true})).toBeVisible();

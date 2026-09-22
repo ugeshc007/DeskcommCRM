@@ -139,6 +139,9 @@ async function connectHandles(
   targetNodeId: string,
   sourceHandleId?: string,
 ): Promise<void> {
+  await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+  await page.locator(".react-flow__controls-fitview").click();
+  await page.waitForTimeout(350);
   // Nó que ramifica tem uma bolinha por saída: `.source` sozinho casa várias e o
   // modo estrito recusa. Quem arrasta de um nó desses diz de qual saída.
   const sourceSel = sourceHandleId
@@ -165,20 +168,6 @@ async function nodeIdsByPrefix(page: Page, prefix: string): Promise<string[]> {
     if (id) ids.push(id);
   }
   return ids;
-}
-
-async function moveNodeTo(page: Page, nodeId: string, targetX: number, targetY: number): Promise<void> {
-  const card = page.locator(`[data-testid="node-card-${nodeId}"]`);
-  const box = await card.boundingBox();
-  if (!box) throw new Error(`nó ${nodeId} sem bounding box`);
-  const startX = box.x + box.width / 2;
-  const startY = box.y + 20;
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  await page.mouse.move((startX + targetX) / 2, (startY + targetY) / 2, { steps: 5 });
-  await page.mouse.move(targetX, targetY, { steps: 10 });
-  await page.mouse.up();
-  await page.waitForTimeout(150);
 }
 
 async function clickEdge(page: Page, edgeId: string): Promise<void> {
@@ -269,23 +258,11 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
       throw new Error("node ids ausentes após montar a paleta");
     }
 
-    const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 6; i++) {
-      if (await zoomOut.isDisabled()) break;
-      await zoomOut.click();
-    }
-    await page.waitForTimeout(300);
-
-    const canvasBox = await page.getByTestId("flow-canvas").boundingBox();
-    if (!canvasBox) throw new Error("flow-canvas sem bounding box");
-    const at = (dx: number, dy: number): [number, number] => [canvasBox.x + dx, canvasBox.y + dy];
-    await moveNodeTo(page, triggerId, ...at(150, 50));
-    await moveNodeTo(page, waitId, ...at(150, 190));
-    await moveNodeTo(page, actionId, ...at(150, 330));
-    await moveNodeTo(page, classifyId, ...at(150, 470));
-    await moveNodeTo(page, endPositivoId, ...at(60, 650));
-    await moveNodeTo(page, endNoReplyId, ...at(260, 650));
-    await moveNodeTo(page, endFallbackId, ...at(460, 650));
+    // O comando público organiza e enquadra os sete cartões no espaço útil,
+    // incluindo a barra de ferramentas e a paleta do construtor.
+    await page.getByTestId("auto-fit-flow").click();
+    await expect(page.locator(".react-flow__node")).toHaveCount(7);
+    await page.waitForTimeout(350);
 
     // Configura: classify → 1 classe "positivo" (troca o default hot/cold);
     // action → prompt_hint real; end-positivo → outcome "Convertido" (os

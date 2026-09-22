@@ -260,7 +260,7 @@ async function removerLogoSeHouver(page: Page, tela: string, escopo: Escopo): Pr
   await page.goto(tela);
   const remover = page
     .locator(`[data-campo-de-logo='${escopo}']`)
-    .getByRole("button", { name: /^remover$/i });
+    .getByRole("button", { name: /^(remover|remove)$/i });
   if ((await remover.count()) === 0) return;
   await remover.click();
   await expect(page.getByText(/logo removido/i)).toBeVisible({ timeout: 15_000 });
@@ -652,7 +652,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
     // a asserção nomeia a precondição em vez de deixá-la sair como um clique que
     // esperou até o timeout.
     const remover = page.locator("[data-campo-de-logo='organizacao']").getByRole("button", {
-      name: /^remover$/i,
+      name: /^(remover|remove)$/i,
     });
     await expect(remover, "precondição: a empresa precisa entrar neste caso COM logo próprio").toBeVisible();
     await remover.click();
@@ -675,7 +675,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
     await loginComTotp(page, creds.users.dono!.email, creds.dono_totp!.secret);
     await page.goto("/admin/marca");
     const remover = page.locator("[data-campo-de-logo='instalacao']").getByRole("button", {
-      name: /^remover$/i,
+      name: /^(remover|remove)$/i,
     });
     await expect(
       remover,

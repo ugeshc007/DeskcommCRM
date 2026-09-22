@@ -583,7 +583,7 @@ test.describe("kit visual da Agenda", () => {
 
     const aviso = painel.getByTestId("sem-jornada-publicada");
     await expect(aviso).toBeVisible({ timeout: ESPERA });
-    await expect(aviso).toContainText("ainda não publicou");
+    await expect(aviso).toContainText(/ainda não publicou|haven.t published your opening hours yet/);
     // Diz o PRÓXIMO PASSO, não só a ausência — e o próximo passo é CLICÁVEL.
     //
     // Esta asserção era `toContainText(/configure|disponibilidade/i)`, e o texto
@@ -628,7 +628,7 @@ test.describe("kit visual da Agenda", () => {
     );
     expect(rotulos.length, "nenhum dia apagado nesta seção — o cenário mudou").toBeGreaterThan(0);
     expect(
-      rotulos.some((r) => /não publicou seus horários/i.test(r)),
+      rotulos.some((r) => /não publicou seus horários|haven.t published your schedules/i.test(r)),
       `nenhum dia diz por que está apagado: ${JSON.stringify(rotulos.slice(0, 3))}`,
     ).toBe(true);
     expect(
@@ -643,7 +643,7 @@ test.describe("kit visual da Agenda", () => {
     // é o mesmo defeito de "tela oferece o que o código ignora", invertido.
     const painel = page.getByTestId("secao-nao-configurado").getByTestId("painel-de-marcacao");
 
-    await expect(painel.getByTestId("fuso-suposto")).toContainText(/supondo o fuso/i);
+    await expect(painel.getByTestId("fuso-suposto")).toContainText(/supondo o fuso|assuming the time zone/i);
 
     const defasada = painel.getByTestId("fontes-defasadas");
     await expect(defasada).toBeVisible();

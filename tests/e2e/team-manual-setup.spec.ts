@@ -128,7 +128,7 @@ test('admin copies a private invite, employee sets a password without email, and
   await revokedPage.getByLabel(/^(Password|Senha)$/).fill(password);
   await revokedPage.getByLabel(/Confirm password|Confirmar senha/).fill(password);
   await revokedPage.getByRole('button', { name: /Create account|Criar conta/i }).click();
-  await expect(revokedPage.getByText('Invalid or expired invitation')).toBeVisible();
+  await expect(revokedPage.getByText(/Invalid or expired invitation|Convite inválido ou expirado/)).toBeVisible();
   const revokedUser = await pool.query('select id from auth.users where email=$1', [revokedEmail]);
   expect(revokedUser.rows).toHaveLength(0);
   await revokedContext.close();

@@ -356,7 +356,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     });
 
     await page.goto(`/team/accept-invite/${valid}`);
-    await page.getByRole("link", { name: /ainda não tenho conta/i }).click();
+    await page.getByRole("link", { name: /ainda não tenho conta|I don.t have an account yet/i }).click();
 
     // O token viaja: é ele que faz a conta nova nascer amarrada a este convite
     // em vez de ganhar uma organização própria.

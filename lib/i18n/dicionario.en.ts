@@ -5170,7 +5170,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "You haven't published your opening hours yet",
   "Sem eles ninguém consegue marcar — nem você, nem o agente. Configure a sua disponibilidade e os horários aparecem aqui.":
     "Without them, no one can score — not you, not the agent. Configure your availability and times appear here.",
-  "Estamos supondo o fuso": "We are assuming the spindle",
+  "Estamos supondo o fuso": "We are assuming the time zone",
   "— ninguém escolheu ainda. O agente oferece horário usando ele.":
     "— no one has chosen yet. The agent offers timetable using it.",
   "O lembrete não será enviado — combine por telefone.":

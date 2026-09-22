@@ -38,6 +38,22 @@
   ],
   "nodes": [
     {
+      "id": "visual-library",
+      "lane": "humano",
+      "col": 7,
+      "type": "frontend",
+      "label": "NodePalette + builder-library",
+      "sublabel": "message presets and starter drafts; no automatic publication"
+    },
+    {
+      "id": "visual-canvas",
+      "lane": "humano",
+      "col": 8,
+      "type": "frontend",
+      "label": "FlowCanvas + ActionForm preview",
+      "sublabel": "graph edits and text preview; existing save/publish guards"
+    },
+    {
       "id": "fila",
       "lane": "humano",
       "col": 1,
@@ -239,6 +255,18 @@
     }
   ],
   "edges": [
+    {
+      "id": "visual-input",
+      "from": "visual-library",
+      "to": "visual-canvas",
+      "label": "click or drag; starters only on an empty canvas"
+    },
+    {
+      "id": "visual-output",
+      "from": "visual-canvas",
+      "to": "engine",
+      "label": "existing validated save and explicit publish; graph execution unchanged"
+    },
     {
       "id": "e1",
       "from": "fila",

@@ -229,6 +229,15 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
       path: "test-results/followup-6.2-01-canvas-empty.png",
       fullPage: true,
     });
+    // Biblioteca nova: cria rascunho conectado sem publicar ou trocar o gatilho.
+    await page.getByTestId("flow-canvas").getByRole("button", { name: /Welcome & enquiry/ }).click();
+    await expect(page.getByTestId("node-card-trigger-1")).toBeVisible();
+    await expect(page.getByTestId("node-card-action-2")).toBeVisible();
+    await expect(page.getByTestId("node-card-end-5")).toBeVisible();
+    await expect(page.getByTestId("node-palette").getByRole("button", { name: /Welcome & enquiry/ })).toBeDisabled();
+    await page.getByTestId("node-card-action-2").click();
+    await expect(page.getByRole("region", { name: "Message preview" })).toContainText("Hello! Welcome to our store.");
+    await page.screenshot({ path: "test-results/followup-visual-starter-preview.png", fullPage: true });
   });
 
   test("adiciona os 4 nós via paleta e conecta trigger→wait→action→end", async ({ page }) => {

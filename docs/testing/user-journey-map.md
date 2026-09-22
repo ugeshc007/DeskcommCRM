@@ -10,6 +10,13 @@
 
 ## Convenções
 
+### Visual flow library (local implementation; browser run pending)
+
+`tests/e2e/followup-builder.spec.ts` extends the empty-editor journey with a welcome
+starter, connected nodes, non-overwrite protection and customer-message preview.
+Unit tests cover graph publication validation and palette clicks/drags. Authenticated
+fresh-database browser execution and screenshots have **not** been collected yet.
+
 - `[P0]` primeira impressão — bug aqui é vergonha pública; prioridade máxima.
 - `[P1]` rotina diária do operador/atendente.
 - `[P2]` exploração/edge.

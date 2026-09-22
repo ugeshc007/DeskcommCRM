@@ -7008,4 +7008,11 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.",
   "Invitation removed from the list.": "Invitation removed from the list.",
   "Remove": "Remove",
+  "Nota recente": "Recent note",
+  "Autor não identificado": "Unknown author",
+  "Adicionar nota": "Add note",
+  "Registre a conversa ou o próximo passo": "Record the conversation or next step",
+  "Salvar nota": "Save note",
+  "Nota adicionada": "Note added",
+  "Não foi possível salvar a nota.": "Could not save the note.",
 };

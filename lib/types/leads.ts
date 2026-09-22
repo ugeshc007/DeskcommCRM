@@ -57,6 +57,13 @@ export interface Lead {
    * aparece quando o roteamento é inequívoco.
    */
   next_action?: { label: string; seq: number; proposed_at: string } | null;
+  /** Nota humana mais recente deste negócio, derivada da timeline. */
+  recent_note?: {
+    id: string;
+    text: string;
+    at: string;
+    by: string | null;
+  } | null;
   /**
    * Derivado (não é coluna): o score vem de `crm_lead_scores` por LEFT JOIN.
    *

@@ -8,6 +8,7 @@
  * Pré-requisito: seed de credenciais + seed de kanban (rodados aqui se faltarem).
  */
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -66,4 +67,46 @@ test("filtro por responsável reflete na URL e esconde leads com dono", async ({
   await expect(page).toHaveURL(/owner=unassigned/);
   await expect(unowned).toBeVisible();
   await expect(owned).toHaveCount(0);
+});
+
+test("anotação nova aparece no card com autor e hora, e o dossiê conserva o histórico", async ({ page, browser }, testInfo) => {
+  await login(page, creds.users.manager!.email);
+  await page.goto(`/app/pipelines/${creds.kanban!.pipeline_id}`);
+  const title = "Pedido E2E com responsavel";
+  const boardResponse = await page.request.get(`/api/v1/pipelines/${creds.kanban!.pipeline_id}/board`);
+  expect(boardResponse.ok()).toBe(true);
+  const board = (await boardResponse.json()).data as { leads: Array<{ id: string; title: string }> };
+  const leadId = board.leads.find((lead) => lead.title === title)?.id;
+  expect(leadId).toBeTruthy();
+  const card = page.getByRole("group", { name: `Lead: ${title}` });
+  await expect(card).toBeVisible();
+  const first = `Primeira conversa ${randomUUID()}`;
+  const second = `Próximo passo ${randomUUID()}`;
+
+  await card.getByRole("button", { name: title }).click();
+  const dossier = page.getByRole("dialog", { name: title });
+  await dossier.getByLabel("Adicionar nota").fill(first);
+  await dossier.getByRole("button", { name: "Salvar nota" }).click();
+  await expect(dossier.getByText(first)).toBeVisible();
+  await expect(dossier.getByLabel("Adicionar nota")).toBeEnabled();
+  await dossier.getByLabel("Adicionar nota").fill(second);
+  await dossier.getByRole("button", { name: "Salvar nota" }).click();
+  await expect(dossier.getByText(second)).toBeVisible();
+  await expect(dossier.getByText(first)).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const recent = card.getByTestId("lead-recent-note");
+  await expect(recent).toContainText(second);
+  await expect(recent).not.toContainText(first);
+  await expect(recent).toContainText(/E2E Manager · \d/);
+  await page.screenshot({ path: testInfo.outputPath("lead-recent-note.png") });
+
+  const viewerContext = await browser.newContext();
+  const viewerPage = await viewerContext.newPage();
+  await login(viewerPage, creds.users.viewer!.email);
+  const denied = await viewerPage.request.post(`/api/v1/leads/${leadId}/notes`, {
+    data: { note: "Viewer must not add notes" },
+  });
+  expect(denied.status()).toBe(403);
+  await viewerContext.close();
 });

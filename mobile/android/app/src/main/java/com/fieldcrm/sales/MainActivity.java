@@ -181,8 +181,15 @@ public final class MainActivity extends Activity {
                 .setMessage(policy.optString("notice_text") + "\n\nGPS starts now and stops at punch-out or after 14 hours. Choose a project after punching in.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Agree and punch in", (dialog, which) -> {
                     try {
-                        Attendance.punchIn(this); startTracking(); render();
-                        if (SecureState.read(this).optBoolean("voice_enabled")) showDestinationPrompt();
+                        Attendance.punchIn(this, () -> runOnUiThread(() -> {
+                            try {
+                                JSONObject current = SecureState.read(this);
+                                if (current.optBoolean("voice_enabled")
+                                    && WorkState.collecting(current.optString("status", "off_duty"))
+                                    && current.getJSONArray("events").length() == 0) showDestinationPrompt();
+                            } catch (Exception ignored) { /* The touch controls remain available. */ }
+                        }));
+                        startTracking(); render();
                     } catch (Exception failure) { alert("Punch in not saved", "Refresh and try again."); }
                 }).show();
         } catch (Exception failure) { alert("Policy unavailable", "Refresh assignments before punching in."); }

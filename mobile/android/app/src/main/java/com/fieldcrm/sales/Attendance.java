@@ -10,6 +10,9 @@ public final class Attendance {
     public static final long MAX_SHIFT_MS = 14L * 60 * 60 * 1000;
     private Attendance() {}
     public static void punchIn(Context context) throws Exception {
+        punchIn(context, null);
+    }
+    public static void punchIn(Context context, Runnable afterSync) throws Exception {
         JSONObject current = SecureState.read(context);
         String zone = current.optString("timezone", "UTC");
         String localDate = java.time.LocalDate.now(java.time.ZoneId.of(zone)).toString();
@@ -26,7 +29,7 @@ public final class Attendance {
                 .put("sequence", 0).put("action", "punch_in").put("captured_at", Instant.now().toString())
                 .put("local_date", localDate));
         });
-        SyncEngine.sync(context, null);
+        SyncEngine.sync(context, afterSync);
     }
     public static void selectProject(Context context, JSONObject project) throws Exception {
         SecureState.mutate(context, state -> {

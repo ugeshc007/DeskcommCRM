@@ -637,6 +637,13 @@ jobs:
           mkdir -p supabase/migrations
           supabase start
 
+      # O CLI precisa da pasta vazia apenas durante o start. Os specs podem
+      # ler migrations individuais para preparar cenários no banco efêmero.
+      - name: Restaurar migrations para os testes
+        run: |
+          rmdir supabase/migrations
+          mv /tmp/migrations-off supabase/migrations
+
       # O baseline é um dump `--schema-only`: ele USA os tipos das extensões
       # (public.vector, citext, gin_trgm_ops) mas não as cria. O stack local do
       # Supabase traz os binários e não as habilita — mesmo prelúdio que o

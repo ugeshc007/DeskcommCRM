@@ -289,7 +289,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
       exp: Math.floor(Date.now() / 1000) - 60, // 1min no passado
     });
     await page.goto(`/team/accept-invite/${expired}`);
-    await expect(page.getByRole("heading", { name: /inválido ou expirado/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /inválido ou expirado|invalid or expired/i })).toBeVisible();
   });
 
   test("7. token adulterado (HMAC quebrado) → inválido", async ({ page }) => {
@@ -303,7 +303,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     // vira a assinatura: troca o último char por outro
     const flipped = valid.slice(0, -1) + (valid.slice(-1) === "A" ? "B" : "A");
     await page.goto(`/team/accept-invite/${flipped}`);
-    await expect(page.getByRole("heading", { name: /inválido ou expirado/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /inválido ou expirado|invalid or expired/i })).toBeVisible();
   });
 
   test("8. email não corresponde: logado com outra conta → mismatch", async ({ page }) => {

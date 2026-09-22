@@ -65,6 +65,7 @@ test.beforeAll(async () => {
     email: emailOrfao,
     password: SENHA,
     email_confirm: true,
+    user_metadata: { locale: "pt-BR" },
   });
   if (e1 || !orfao.user) throw e1 ?? new Error("sem usuário órfão");
   idOrfao = orfao.user.id;
@@ -75,6 +76,7 @@ test.beforeAll(async () => {
     email: emailComOrg,
     password: SENHA,
     email_confirm: true,
+    user_metadata: { locale: "pt-BR" },
   });
   if (e2 || !comOrg.user) throw e2 ?? new Error("sem usuário de controle");
   idComOrg = comOrg.user.id;

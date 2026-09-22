@@ -106,11 +106,11 @@ test.describe("rbac role matrix (spec 13 §4)", () => {
 
     await page.goto("/app/settings/api-tokens");
     await page.waitForURL(/\/403/);
-    await expect(page.getByRole("heading", { name: /403 — Sem permissão/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /403 — (Sem permissão|Permission denied)/ })).toBeVisible();
 
     await page.goto("/app/settings/billing");
     await page.waitForURL(/\/403/);
-    await expect(page.getByRole("heading", { name: /403 — Sem permissão/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /403 — (Sem permissão|Permission denied)/ })).toBeVisible();
 
     await expectNoBlockingA11y(page);
   });

@@ -34,6 +34,7 @@ test.beforeAll(async () => {
     email,
     password: SENHA,
     email_confirm: true,
+    user_metadata: { locale: "pt-BR" },
   });
   if (error || !criado.user) throw error ?? new Error("sem usuário");
   userId = criado.user.id;

@@ -9,6 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 import { addCalendarDays, mondayOfWeek } from '@/lib/field-sales/schedule';
 import { FieldOperations, type ShopCollection } from './operations';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
@@ -59,6 +62,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [managedEmployeeId, setManagedEmployeeId] = useState<string | null>(null);
   const [managedProjectId, setManagedProjectId] = useState<string | null>(null);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [endingAssignment, setEndingAssignment] = useState<Assignment | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('calendar');
@@ -305,10 +309,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               <p>{rule.schedule.repeat === 'weekly' ? rule.schedule.weekdays.map(day => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day - 1]).join(', ') : `Only ${rule.schedule.start_date}`}</p>
               <p className="text-xs text-muted-foreground">From {rule.schedule.start_date}{rule.schedule.end_date ? ` until ${rule.schedule.end_date}` : ' · repeats weekly'}</p>
               <div className="mt-2 flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" onClick={() => { setError(''); setEditingAssignment(rule); setManagedProjectId(project.id); }}>Change future</Button>
-                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
-                  if (window.confirm(`End ${project.name} for this officer now? Earlier visits and routes stay saved.`))
-                    void save({ operation: 'end_schedule', id: rule.id, revision: rule.revision, effective_date: teamDate }, false);
-                }}>End assignment now</Button></div></div>) : <p className="mt-2 text-xs text-muted-foreground">Not assigned</p>}
+                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setEndingAssignment(rule)}>End assignment now</Button></div></div>) : <p className="mt-2 text-xs text-muted-foreground">Not assigned</p>}
           </section>;
         })}
         {managedProjectId && <form key={`${managedProjectId}:${editingAssignment?.id ?? 'new'}`} onSubmit={submitManagedAssignment} className="space-y-3 rounded-lg border p-3">
@@ -342,5 +343,18 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <Field label="Visit instructions"><Textarea name="instructions" maxLength={4000} defaultValue={editing?.schedule.instructions}/></Field><Button disabled={busy}>Save assignment</Button>
       </form>}
     </DialogContent></Dialog>
+    <AlertDialog open={endingAssignment !== null} onOpenChange={open => { if (!open) setEndingAssignment(null); }}>
+      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>End this project assignment?</AlertDialogTitle>
+        <AlertDialogDescription>{endingAssignment?.project_name} will disappear from this officer’s active assignments now. Earlier visits and routes remain saved.</AlertDialogDescription>
+      </AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>Keep assignment</AlertDialogCancel>
+        <AlertDialogAction disabled={busy} onClick={event => {
+          event.preventDefault();
+          if (!endingAssignment) return;
+          const name = endingAssignment.project_name;
+          void save({ operation: 'end_schedule', id: endingAssignment.id, revision: endingAssignment.revision, effective_date: teamDate }, false)
+            .then(saved => { if (saved) { setEndingAssignment(null); toast.success(`${name} assignment ended.`); } });
+        }}>End assignment</AlertDialogAction></AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </main>;
 }

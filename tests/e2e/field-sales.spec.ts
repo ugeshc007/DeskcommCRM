@@ -229,8 +229,12 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await page.getByRole('button', { name: 'Manage projects' }).click();
   const ending = page.getByRole('dialog').locator('section').filter({ hasText: 'Secondary project' });
-  page.once('dialog', dialog => void dialog.accept());
   await ending.getByRole('button', { name: 'End assignment now' }).click();
+  const endConfirmation = page.getByRole('alertdialog', { name: 'End this project assignment?' });
+  await expect(endConfirmation).toBeVisible();
+  await endConfirmation.getByRole('button', { name: 'End assignment', exact: true }).click();
+  await expect(endConfirmation).toBeHidden();
+  await expect(page.getByText('Secondary project assignment ended.')).toBeVisible();
   await expect(ending.getByText('Not assigned')).toBeVisible();
   await page.keyboard.press('Escape');
 

@@ -18,6 +18,8 @@ type Point = { session_id: string; latitude: number; longitude: number; captured
 type Session = { id: string; employee_id: string; display_name: string; project_name: string | null; site_name: string | null; status: string; punched_in_at: string; punched_out_at: string | null; corrected_in: string | null; corrected_out: string | null };
 type Correction = { id: string; employee_id: string; display_name: string; proposed_in: string; proposed_out: string; reason: string; status: string; review_note: string };
 type Visit = { id: string; revision: number; display_name: string; project_name: string; status: string; notes: string; next_action: string; next_action_at: string | null; next_action_completed_at: string | null };
+// Geographic view, not a border polygon: the installed UAE archive also contains nearby tiles.
+const UAE_MAP_BOUNDS: [[number, number], [number, number]] = [[51.4, 22.5], [56.5, 26.2]];
 export type ShopCollection = { id: string; employee_id: string; project_id: string; project_customer_id: string; session_id: string;
   captured_at: string; amount_cents: string | null; balance_after_cents: string | null; currency: string;
   voided_at: string | null; void_reason: string | null; shop_name: string; customer_code: string | null; project_name: string; latitude: number | null; longitude: number | null; accuracy_m: number | null };
@@ -40,8 +42,13 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const tile = data.map?.map_tile_path;
       const header = tile?.endsWith('.pmtiles') ? await new archive.PMTiles(new URL(tile, window.location.origin).toString()).getHeader() : null;
       if (closed || !container.current) return;
-      const instance = new lib.Map({ container: container.current, center: data.region.country_code === 'AE' ? [54.4, 24.4] : [0, 0], zoom: data.region.country_code === 'AE' ? 6 : 1, attributionControl: false,
-        ...(header ? { bounds: [[header.minLon, header.minLat], [header.maxLon, header.maxLat]] as [[number, number], [number, number]], fitBoundsOptions: { padding: 20 } } : {}),
+      const uae = data.region.country_code === 'AE';
+      const archiveBounds: [[number, number], [number, number]] | null = header
+        ? [[header.minLon, header.minLat], [header.maxLon, header.maxLat]] : null;
+      const instance = new lib.Map({ container: container.current, center: uae ? [55.27, 25.2] : [0, 0], zoom: uae ? 11 : 1,
+        attributionControl: false, renderWorldCopies: false,
+        ...(uae ? { maxBounds: UAE_MAP_BOUNDS, minZoom: 8 }
+          : archiveBounds ? { bounds: archiveBounds, fitBoundsOptions: { padding: 20 } } : {}),
         style: fieldMapStyle(tile, window.location.origin, header) });
       instance.on('idle', () => {
         if (!closed && tile && instance.isSourceLoaded('basemap')) setMapReady(!header || instance.querySourceFeatures('basemap', { sourceLayer: 'roads' }).length > 0);

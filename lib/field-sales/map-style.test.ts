@@ -15,6 +15,9 @@ describe('fieldMapStyle', () => {
     expect(style['font-faces']).toEqual({ 'Field Map Sans': [{ url: 'https://crm.example.test/fonts/field-map/NotoSans.ttf' }] });
     expect(style.layers.filter(layer => layer.type === 'symbol').every(layer =>
       JSON.stringify(layer.layout?.['text-font']) === JSON.stringify(['Field Map Sans']))).toBe(true);
+    expect(style.layers.find(layer => layer.id === 'place-names')).toMatchObject({ paint: { 'text-color': '#263b33' } });
+    expect(style.layers.find(layer => layer.id === 'road-names')).toMatchObject({ paint: { 'text-color': '#3b3833' } });
+    expect(style.layers.find(layer => layer.id === 'shop-and-landmark-names')).toMatchObject({ paint: { 'text-color': '#243d4a' } });
     expect(style).not.toHaveProperty('glyphs'); // Font and tiles are both served by this installation.
   });
 });

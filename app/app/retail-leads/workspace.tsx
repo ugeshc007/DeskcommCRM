@@ -125,7 +125,7 @@ export function RetailLeadWorkspace({ pipelines, stages, currency, ownStore, man
           Ask a manager to assign your store before saving a retail lead.
         </p>}
         <form onSubmit={createLead} className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-1 text-sm">Pipeline
+          <label className="space-y-1 text-sm">Sales funnel
             <select className="block h-10 w-full rounded-md border bg-background px-3" value={pipelineId}
               onChange={(event) => { const value = event.target.value; setPipelineId(value);
                 setStageId(stages.find((stage) => stage.pipeline_id === value)?.id ?? ""); }}>

@@ -74,7 +74,7 @@ export function RetailLeadTransfer({ leads, destinations }: Props) {
           {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </label>
-      <label className="space-y-1 text-sm">Destination pipeline
+      <label className="space-y-1 text-sm">Destination funnel
         <select className="block h-10 w-full rounded-md border bg-background px-3" value={pipelineId}
           onChange={(event) => { setPipelineId(event.target.value);
             setStageId(destination?.stages.find((stage) => stage.pipeline_id === event.target.value)?.id ?? ""); }}>

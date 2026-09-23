@@ -315,6 +315,15 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('button', { name: 'Refresh locations' }).click();
   await expect(officerPin).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('last-reliable-pin-after-refresh.png'), fullPage: true });
+  await pool.query("update field_sales_devices set last_seen_at=now()-interval '3 minutes' where organization_id=$1 and employee_id=$2", [org, employee]);
+  await page.getByRole('button', { name: 'Refresh locations' }).click();
+  await expect(officerPin).toHaveCount(0);
+  const offlineCard = page.getByRole('region', { name: 'Officer duty status' }).getByRole('article')
+    .filter({ has: page.getByRole('heading', { name: 'Synthetic salesperson', exact: true }) });
+  await expect(offlineCard.getByText('Offline', { exact: false })).toBeVisible();
+  await expect(offlineCard.getByText('Phone offline. Last known GPS is historical; there is no current live map pin.')).toBeVisible();
+  await expect(offlineCard.getByText('Last reliable position:', { exact: false })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('offline-officer-without-live-pin.png'), fullPage: true });
   await pool.query("update field_sales_sessions set status='off_duty',punched_out_at=now() where organization_id=$1 and id=$2", [org, liveSession]);
   await authenticateFieldDevice(pool, 'Bearer ' + deviceToken);
   await page.goto('/app/field-sales');

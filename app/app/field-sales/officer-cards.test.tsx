@@ -46,4 +46,13 @@ describe('duty cards when GPS is missing', () => {
     rerender(<OfficerCards people={[{ ...officer, last_reported_at: '2026-09-22T18:05:00Z', last_reported_accuracy_m: 180 }]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
     expect(screen.getByText(/GPS received at .* but no reliable map position · reported ±180 m/)).toBeVisible();
   });
+  it('identifies an offline officer’s reliable position as historical while keeping the work session visible', () => {
+    render(<OfficerCards people={[{ ...officer, online: false, latitude: 25, longitude: 55,
+      accuracy_m: 19, captured_at: '2026-09-22T13:00:00Z' }]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
+    expect(screen.getByRole('heading', { name: 'On-duty officers · 1' })).toBeVisible();
+    expect(screen.getByText(/Offline · App last checked in/)).toBeVisible();
+    expect(screen.getByText('Phone offline. Last known GPS is historical; there is no current live map pin.')).toBeVisible();
+    expect(screen.getByText(/Last reliable position:/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'View route and visits' })).toBeVisible();
+  });
 });

@@ -63,13 +63,13 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
         const current = latest.current;
-        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.captured_at, p.last_reported_at]),
+        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.captured_at, p.last_reported_at, p.online]),
           current.collections.filter(c => c.employee_id === selection.current).map(c => [c.id,c.latitude,c.longitude])]);
         if (markerSignature !== nextMarkerSignature) {
           activePopup?.remove(); activePopup = null;
           markers.current.forEach(marker => marker.remove()); markers.current = [];
           for (const position of current.latest) {
-            if (position.latitude === null || position.longitude === null || position.accuracy_m === null
+            if (!position.online || position.latitude === null || position.longitude === null || position.accuracy_m === null
               || !reliablePosition({ ...position, latitude: position.latitude, longitude: position.longitude, accuracy_m: position.accuracy_m, mock_location: Boolean(position.mock_location) })) continue;
             const newerImpreciseFix = !!position.last_reported_at && !!position.captured_at
               && Date.parse(position.last_reported_at) > Date.parse(position.captured_at);
@@ -108,7 +108,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
         }
         const { lines, plotted } = displayRoute(current.points);
         const selected = current.latest.find(position => position.employee_id === selection.current);
-        const showAccuracy = selected && selected.latitude !== null && selected.longitude !== null && selected.accuracy_m !== null
+        const showAccuracy = selected?.online && selected.latitude !== null && selected.longitude !== null && selected.accuracy_m !== null
           && reliablePosition({ latitude: selected.latitude, longitude: selected.longitude,
             accuracy_m: selected.accuracy_m, mock_location: Boolean(selected.mock_location) });
         const accuracyArea = { type: 'FeatureCollection' as const, features: showAccuracy ? [{ type: 'Feature' as const,
@@ -142,7 +142,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
         instance.resize();
         draw();
         const plotted = displayRoute(latest.current.points).plotted;
-        const points = plotted.length ? plotted : latest.current.latest.filter(p => p.latitude !== null && p.longitude !== null
+        const points = plotted.length ? plotted : latest.current.latest.filter(p => p.online && p.latitude !== null && p.longitude !== null
           && p.accuracy_m !== null && reliablePosition({ latitude: p.latitude, longitude: p.longitude,
             accuracy_m: p.accuracy_m, mock_location: Boolean(p.mock_location) }));
         if (points.length) {
@@ -163,7 +163,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
     <div ref={container} data-map-ready={mapReady} className="h-[420px] overflow-hidden rounded-xl border" aria-label="Recorded employee positions and selected work route"/>
     {data.map?.map_tile_path && <p className="text-xs text-muted-foreground">{data.map.map_attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></p>}
-    <p className="text-xs text-muted-foreground">Pins show the last reliable fix from an open work session; orange means a newer GPS report was too imprecise or untrusted. Check the pin timestamp before treating it as current. Blue lines require precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
+    <p className="text-xs text-muted-foreground">Pins show the last reliable fix only while the phone is online and the work session is open. Orange means a newer GPS report was too imprecise or untrusted. Check the pin timestamp before treating it as current. Offline officers have no live pin; their last known position remains in the officer card and recorded route. Blue lines require precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
   </section>;
 }
 

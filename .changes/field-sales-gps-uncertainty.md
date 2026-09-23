@@ -1,5 +1,5 @@
 ---
-impacto: correcao
+impacto: nada_mudou
 secao: corrigido
 titulo: Mapa de campo não transforma GPS impreciso em trajetos
 ---

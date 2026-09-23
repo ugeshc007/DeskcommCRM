@@ -198,6 +198,14 @@ describe("retail lead Event IDs", () => {
     expect((await pool.query("select organization_id from crm_leads where id=$1",[eventId])).rows[0].organization_id)
       .toBe(source.org);
     await pool.query("delete from crm_lead_links where id=$1",[linkId]);
+    const externalActivityId = randomUUID();
+    await pool.query(`insert into crm_lead_activities(id,organization_id,lead_id,contact_id,
+      source_module,source_id,type,payload,performed_by_user_id)
+      values($1,$2,$3,$4,'agenda',$5,'note','{}'::jsonb,$6)`,
+    [externalActivityId,source.org,eventId,originalContact,randomUUID(),source.seller]);
+    await expect(asUser(source.manager, client => client.query(transferSql,args)))
+      .rejects.toThrow(/retail_transfer_linked_records/);
+    await pool.query("delete from crm_lead_activities where id=$1",[externalActivityId]);
     const transferred = await asUser(source.manager, client => client.query(transferSql,args));
     expect(transferred.rows[0].id).toBe(eventId);
     expect((await pool.query("select id from crm_leads where id=$1 and organization_id=$2",

@@ -381,6 +381,11 @@ begin
     r.organization_id=p_destination_org and r.primary_phone=v_profile.primary_phone and r.active) then
     raise exception 'retail_event_open' using errcode='23505';
   end if;
+  if exists (select 1 from public.crm_lead_activities a
+    where a.organization_id=p_source_org and a.lead_id=p_lead
+      and (a.source_module <> 'crm' or (a.source_id is not null and a.source_id <> p_lead))) then
+    raise exception 'retail_transfer_linked_records' using errcode='22023';
+  end if;
 
   -- Every other lead FK is checked from the live catalogue. New modules that
   -- add linked records fail closed until their transfer semantics are defined.

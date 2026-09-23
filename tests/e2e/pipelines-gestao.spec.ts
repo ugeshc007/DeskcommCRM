@@ -201,6 +201,10 @@ test("retail Event ID form assigns the logged-in person's store and blocks a sec
   await page.getByRole("button", { name: "Create lead" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Created Event ID:" })).toContainText(/[0-9a-f-]{36}/);
   await expect(page.getByRole("row").filter({ hasText: phone })).toContainText("Synthetic showroom");
+  await expect(page.getByRole("row").filter({ hasText: phone })).toContainText("Created");
+  await page.getByLabel("Customer phone").fill(phone);
+  await page.getByRole("button", { name: "Search Event IDs" }).click();
+  await expect(page.getByText("1 Event ID found.")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("retail-lead-created.png"), fullPage: true });
   await fillLead();
   await page.getByRole("button", { name: "Create lead" }).click();

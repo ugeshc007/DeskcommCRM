@@ -5,10 +5,12 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, roleAtLeast } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
+import { retailEventStatus } from "@/lib/retail/event-status";
 
 import { RetailLeadWorkspace } from "./workspace";
 import { RetailFollowupAction } from "./followup-action";
 import { RetailLeadTransfer, type TransferDestination } from "./transfer";
+import { RetailEventSearch } from "./search";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +54,7 @@ export default async function RetailLeadsPage() {
   const profiles = (profileResult.data ?? []) as RetailProfile[];
   const leadIds = profiles.map((profile) => profile.lead_id);
   const { data: leads } = leadIds.length
-    ? await supabase.from("crm_leads").select("id,title,pipeline_id,stage_id,status,value_cents,created_at")
+    ? await supabase.from("crm_leads").select("id,title,pipeline_id,stage_id,status,custom_fields,value_cents,created_at")
       .eq("organization_id", org.orgId).in("id", leadIds)
     : { data: [] };
   const byId = new Map((leads ?? []).map((lead) => [lead.id, lead]));
@@ -157,6 +159,7 @@ export default async function RetailLeadsPage() {
         <RetailLeadTransfer leads={entries.filter((entry) => entry.active).map((entry) => ({
           id: entry.lead_id, name: entry.title,
         }))} destinations={destinations} />}
+      <RetailEventSearch />
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Recent Event IDs</h2>
         <div className="overflow-x-auto rounded-xl border">
@@ -172,7 +175,7 @@ export default async function RetailLeadsPage() {
                   {entry.title}</Link><span className="block font-mono text-xs text-muted-foreground">{entry.lead_id}</span></td>
                 <td className="p-3">{entry.primary_phone}</td>
                 <td className="p-3">{entry.store_name}</td>
-                <td className="p-3">{entry.status === "won" ? "Converted" : entry.status === "lost" ? "Lost" : "Open"}</td>
+                <td className="p-3">{retailEventStatus(entry.status, entry.custom_fields)}</td>
                 <td className="p-3">{entry.next_followup_at ? new Date(entry.next_followup_at).toLocaleString(user.idioma) : "—"}</td>
                 <td className="p-3">{entry.active && entry.next_followup_at &&
                   <RetailFollowupAction leadId={entry.lead_id} expectedDueAt={entry.next_followup_at}

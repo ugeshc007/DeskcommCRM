@@ -263,6 +263,9 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
     await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
       values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), liveSession, sequence, new Date(start.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
   }
+  // A newer indoor/network fix must not erase the earlier credible map pin.
+  await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
+    values($1,$2,$3,2,$4,25.2300,55.3000,230,false,$5)`, [org, randomUUID(), liveSession, new Date(start.getTime() + 90000), 'a'.repeat(64)]);
   const visitedShop = randomUUID();
   await pool.query(`insert into field_sales_project_customers(organization_id,id,project_id,shop_name,currency)
     values($1,$2,$3,'Synthetic visited shop','AED')`, [org, visitedShop, project]);
@@ -291,7 +294,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByLabel('Travel date').fill(day);
   await routeDialog.getByLabel('Field officer').selectOption(employee);
   await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
-  await expect(page.getByText('2', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
   await expect(page.getByRole('heading', { name: `Activity notes · ${day}` })).toBeVisible();
   await expect(page.getByText('Going to Synthetic showroom', { exact: true })).toBeVisible();
@@ -305,8 +308,16 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('admin-live-map-mobile.png'), fullPage: true });
   await routeDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.goto('/app/field-sales/live');
+  await expect(page.getByText(/Newer GPS at .* was too imprecise or untrusted; pin shows the earlier reliable fix/)).toBeVisible();
+  const officerPin = page.getByRole('button', { name: "View Synthetic salesperson's route for this date" });
+  await expect(officerPin).toBeVisible();
+  await page.getByRole('button', { name: 'Refresh locations' }).click();
+  await expect(officerPin).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('last-reliable-pin-after-refresh.png'), fullPage: true });
   await pool.query("update field_sales_sessions set status='off_duty',punched_out_at=now() where organization_id=$1 and id=$2", [org, liveSession]);
   await authenticateFieldDevice(pool, 'Bearer ' + deviceToken);
+  await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Online · no active work session', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'On-duty officers · 0', exact: true })).toBeVisible();

@@ -271,6 +271,27 @@ describe('optional field-sales foundation', () => {
     expect(employeeDay.points).toEqual([expect.objectContaining({ session_id: f.session, latitude: 1, longitude: 2 })]);
     await expect(readFieldOperations(pool, other.org, other.manager, date, null, f.actor)).rejects.toThrow('field_forbidden');
   });
+  it('keeps the last reliable on-duty pin when a newer GPS fix is too imprecise', async () => {
+    const f = await fixture();
+    await recordAttendance(pool, f.org, f.actor, f.command);
+    const at = (minutes: number) => new Date(Date.parse(f.start) + minutes * 60_000).toISOString();
+    const sample = (sequence: number, accuracy_m: number, latitude: number) => ({
+      sample_id: randomUUID(), session_id: f.session, sequence, captured_at: at(sequence + 1),
+      latitude, longitude: 55, accuracy_m, mock_location: false,
+    });
+    await recordLocations(pool, f.org, f.actor, { samples: [sample(0, 17, 25), sample(1, 227, 26)] });
+    const first = (await readFieldOperations(pool, f.org, f.manager, f.localDate)).latest[0];
+    expect(first).toMatchObject({ status: 'working', latitude: 25, accuracy_m: 17,
+      captured_at: new Date(at(1)), last_reported_at: new Date(at(2)), last_reported_accuracy_m: 227 });
+
+    await recordLocations(pool, f.org, f.actor, { samples: [sample(2, 30, 27)] });
+    expect((await readFieldOperations(pool, f.org, f.manager, f.localDate)).latest[0])
+      .toMatchObject({ latitude: 27, accuracy_m: 30, last_reported_accuracy_m: 30 });
+
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(),
+      action: 'punch_out', sequence: 1, captured_at: at(4) });
+    expect((await readFieldOperations(pool, f.org, f.manager, f.localDate)).latest[0].latitude).toBeNull();
+  });
   it('splits a future series atomically with optimistic revision protection', async () => {
     const f = await fixture(), a = await assignment(f, '2099-01-01');
     const edit = { operation: 'reschedule', id: a.schedule, revision: 1, new_id: randomUUID(), date: a.date, scope: 'one', schedule: { ...a.rule, start_time: '11:00', end_time: '12:00' } };

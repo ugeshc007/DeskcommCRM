@@ -4,6 +4,7 @@ import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldScope, 
 import { fieldFingerprint } from './attendance';
 import { expandSchedule, addCalendarDays, wallTimeToUtc } from './schedule';
 import { localDateSchema, organizationRegion } from './contracts';
+import { MAX_POSITION_ACCURACY_M } from './route-quality';
 
 export const visitCommandSchema = z.strictObject({
   command_id: z.uuid(), visit_id: z.uuid(), schedule_id: z.uuid(), date: localDateSchema,
@@ -136,6 +137,7 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
       order by s.punched_in_at desc limit 501`, [org, ids, start, end])).rows;
     if (sessions.length > 500) throw new Error('field_operations_too_large');
     const latest = (await db.query(`select e.user_id as employee_id,e.display_name,s.id as session_id,s.status,l.latitude,l.longitude,l.accuracy_m,l.captured_at,l.received_at,l.mock_location,
+      raw.captured_at as last_reported_at,raw.accuracy_m as last_reported_accuracy_m,
       presence.last_seen_at,coalesce(presence.last_seen_at>=now()-interval '2 minutes',false) as online
       from public.field_sales_employees e left join public.field_sales_sessions s on s.organization_id=e.organization_id and s.employee_id=e.user_id and s.punched_out_at is null
       left join lateral(select max(d.last_seen_at) as last_seen_at from public.field_sales_devices d
@@ -143,8 +145,12 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
         and d.revoked_at is null and (d.expires_at is null or d.expires_at>now()))presence on true
       left join lateral(select l.* from public.field_sales_locations l join public.field_sales_settings policy on policy.organization_id=l.organization_id
         where l.organization_id=$1 and l.session_id=s.id and l.captured_at>=s.punched_in_at and l.captured_at>=now()-make_interval(days=>policy.retention_days)
+          and not l.mock_location and l.accuracy_m<=$3
         order by l.captured_at desc,l.sequence desc limit 1)l on true
-      where e.organization_id=$1 and e.user_id=any($2::uuid[]) order by e.display_name`, [org, ids])).rows;
+      left join lateral(select l.captured_at,l.accuracy_m from public.field_sales_locations l join public.field_sales_settings policy on policy.organization_id=l.organization_id
+        where l.organization_id=$1 and l.session_id=s.id and l.captured_at>=s.punched_in_at and l.captured_at>=now()-make_interval(days=>policy.retention_days)
+        order by l.captured_at desc,l.sequence desc limit 1)raw on true
+      where e.organization_id=$1 and e.user_id=any($2::uuid[]) order by e.display_name`, [org, ids, MAX_POSITION_ACCURACY_M])).rows;
     const visits = (await db.query(`select v.*,v.local_date::text as local_date,p.name as project_name,e.display_name from public.field_sales_visits v
       join public.field_sales_projects p on p.organization_id=v.organization_id and p.id=v.project_id
       join public.field_sales_employees e on e.organization_id=v.organization_id and e.user_id=v.employee_id

@@ -14,7 +14,7 @@ import { fieldMapStyle } from '@/lib/field-sales/map-style';
 import { accuracyRing, displayRoute, reliablePosition } from '@/lib/field-sales/route-quality';
 import { OfficerCards } from './officer-cards';
 
-type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; online: boolean; last_seen_at: string | null };
+type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; last_reported_at: string | null; last_reported_accuracy_m: number | null; online: boolean; last_seen_at: string | null };
 type Point = { session_id: string; latitude: number; longitude: number; captured_at: string; accuracy_m: number; mock_location: boolean };
 type Session = { id: string; employee_id: string; display_name: string; project_name: string | null; site_name: string | null; status: string; punched_in_at: string; punched_out_at: string | null; corrected_in: string | null; corrected_out: string | null };
 type Correction = { id: string; employee_id: string; display_name: string; proposed_in: string; proposed_out: string; reason: string; status: string; review_note: string };
@@ -63,7 +63,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
         const current = latest.current;
-        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location]),
+        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.captured_at, p.last_reported_at]),
           current.collections.filter(c => c.employee_id === selection.current).map(c => [c.id,c.latitude,c.longitude])]);
         if (markerSignature !== nextMarkerSignature) {
           activePopup?.remove(); activePopup = null;
@@ -71,10 +71,13 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
           for (const position of current.latest) {
             if (position.latitude === null || position.longitude === null || position.accuracy_m === null
               || !reliablePosition({ ...position, latitude: position.latitude, longitude: position.longitude, accuracy_m: position.accuracy_m, mock_location: Boolean(position.mock_location) })) continue;
-            const marker = new lib.Marker({ color: position.employee_id === selection.current ? '#2563eb' : '#166534' })
+            const newerImpreciseFix = !!position.last_reported_at && !!position.captured_at
+              && Date.parse(position.last_reported_at) > Date.parse(position.captured_at);
+            const marker = new lib.Marker({ color: position.employee_id === selection.current ? '#2563eb' : newerImpreciseFix ? '#d97706' : '#166534' })
               .setLngLat([position.longitude, position.latitude]).addTo(instance);
+            const captured = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: current.region.timezone }).format(new Date(position.captured_at!));
             const popup = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 24 })
-              .setText(`${position.display_name} · approximate ±${Math.round(position.accuracy_m)} m`);
+              .setText(`${position.display_name} · last reliable fix ${captured} · approximate ±${Math.round(position.accuracy_m)} m${newerImpreciseFix ? ' · newer GPS too imprecise or untrusted' : ''}`);
             const element = marker.getElement(); element.tabIndex = 0; element.setAttribute('role', 'button');
             element.setAttribute('aria-label', `View ${position.display_name}'s route for this date`);
             element.title = position.display_name;
@@ -160,7 +163,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
     <div ref={container} data-map-ready={mapReady} className="h-[420px] overflow-hidden rounded-xl border" aria-label="Recorded employee positions and selected work route"/>
     {data.map?.map_tile_path && <p className="text-xs text-muted-foreground">{data.map.map_attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></p>}
-    <p className="text-xs text-muted-foreground">Blue lines require precise, confirmed movement. The shaded circle shows the selected officer&apos;s reported location uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
+    <p className="text-xs text-muted-foreground">Pins show the last reliable fix from an open work session; orange means a newer GPS report was too imprecise or untrusted. Check the pin timestamp before treating it as current. Blue lines require precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
   </section>;
 }
 

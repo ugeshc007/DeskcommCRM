@@ -101,7 +101,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
       </div>
       {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} selectedEmployeeId={employeeId} onSelect={setEmployeeId}/>}
       <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={setEmployeeId}/>
-      <p className="text-xs text-muted-foreground">Pins show an approximate last reported on-duty position when its accuracy is usable. The shaded circle shows reported uncertainty. The blue path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
+      <p className="text-xs text-muted-foreground">Pins show the last reliable on-duty fix, with its time and accuracy. Orange means a newer GPS report was too imprecise or untrusted; the pin may be old. The shaded circle shows reported uncertainty. The blue path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>

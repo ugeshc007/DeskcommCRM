@@ -6,6 +6,11 @@ street, check the Android app's precise-location permission, enable the phone's 
 and Wi-Fi scanning, and compare fixes briefly outdoors. The manager map shows uncertainty
 and may omit a route when the phone cannot provide credible movement. Do not interpret a
 pin as proof that the officer entered a particular building.
+For an open work session, the map retains the last non-mock fix reported within 100 m
+accuracy even when a newer upload is less precise or untrusted. An orange pin means the latest
+upload was rejected for display; its popup and officer card show the reliable fix's timestamp.
+The pin is a last known area, not proof of the officer's present position. Punch-out
+removes the pin; raw location history is preserved within the retention period.
 
 The app can serve licensed raster XYZ tiles from an absolute directory configured by
 `FIELD_MAP_TILES_DIR`. Supply a read-only runtime volume outside the repository and

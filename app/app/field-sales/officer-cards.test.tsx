@@ -5,7 +5,7 @@ import { OfficerCards } from './officer-cards';
 import type { Operations } from './operations';
 
 const officer: Operations['latest'][number] = { employee_id: 'officer-a', display_name: 'Synthetic officer', status: 'working',
-  latitude: null, longitude: null, captured_at: null, accuracy_m: null, mock_location: null, online: true, last_seen_at: '2026-09-22T18:00:00Z' };
+  latitude: null, longitude: null, captured_at: null, accuracy_m: null, mock_location: null, last_reported_at: null, last_reported_accuracy_m: null, online: true, last_seen_at: '2026-09-22T18:00:00Z' };
 
 describe('duty cards when GPS is missing', () => {
   it('keeps a working officer visible and opens route history without requiring a map pin', async () => {
@@ -37,11 +37,13 @@ describe('duty cards when GPS is missing', () => {
     expect(screen.getByText('Off duty', { exact: true })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'On-duty officers · 0' })).toBeVisible();
   });
-  it('labels a usable fix as approximate and warns when the fix cannot support a map pin', () => {
+  it('labels a usable fix as approximate and explains newer imprecise reports', () => {
     const position = { ...officer, latitude: 25, longitude: 55, accuracy_m: 30 };
     const { rerender } = render(<OfficerCards people={[position]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
     expect(screen.getByText('Approximate location ±30 m · not an exact building')).toBeVisible();
-    rerender(<OfficerCards people={[{ ...position, accuracy_m: 180 }]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
-    expect(screen.getByText('Location too imprecise for the map · reported ±180 m')).toBeVisible();
+    rerender(<OfficerCards people={[{ ...position, captured_at: '2026-09-22T18:00:00Z', last_reported_at: '2026-09-22T18:05:00Z', last_reported_accuracy_m: 180 }]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
+    expect(screen.getByText(/Newer GPS at .* was too imprecise or untrusted; pin shows the earlier reliable fix/)).toBeVisible();
+    rerender(<OfficerCards people={[{ ...officer, last_reported_at: '2026-09-22T18:05:00Z', last_reported_accuracy_m: 180 }]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
+    expect(screen.getByText(/GPS received at .* but no reliable map position · reported ±180 m/)).toBeVisible();
   });
 });

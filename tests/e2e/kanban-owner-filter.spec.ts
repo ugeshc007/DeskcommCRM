@@ -69,6 +69,18 @@ test("filtro por responsável reflete na URL e esconde leads com dono", async ({
   await expect(owned).toHaveCount(0);
 });
 
+test("manager can open the stage-aging report and adjust its threshold", async ({ page }, testInfo) => {
+  await login(page, creds.users.manager!.email);
+  await page.goto("/app/lead-aging?days=30");
+  await expect(page.getByRole("heading", { name: /Lead aging|Envelhecimento de leads/ })).toBeVisible();
+  await expect(page.getByTestId("lead-aging-summary")).toContainText("30");
+  await page.getByLabel(/Days in stage|Dias na etapa/).fill("7");
+  await page.getByRole("button", { name: /Show leads|Mostrar leads/ }).click();
+  await expect(page).toHaveURL(/days=7/);
+  await expect(page.getByTestId("lead-aging-summary")).toContainText("7");
+  await page.screenshot({ path: testInfo.outputPath("lead-aging-report.png") });
+});
+
 test("anotação nova aparece no card com autor e hora, e o dossiê conserva o histórico", async ({ page, browser }, testInfo) => {
   await login(page, creds.users.manager!.email);
   await page.goto(`/app/pipelines/${creds.kanban!.pipeline_id}`);

@@ -557,6 +557,15 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    href: "/app/lead-aging",
+    label: "Envelhecimento de leads",
+    description: "Leads abertos que permanecem numa etapa além do prazo escolhido.",
+    icon: "ClockCountdown",
+    group: "analise",
+    section: "Os números do período",
+    minRole: "manager",
+  },
+  {
     // Observabilidade, não configuração: por isso não fica junto dos agentes.
     href: "/app/ai/evolution",
     label: "Evolução da IA",

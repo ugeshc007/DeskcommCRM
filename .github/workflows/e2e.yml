@@ -635,6 +635,11 @@ jobs:
       # CI. O que o self-hoster aplica é o `baseline.sql`, então é ele que o
       # e2e aplica: o banco do teste fica igual ao de quem instalou o produto.
       - name: Subir Supabase local (sem a cadeia de migrations)
+        # setup-cli defaults to GHCR; its shared-runner limit blocked every
+        # shard before Playwright started. Use Supabase's published Docker Hub
+        # images with the same version tags while keeping the real local stack.
+        env:
+          SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
         run: |
           mv supabase/migrations /tmp/migrations-off
           mkdir -p supabase/migrations

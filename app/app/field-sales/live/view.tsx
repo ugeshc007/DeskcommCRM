@@ -101,12 +101,12 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
       </div>
       {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} selectedEmployeeId={employeeId} onSelect={setEmployeeId}/>}
       <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={setEmployeeId}/>
-      <p className="text-xs text-muted-foreground">Pins show the last reported on-duty position, not a continuously measured position. The blue path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
+      <p className="text-xs text-muted-foreground">Pins show an approximate last reported on-duty position when its accuracy is usable. The shaded circle shows reported uncertainty. The blue path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
         {plottedRoute.plotted.length > 0 && !plottedRoute.lines.length && <p className="mt-2 text-sm">Only isolated GPS fixes are available. Blue dots show recorded positions; there are not enough continuous fixes to draw a travel path.</p>}
-        {!!data.points.length && !plottedRoute.plotted.length && <p className="mt-2 text-sm">The recorded fixes did not pass map quality checks. No reliable travel path is available.</p>}
+        {!!data.points.length && !plottedRoute.plotted.length && <p className="mt-2 text-sm">The recorded fixes were too imprecise or untrusted to show a travel path. No exact building can be inferred from them.</p>}
         {!data.points.length && selected?.status && <p className="mt-2 text-sm">The work session is active, but no GPS records are available for this date. Check location and pending GPS records in the phone app’s Notifications.</p>}
         <Button className="mt-3" variant="outline" onClick={() => setEmployeeId('')}>Show all current positions</Button>
       </section>}

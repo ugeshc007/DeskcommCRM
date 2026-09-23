@@ -2,6 +2,17 @@
 
 Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migration 0320 and the matching app image; verify the installed schema and health version before claiming it is available. Evidence, not phase names, determines completion.
 
+## GPS uncertainty display
+
+Indoor GPS and network fixes cannot prove which building contains a phone. The manager map
+must show the selected officer's reported uncertainty radius, hide mock and very poor
+current positions, and draw a travel line only after precise fixes confirm movement beyond
+their combined uncertainty. Sparse credible fixes may appear as isolated dots; a missing
+line means no reliable route can be inferred, not that the officer stayed still. Raw GPS
+records remain unchanged for authorized audit and retention. Improving the phone's actual
+accuracy requires precise-location permission, enabled location and Wi-Fi scanning, and a
+clearer satellite view; the map must not snap a fix to a shop or building without evidence.
+
 ## Project shops and optional voice — local development, not deployed
 
 - An administrator manages each project's shop/customer roster individually or by CSV. A field

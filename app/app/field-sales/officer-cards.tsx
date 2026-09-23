@@ -22,7 +22,9 @@ export function OfficerCards({ people, timezone, date, selectedEmployeeId, onSel
     <p className="mt-1 text-sm">Last position: {time(person.captured_at)}</p>
     {person.latitude === null || person.longitude === null
       ? <p className="mt-1 text-sm text-muted-foreground">{person.status ? 'Working session recorded; waiting for the phone to send a GPS position.' : 'No on-duty position available'}</p>
-      : <p className="mt-1 text-sm text-muted-foreground">Accuracy ±{Math.round(person.accuracy_m ?? 0)} m{person.mock_location ? ' · Mock location flagged' : ''}</p>}
+      : <p className="mt-1 text-sm text-muted-foreground">{person.mock_location || (person.accuracy_m ?? Infinity) > 100
+        ? `Location too imprecise for the map${person.accuracy_m === null ? '' : ` · reported ±${Math.round(person.accuracy_m)} m`}`
+        : `Approximate location ±${Math.round(person.accuracy_m ?? 0)} m · not an exact building`}</p>}
     <Button className="mt-3" variant="outline" onClick={() => onSelect(person.employee_id)}>View route and visits</Button>
   </article>)}</div>;
   return <section className="space-y-3" aria-label="Officer duty status">

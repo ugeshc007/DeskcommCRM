@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { localParts, wallTimeToUtc } from '@/lib/field-sales/schedule';
 import { VisitPhotos } from './visit-photos';
 import { fieldMapStyle } from '@/lib/field-sales/map-style';
-import { displayRoute } from '@/lib/field-sales/route-quality';
+import { accuracyRing, displayRoute, reliablePosition } from '@/lib/field-sales/route-quality';
 import { OfficerCards } from './officer-cards';
 
 type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; online: boolean; last_seen_at: string | null };
@@ -63,16 +63,18 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
         const current = latest.current;
-        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.mock_location]),
+        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location]),
           current.collections.filter(c => c.employee_id === selection.current).map(c => [c.id,c.latitude,c.longitude])]);
         if (markerSignature !== nextMarkerSignature) {
           activePopup?.remove(); activePopup = null;
           markers.current.forEach(marker => marker.remove()); markers.current = [];
           for (const position of current.latest) {
-            if (position.latitude === null || position.longitude === null) continue;
-            const marker = new lib.Marker({ color: position.mock_location ? '#b45309' : position.employee_id === selection.current ? '#2563eb' : '#166534' })
+            if (position.latitude === null || position.longitude === null || position.accuracy_m === null
+              || !reliablePosition({ ...position, latitude: position.latitude, longitude: position.longitude, accuracy_m: position.accuracy_m, mock_location: Boolean(position.mock_location) })) continue;
+            const marker = new lib.Marker({ color: position.employee_id === selection.current ? '#2563eb' : '#166534' })
               .setLngLat([position.longitude, position.latitude]).addTo(instance);
-            const popup = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 24 }).setText(position.display_name);
+            const popup = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 24 })
+              .setText(`${position.display_name} · approximate ±${Math.round(position.accuracy_m)} m`);
             const element = marker.getElement(); element.tabIndex = 0; element.setAttribute('role', 'button');
             element.setAttribute('aria-label', `View ${position.display_name}'s route for this date`);
             element.title = position.display_name;
@@ -102,6 +104,20 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
           markerSignature = nextMarkerSignature;
         }
         const { lines, plotted } = displayRoute(current.points);
+        const selected = current.latest.find(position => position.employee_id === selection.current);
+        const showAccuracy = selected && selected.latitude !== null && selected.longitude !== null && selected.accuracy_m !== null
+          && reliablePosition({ latitude: selected.latitude, longitude: selected.longitude,
+            accuracy_m: selected.accuracy_m, mock_location: Boolean(selected.mock_location) });
+        const accuracyArea = { type: 'FeatureCollection' as const, features: showAccuracy ? [{ type: 'Feature' as const,
+          properties: {}, geometry: { type: 'Polygon' as const,
+            coordinates: [accuracyRing(selected.longitude!, selected.latitude!, Math.max(10, selected.accuracy_m!))] } }] : [] };
+        const accuracySource = instance.getSource('position-accuracy') as GeoJSONSource | undefined;
+        if (accuracySource) accuracySource.setData(accuracyArea);
+        else { instance.addSource('position-accuracy', { type: 'geojson', data: accuracyArea });
+          instance.addLayer({ id: 'position-accuracy-area', type: 'fill', source: 'position-accuracy',
+            paint: { 'fill-color': '#2563eb', 'fill-opacity': 0.12 } });
+          instance.addLayer({ id: 'position-accuracy-edge', type: 'line', source: 'position-accuracy',
+            paint: { 'line-color': '#2563eb', 'line-opacity': 0.65, 'line-width': 1 } }); }
         const route = { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'MultiLineString' as const, coordinates: lines } }] };
         const source = instance.getSource('route') as GeoJSONSource | undefined;
         if (source) source.setData(route);
@@ -123,7 +139,9 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
         instance.resize();
         draw();
         const plotted = displayRoute(latest.current.points).plotted;
-        const points = plotted.length ? plotted : latest.current.latest.filter(p => p.latitude !== null && p.longitude !== null);
+        const points = plotted.length ? plotted : latest.current.latest.filter(p => p.latitude !== null && p.longitude !== null
+          && p.accuracy_m !== null && reliablePosition({ latitude: p.latitude, longitude: p.longitude,
+            accuracy_m: p.accuracy_m, mock_location: Boolean(p.mock_location) }));
         if (points.length) {
           const bounds = new lib.LngLatBounds(); points.forEach(p => bounds.extend([p.longitude!, p.latitude!]));
           instance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
@@ -142,7 +160,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
     <div ref={container} data-map-ready={mapReady} className="h-[420px] overflow-hidden rounded-xl border" aria-label="Recorded employee positions and selected work route"/>
     {data.map?.map_tile_path && <p className="text-xs text-muted-foreground">{data.map.map_attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></p>}
-    <p className="text-xs text-muted-foreground">Blue lines show quality-filtered GPS, not road directions. Poor fixes, implausible jumps, mock locations and gaps over five minutes are omitted from the displayed path; raw records are retained.</p>
+    <p className="text-xs text-muted-foreground">Blue lines require precise, confirmed movement. The shaded circle shows the selected officer&apos;s reported location uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
   </section>;
 }
 

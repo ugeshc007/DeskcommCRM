@@ -1,6 +1,11 @@
 # Field Sales: self-hosted map assets
 
 The UAE pilot uses a self-hosted Protomaps v4 archive. A Google Maps API key is not needed.
+Map tiles do not improve the phone's GPS accuracy. If an indoor position appears across the
+street, check the Android app's precise-location permission, enable the phone's location
+and Wi-Fi scanning, and compare fixes briefly outdoors. The manager map shows uncertainty
+and may omit a route when the phone cannot provide credible movement. Do not interpret a
+pin as proof that the officer entered a particular building.
 
 The app can serve licensed raster XYZ tiles from an absolute directory configured by
 `FIELD_MAP_TILES_DIR`. Supply a read-only runtime volume outside the repository and

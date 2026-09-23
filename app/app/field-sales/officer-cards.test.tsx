@@ -37,4 +37,11 @@ describe('duty cards when GPS is missing', () => {
     expect(screen.getByText('Off duty', { exact: true })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'On-duty officers · 0' })).toBeVisible();
   });
+  it('labels a usable fix as approximate and warns when the fix cannot support a map pin', () => {
+    const position = { ...officer, latitude: 25, longitude: 55, accuracy_m: 30 };
+    const { rerender } = render(<OfficerCards people={[position]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
+    expect(screen.getByText('Approximate location ±30 m · not an exact building')).toBeVisible();
+    rerender(<OfficerCards people={[{ ...position, accuracy_m: 180 }]} timezone="Asia/Dubai" date="2026-09-22" selectedEmployeeId="" onSelect={vi.fn()}/>);
+    expect(screen.getByText('Location too imprecise for the map · reported ±180 m')).toBeVisible();
+  });
 });

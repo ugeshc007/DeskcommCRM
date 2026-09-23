@@ -9,7 +9,9 @@ export type RecordedPoint = {
 };
 
 const MAX_JOIN_GAP_MS = 5 * 60_000;
-const MAX_DISPLAY_ACCURACY_M = 100;
+// A 100 m fix can place someone across a street indoors. It must not draw a travel route.
+const MAX_ROUTE_ACCURACY_M = 30;
+export const MAX_POSITION_ACCURACY_M = 100;
 const MAX_PLAUSIBLE_SPEED_M_S = 55;
 
 function metres(a: RecordedPoint, b: RecordedPoint) {
@@ -25,41 +27,57 @@ function sameContinuousSession(a: RecordedPoint, b: RecordedPoint) {
   return a.session_id === b.session_id && elapsed > 0 && elapsed <= MAX_JOIN_GAP_MS;
 }
 
-function bounced(a: RecordedPoint, b: RecordedPoint, c: RecordedPoint) {
-  if (!sameContinuousSession(a, b) || !sameContinuousSession(b, c)) return false;
-  if (Date.parse(c.captured_at) - Date.parse(a.captured_at) > 120_000) return false;
-  const returnRadius = Math.max(30, a.accuracy_m + c.accuracy_m);
-  const excursion = Math.max(80, 2 * (a.accuracy_m + b.accuracy_m + c.accuracy_m));
-  return metres(a, c) <= returnRadius && metres(a, b) > excursion && metres(b, c) > excursion;
+export function reliablePosition(point: Pick<RecordedPoint, 'latitude' | 'longitude' | 'accuracy_m' | 'mock_location'>) {
+  return !point.mock_location && Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+    && Number.isFinite(point.accuracy_m) && point.accuracy_m >= 0 && point.accuracy_m <= MAX_POSITION_ACCURACY_M;
+}
+
+/** A location fix is a measured area, never proof of a particular building. */
+export function accuracyRing(longitude: number, latitude: number, radiusMetres: number): number[][] {
+  const latDegrees = radiusMetres / 111_320;
+  const lonDegrees = radiusMetres / (111_320 * Math.max(0.01, Math.cos(latitude * Math.PI / 180)));
+  const ring = Array.from({ length: 32 }, (_, index) => {
+    const angle = index * 2 * Math.PI / 32;
+    return [longitude + lonDegrees * Math.cos(angle), latitude + latDegrees * Math.sin(angle)];
+  });
+  return [...ring, [...ring[0]!]];
 }
 
 export function displayRoute(points: RecordedPoint[]) {
-  const good = points.filter(p => !p.mock_location && Number.isFinite(p.latitude) && Number.isFinite(p.longitude)
-    && Number.isFinite(p.accuracy_m) && p.accuracy_m >= 0 && p.accuracy_m <= MAX_DISPLAY_ACCURACY_M);
-  const goodSet = new Set(good);
-  const bouncedPoints = new Set<RecordedPoint>();
-  for (let i = 1; i < good.length - 1; i++) {
-    if (bounced(good[i - 1]!, good[i]!, good[i + 1]!)) bouncedPoints.add(good[i]!);
-  }
   const lines: number[][][] = [];
   const plotted: RecordedPoint[] = [];
   let line: number[][] = [];
-  let previous: RecordedPoint | null = null;
+  let anchor: RecordedPoint | null = null;
+  let pending: RecordedPoint | null = null;
+  let previousRaw: RecordedPoint | null = null;
   const flush = () => { if (line.length > 1) lines.push(line); line = []; };
   for (const point of points) {
-    if (!goodSet.has(point) || bouncedPoints.has(point)) {
-      if (!bouncedPoints.has(point)) { flush(); previous = null; }
+    if (!reliablePosition(point) || point.accuracy_m > MAX_ROUTE_ACCURACY_M) {
+      flush(); anchor = null; pending = null; previousRaw = null;
       continue;
     }
-    if (previous && !sameContinuousSession(previous, point)) { flush(); previous = null; }
-    if (previous) {
-      const elapsedSeconds = (Date.parse(point.captured_at) - Date.parse(previous.captured_at)) / 1000;
-      const minimumTravel = Math.max(0, metres(previous, point) - previous.accuracy_m - point.accuracy_m);
-      if (minimumTravel / elapsedSeconds > MAX_PLAUSIBLE_SPEED_M_S) { flush(); previous = null; continue; }
+    if (!anchor || !previousRaw || !sameContinuousSession(previousRaw, point)) {
+      flush(); anchor = point; pending = null; previousRaw = point;
+      line = [[point.longitude, point.latitude]];
+      plotted.push(point);
+      continue;
     }
-    line.push([point.longitude, point.latitude]);
-    plotted.push(point);
-    previous = point;
+    previousRaw = point;
+    const elapsedSeconds = (Date.parse(point.captured_at) - Date.parse(anchor.captured_at)) / 1000;
+    const minimumTravel = Math.max(0, metres(anchor, point) - anchor.accuracy_m - point.accuracy_m);
+    if (minimumTravel / elapsedSeconds > MAX_PLAUSIBLE_SPEED_M_S) { pending = null; continue; }
+    // Movement smaller than the two uncertainty radii is indistinguishable from stationary drift.
+    if (metres(anchor, point) <= anchor.accuracy_m + point.accuracy_m) { pending = null; continue; }
+    // One displaced fix is not a trip. Require another fix near it and still outside the anchor's uncertainty.
+    if (pending && sameContinuousSession(pending, point)
+      && metres(pending, point) <= pending.accuracy_m + point.accuracy_m) {
+      line.push([point.longitude, point.latitude]);
+      plotted.push(point);
+      anchor = point;
+      pending = null;
+    } else {
+      pending = point;
+    }
   }
   flush();
   return { lines, plotted, omitted: points.length - plotted.length };

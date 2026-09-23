@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { localParts, wallTimeToUtc } from '@/lib/field-sales/schedule';
 import { VisitPhotos } from './visit-photos';
 import { fieldMapStyle } from '@/lib/field-sales/map-style';
-import { accuracyRing, displayRoute, reliablePosition } from '@/lib/field-sales/route-quality';
+import { accuracyRing, displayRoute, livePosition } from '@/lib/field-sales/route-quality';
 import { OfficerCards } from './officer-cards';
 
 type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; last_reported_at: string | null; last_reported_accuracy_m: number | null; online: boolean; last_seen_at: string | null };
@@ -63,21 +63,20 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
         const current = latest.current;
-        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.captured_at, p.last_reported_at, p.online]),
+        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.captured_at, p.last_reported_at, livePosition(p, current.generated_at)]),
           current.collections.filter(c => c.employee_id === selection.current).map(c => [c.id,c.latitude,c.longitude])]);
         if (markerSignature !== nextMarkerSignature) {
           activePopup?.remove(); activePopup = null;
           markers.current.forEach(marker => marker.remove()); markers.current = [];
           for (const position of current.latest) {
-            if (!position.online || position.latitude === null || position.longitude === null || position.accuracy_m === null
-              || !reliablePosition({ ...position, latitude: position.latitude, longitude: position.longitude, accuracy_m: position.accuracy_m, mock_location: Boolean(position.mock_location) })) continue;
+            if (!livePosition(position, current.generated_at)) continue;
             const newerImpreciseFix = !!position.last_reported_at && !!position.captured_at
               && Date.parse(position.last_reported_at) > Date.parse(position.captured_at);
             const marker = new lib.Marker({ color: position.employee_id === selection.current ? '#2563eb' : newerImpreciseFix ? '#d97706' : '#166534' })
-              .setLngLat([position.longitude, position.latitude]).addTo(instance);
+              .setLngLat([position.longitude!, position.latitude!]).addTo(instance);
             const captured = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: current.region.timezone }).format(new Date(position.captured_at!));
             const popup = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 24 })
-              .setText(`${position.display_name} · last reliable fix ${captured} · approximate ±${Math.round(position.accuracy_m)} m${newerImpreciseFix ? ' · newer GPS too imprecise or untrusted' : ''}`);
+              .setText(`${position.display_name} · last reliable fix ${captured} · approximate ±${Math.round(position.accuracy_m!)} m${newerImpreciseFix ? ' · newer GPS too imprecise or untrusted' : ''}`);
             const element = marker.getElement(); element.tabIndex = 0; element.setAttribute('role', 'button');
             element.setAttribute('aria-label', `View ${position.display_name}'s route for this date`);
             element.title = position.display_name;
@@ -108,9 +107,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
         }
         const { lines, plotted } = displayRoute(current.points);
         const selected = current.latest.find(position => position.employee_id === selection.current);
-        const showAccuracy = selected?.online && selected.latitude !== null && selected.longitude !== null && selected.accuracy_m !== null
-          && reliablePosition({ latitude: selected.latitude, longitude: selected.longitude,
-            accuracy_m: selected.accuracy_m, mock_location: Boolean(selected.mock_location) });
+        const showAccuracy = selected && livePosition(selected, current.generated_at);
         const accuracyArea = { type: 'FeatureCollection' as const, features: showAccuracy ? [{ type: 'Feature' as const,
           properties: {}, geometry: { type: 'Polygon' as const,
             coordinates: [accuracyRing(selected.longitude!, selected.latitude!, Math.max(10, selected.accuracy_m!))] } }] : [] };
@@ -142,9 +139,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
         instance.resize();
         draw();
         const plotted = displayRoute(latest.current.points).plotted;
-        const points = plotted.length ? plotted : latest.current.latest.filter(p => p.online && p.latitude !== null && p.longitude !== null
-          && p.accuracy_m !== null && reliablePosition({ latitude: p.latitude, longitude: p.longitude,
-            accuracy_m: p.accuracy_m, mock_location: Boolean(p.mock_location) }));
+        const points = plotted.length ? plotted : latest.current.latest.filter(p => livePosition(p, latest.current.generated_at));
         if (points.length) {
           const bounds = new lib.LngLatBounds(); points.forEach(p => bounds.extend([p.longitude!, p.latitude!]));
           instance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
@@ -163,7 +158,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
     <div ref={container} data-map-ready={mapReady} className="h-[420px] overflow-hidden rounded-xl border" aria-label="Recorded employee positions and selected work route"/>
     {data.map?.map_tile_path && <p className="text-xs text-muted-foreground">{data.map.map_attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></p>}
-    <p className="text-xs text-muted-foreground">Pins show the last reliable fix only while the phone is online and the work session is open. Orange means a newer GPS report was too imprecise or untrusted. Check the pin timestamp before treating it as current. Offline officers have no live pin; their last known position remains in the officer card and recorded route. Blue lines require precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
+    <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Orange means a newer GPS report was too imprecise or untrusted. Older positions remain in officer cards and recorded routes, without appearing as current pins. Blue lines require precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
   </section>;
 }
 
@@ -206,7 +201,7 @@ export function FieldOperations({ organizationId, userId, date, onOpenRoute }: {
     {data && <>
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-semibold">Daily attendance and visit report</h2><p className="text-sm text-muted-foreground">Includes breaks; not a payroll calculation. GPS coordinates and visit notes are excluded.</p></div><Button variant="outline" disabled={busy} onClick={() => void exportReport()}>Export daily CSV</Button></section>
       {employeeId && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"><p><strong>{data.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Selected salesperson'}</strong> · complete recorded route for {date}</p><Button variant="outline" onClick={() => setEmployeeId('')}>Show all live positions</Button></div>}
-      <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
+      <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
       <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={onOpenRoute}/>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Attendance and route history</h2>
         <p className="text-sm text-muted-foreground">Session spans include breaks. Approved corrections are shown separately and never rewrite raw GPS or original punch records.</p>

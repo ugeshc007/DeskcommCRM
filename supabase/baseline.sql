@@ -26019,6 +26019,8 @@ revoke insert, update, delete on public.crm_retail_followup_actions from authent
 grant select on public.crm_retail_leads, public.crm_retail_store_assignments,
   public.crm_retail_followup_actions to authenticated;
 
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

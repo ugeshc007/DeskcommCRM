@@ -470,3 +470,5 @@ revoke insert, update, delete on public.crm_retail_store_assignments from authen
 revoke insert, update, delete on public.crm_retail_followup_actions from authenticated;
 grant select on public.crm_retail_leads, public.crm_retail_store_assignments,
   public.crm_retail_followup_actions to authenticated;
+
+notify pgrst, 'reload schema';

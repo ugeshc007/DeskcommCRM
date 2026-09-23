@@ -473,8 +473,10 @@ describe('optional field-sales foundation', () => {
     expect((await readAssignedCustomers(pool, f.org, f.actor, f.localDate)).map(row => row.id)).toContain(customer.id);
     await expect(readProjectCustomers(pool, foreign.org, foreign.manager, f.project)).resolves.toEqual([]);
     await recordAttendance(pool, f.org, f.actor, f.command);
+    // Capture inside the fixture's local workday; wall-clock "now" crosses
+    // midnight in Asia/Dubai while the suite runs in UTC.
     const payment = { collection_id: randomUUID(), project_customer_id: customer.id, project_id: f.project,
-      session_id: f.session, captured_at: new Date().toISOString(), amount_cents: 15_000 };
+      session_id: f.session, captured_at: f.start, amount_cents: 15_000 };
     await expect(recordCustomerCollection(pool, foreign.org, foreign.actor, payment)).rejects.toThrow();
     expect((await recordCustomerCollection(pool, f.org, f.actor, payment)).replayed).toBe(false);
     expect((await recordCustomerCollection(pool, f.org, f.actor, payment)).replayed).toBe(true);

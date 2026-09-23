@@ -88,6 +88,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Supabase pulls several GHCR images per runner. Starting all twelve shards
+      # together hit the registry rate limit before any browser test could run.
+      max-parallel: 2
       # Sem fail-fast: se a parte 1 quebrar, ainda quero saber se a 2 também.
       # Com ele ligado, o primeiro vermelho esconde o outro e o conserto vira
       # uma rodada por parte.

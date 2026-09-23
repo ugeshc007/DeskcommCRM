@@ -32,6 +32,19 @@ export function reliablePosition(point: Pick<RecordedPoint, 'latitude' | 'longit
     && Number.isFinite(point.accuracy_m) && point.accuracy_m >= 0 && point.accuracy_m <= MAX_POSITION_ACCURACY_M;
 }
 
+/** A live pin needs a connected, on-duty phone and a recent reliable fix. Older fixes belong in history. */
+export function livePosition(point: {
+  status: string | null; online: boolean; captured_at: string | null;
+  latitude: number | null; longitude: number | null; accuracy_m: number | null; mock_location: boolean | null;
+}, observedAt: string) {
+  if (!point.status || !point.online || !point.captured_at || point.latitude === null
+    || point.longitude === null || point.accuracy_m === null) return false;
+  const age = Date.parse(observedAt) - Date.parse(point.captured_at);
+  return Number.isFinite(age) && age >= -60_000 && age <= MAX_JOIN_GAP_MS
+    && reliablePosition({ latitude: point.latitude, longitude: point.longitude,
+      accuracy_m: point.accuracy_m, mock_location: Boolean(point.mock_location) });
+}
+
 /** A location fix is a measured area, never proof of a particular building. */
 export function accuracyRing(longitude: number, latitude: number, radiusMetres: number): number[][] {
   const latDegrees = radiusMetres / 111_320;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accuracyRing, displayRoute, reliablePosition, type RecordedPoint } from './route-quality';
+import { accuracyRing, displayRoute, livePosition, reliablePosition, type RecordedPoint } from './route-quality';
 
 const point = (latitude: number, seconds: number, accuracy_m = 12, session_id = 'session'): RecordedPoint => ({
   session_id, latitude, longitude: 55, captured_at: new Date(Date.UTC(2026, 8, 22, 8, 0, seconds)).toISOString(),
@@ -47,5 +47,16 @@ describe('displayRoute', () => {
     expect(ring).toHaveLength(33);
     expect(ring[0]).toEqual(ring[32]);
     expect((ring[8]![1]! - 25) * 111_320).toBeCloseTo(30, 5);
+  });
+  it('shows a live pin only for a recent reliable fix in an open, connected shift', () => {
+    const fix = { status: 'working', online: true, latitude: 25, longitude: 55, accuracy_m: 19,
+      mock_location: false, captured_at: '2026-09-22T18:00:00Z' };
+    const now = '2026-09-22T18:02:00Z';
+    expect(livePosition(fix, now)).toBe(true);
+    expect(livePosition({ ...fix, online: false }, now)).toBe(false);
+    expect(livePosition({ ...fix, status: null }, now)).toBe(false);
+    expect(livePosition({ ...fix, accuracy_m: 146 }, now)).toBe(false);
+    expect(livePosition({ ...fix, captured_at: '2026-09-22T17:56:59Z' }, now)).toBe(false);
+    expect(livePosition({ ...fix, captured_at: '2026-09-22T17:57:00Z' }, now)).toBe(true);
   });
 });

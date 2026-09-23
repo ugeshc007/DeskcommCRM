@@ -8711,6 +8711,10 @@ const DICIONARIO_BASE: Traducoes = {
     es: "Es el valor predeterminado de la empresa. Cada negocio puede usar una moneda diferente.",
   },
   "Valor do negócio": { es: "Valor del negocio" },
+  "Retail leads": { es: "Clientes potenciales de tiendas" },
+  "Create Event IDs with customer details, store assignment and a required follow-up.": {
+    es: "Crea ID de evento con datos del cliente, asignación de tienda y seguimiento obligatorio.",
+  },
   "Field Sales": { es: "Ventas de campo" },
   "Field team live map": { es: "Mapa en vivo del equipo de campo" },
   "Monitor on-duty field officers and review each recorded route by date.": {

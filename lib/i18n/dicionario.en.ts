@@ -6993,6 +6993,9 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "É o padrão da empresa. Cada negócio pode usar uma moeda diferente.":
     "This is the company default. Each deal can use a different currency.",
   "Valor do negócio": "Deal value",
+  "Retail leads": "Retail leads",
+  "Create Event IDs with customer details, store assignment and a required follow-up.":
+    "Create Event IDs with customer details, store assignment and a required follow-up.",
   "Field Sales": "Field Sales",
   "Field team live map": "Field team live map",
   "Monitor on-duty field officers and review each recorded route by date.":

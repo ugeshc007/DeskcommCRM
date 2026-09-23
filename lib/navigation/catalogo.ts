@@ -104,6 +104,15 @@ export const GRUPO_NO_RODAPE: NavGroupId = "organizacao";
  */
 export const NAV_CATALOG = [
   {
+    href: "/app/retail-leads",
+    label: "Retail leads",
+    description: "Create Event IDs with customer details, store assignment and a required follow-up.",
+    icon: "Storefront",
+    group: "crm",
+    section: "O dia a dia da venda",
+    minRole: "agent",
+  },
+  {
     href: "/app/field-sales",
     label: "Field Sales",
     description: "Schedule project visits and coordinate on-duty field teams.",

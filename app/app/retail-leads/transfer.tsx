@@ -58,13 +58,13 @@ export function RetailLeadTransfer({ leads, destinations }: Props) {
     <p className="text-sm text-muted-foreground">Only a manager or admin in both organizations can move an open Event ID.
       The Event ID stays the same; its customer and notes move with it. Some linked records need manager review before a move.</p>
     <form onSubmit={transfer} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-      <label className="space-y-1 text-sm">Event ID
+      <label className="block space-y-1 text-sm">Event ID
         <select className="block h-10 w-full rounded-md border bg-background px-3" value={leadId}
           onChange={(event) => setLeadId(event.target.value)}>
           {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name} · {lead.id.slice(0, 8)}</option>)}
         </select>
       </label>
-      <label className="space-y-1 text-sm">Destination brand
+      <label className="block space-y-1 text-sm">Destination brand
         <select className="block h-10 w-full rounded-md border bg-background px-3" value={destinationId}
           onChange={(event) => { const next = destinations.find((item) => item.id === event.target.value);
             const pipeline = next?.pipelines[0]?.id ?? "";
@@ -74,20 +74,20 @@ export function RetailLeadTransfer({ leads, destinations }: Props) {
           {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </label>
-      <label className="space-y-1 text-sm">Destination funnel
+      <label className="block space-y-1 text-sm">Destination funnel
         <select className="block h-10 w-full rounded-md border bg-background px-3" value={pipelineId}
           onChange={(event) => { setPipelineId(event.target.value);
             setStageId(destination?.stages.find((stage) => stage.pipeline_id === event.target.value)?.id ?? ""); }}>
           {destination?.pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
         </select>
       </label>
-      <label className="space-y-1 text-sm">First stage
+      <label className="block space-y-1 text-sm">First stage
         <select className="block h-10 w-full rounded-md border bg-background px-3" value={stageId}
           onChange={(event) => setStageId(event.target.value)}>
           {stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
         </select>
       </label>
-      <label className="space-y-1 text-sm">Destination salesperson
+      <label className="block space-y-1 text-sm">Destination salesperson
         <select className="block h-10 w-full rounded-md border bg-background px-3" value={ownerId}
           onChange={(event) => setOwnerId(event.target.value)}>
           {destination?.owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name} · {owner.store}</option>)}

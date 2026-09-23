@@ -82,10 +82,7 @@ export default async function RetailLeadsPage() {
   const overdue = (overdueData ?? []) as OverdueItem[];
   let destinations: TransferDestination[] = [];
   if (manager) {
-    const { data: myMemberships } = await supabase.from("user_organizations")
-      .select("organization_id,role").eq("user_id", user.id)
-      .is("revoked_at", null).not("accepted_at", "is", null);
-    const destinationIds = (myMemberships ?? [])
+    const destinationIds = user.organizations
       .filter((membership) => membership.organization_id !== org.orgId &&
         roleAtLeast(membership.role, "manager"))
       .map((membership) => membership.organization_id);

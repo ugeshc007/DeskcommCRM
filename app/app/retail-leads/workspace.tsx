@@ -125,25 +125,25 @@ export function RetailLeadWorkspace({ pipelines, stages, currency, ownStore, man
           Ask a manager to assign your store before saving a retail lead.
         </p>}
         <form onSubmit={createLead} className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-1 text-sm">Sales funnel
+          <label className="block space-y-1 text-sm">Sales funnel
             <select className="block h-10 w-full rounded-md border bg-background px-3" value={pipelineId}
               onChange={(event) => { const value = event.target.value; setPipelineId(value);
                 setStageId(stages.find((stage) => stage.pipeline_id === value)?.id ?? ""); }}>
               {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
             </select>
           </label>
-          <label className="space-y-1 text-sm">First stage
+          <label className="block space-y-1 text-sm">First stage
             <select className="block h-10 w-full rounded-md border bg-background px-3" value={stageId}
               onChange={(event) => setStageId(event.target.value)}>
               {availableStages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
             </select>
           </label>
-          <label className="space-y-1 text-sm">Customer name *<Input name="customer_name" required minLength={2} maxLength={200} /></label>
-          <label className="space-y-1 text-sm">Primary phone *<Input name="primary_phone" required placeholder="+971501234567" pattern="\+[0-9]{8,15}" /></label>
-          <label className="space-y-1 text-sm">Secondary phone<Input name="secondary_phone" placeholder="+971501234567" pattern="\+[0-9]{8,15}" /></label>
-          <label className="space-y-1 text-sm">Email<Input name="email" type="email" /></label>
-          <label className="space-y-1 text-sm">Lead source *<Input name="source" required placeholder="Store visit, Meta ad…" /></label>
-          <label className="space-y-1 text-sm">How did you know about us?<Input name="how_known" maxLength={500} /></label>
+          <label className="block space-y-1 text-sm">Customer name *<Input name="customer_name" required minLength={2} maxLength={200} /></label>
+          <label className="block space-y-1 text-sm">Primary phone *<Input name="primary_phone" required placeholder="+971501234567" pattern="\+[0-9]{8,15}" /></label>
+          <label className="block space-y-1 text-sm">Secondary phone<Input name="secondary_phone" placeholder="+971501234567" pattern="\+[0-9]{8,15}" /></label>
+          <label className="block space-y-1 text-sm">Email<Input name="email" type="email" /></label>
+          <label className="block space-y-1 text-sm">Lead source *<Input name="source" required placeholder="Store visit, Meta ad…" /></label>
+          <label className="block space-y-1 text-sm">How did you know about us?<Input name="how_known" maxLength={500} /></label>
           <div className="space-y-2 text-sm sm:col-span-2">
             <Label htmlFor="retail-product">Looking products *</Label>
             <div className="flex gap-2"><Input id="retail-product" value={productInput}
@@ -155,10 +155,10 @@ export function RetailLeadWorkspace({ pipelines, stages, currency, ownStore, man
                 {product} ×</button>
             ))}</div>
           </div>
-          <label className="space-y-1 text-sm">Budget ({currency}) *<Input name="budget" required inputMode="decimal" placeholder="2500.00" /></label>
-          <label className="space-y-1 text-sm">Expected purchase date *<Input name="expected_purchase_date" required type="date" /></label>
-          <label className="space-y-1 text-sm">Next follow-up *<Input name="next_followup_at" required type="datetime-local" /></label>
-          <label className="space-y-1 text-sm">Address<Input name="address" maxLength={500} /></label>
+          <label className="block space-y-1 text-sm">Budget ({currency}) *<Input name="budget" required inputMode="decimal" placeholder="2500.00" /></label>
+          <label className="block space-y-1 text-sm">Expected purchase date *<Input name="expected_purchase_date" required type="date" /></label>
+          <label className="block space-y-1 text-sm">Next follow-up *<Input name="next_followup_at" required type="datetime-local" /></label>
+          <label className="block space-y-1 text-sm">Address<Input name="address" maxLength={500} /></label>
           {error && <p role="alert" className="text-sm text-destructive sm:col-span-2">{error}</p>}
           {createdId && <p role="status" className="text-sm sm:col-span-2">Created Event ID: <span className="font-mono">{createdId}</span></p>}
           <div className="sm:col-span-2"><Button type="submit" disabled={busy || !ownStore || !stageId}>

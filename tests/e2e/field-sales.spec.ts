@@ -320,7 +320,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(officerPin).toHaveCount(0);
   const offlineCard = page.getByRole('region', { name: 'Officer duty status' }).getByRole('article')
     .filter({ has: page.getByRole('heading', { name: 'Synthetic salesperson', exact: true }) });
-  await expect(offlineCard.getByText('Offline', { exact: false })).toBeVisible();
+  await expect(offlineCard.getByText(/^Offline · App last checked in:/)).toBeVisible();
   await expect(offlineCard.getByText('Phone offline. Last known GPS is historical; there is no current live map pin.')).toBeVisible();
   await expect(offlineCard.getByText('Last reliable position:', { exact: false })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('offline-officer-without-live-pin.png'), fullPage: true });

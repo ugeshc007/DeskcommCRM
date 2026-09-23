@@ -15,6 +15,7 @@ import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
 import { enrollFromManualInvite } from "@/lib/auth/manual-invite-enrollment";
 import { publicSignupAllowed } from "@/lib/saas/deployment-mode";
+import { isExistingAccountError } from "@/lib/auth/existing-account-error";
 
 export type SignUpResult =
   | {
@@ -183,7 +184,7 @@ export async function signUp(
     // O caminho certo existe e é curto (entrar e aceitar o convite), mas a
     // tela não levava até ele.
     //
-    const jaExiste = /already\s*registered|already\s*exists/i.test(error.message);
+    const jaExiste = isExistingAccountError(error);
     if (jaExiste) {
       await audit({
         action: "auth.signup_failed",

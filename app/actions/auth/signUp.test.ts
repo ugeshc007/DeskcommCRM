@@ -140,6 +140,18 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
     expect(res).toEqual({ ok: false, error: "conta_ja_existe" });
   });
 
+  it("reconhece o código de conta existente mesmo com mensagem diferente", async () => {
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "user_already_exists", message: "Duplicate account", status: 422 },
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+
+    expect(res).toEqual({ ok: false, error: "conta_ja_existe" });
+  });
+
   it("SaaS gerenciado recusa cadastro direto antes de chamar o provedor", async () => {
     configuracao.mode = "managed_saas";
 

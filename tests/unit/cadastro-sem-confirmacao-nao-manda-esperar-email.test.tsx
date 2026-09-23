@@ -93,4 +93,17 @@ describe("cadastro quando o provedor já abriu a sessão", () => {
     expect(link.getAttribute("href")).toBe("/login?next=%2Fget-started");
     expect(screen.queryByText(/Tente novamente/i)).toBeNull();
   });
+
+  it("convite para e-mail existente oferece login e preserva o aceite", async () => {
+    signUp.mockResolvedValue({ ok: false, error: "conta_ja_existe" });
+    render(<SignupForm convite={{ token: "tok-123", email: "convidado@plata.test" }} />);
+    await preencherEEnviar(false);
+
+    expect(await screen.findByText(/já tem uma conta com este e-mail/i)).toBeTruthy();
+    const link = screen.getByRole("link", { name: /entrar e aceitar o convite/i });
+    expect(link.getAttribute("href")).toBe(
+      "/login?next=%2Fteam%2Faccept-invite%2Ftok-123",
+    );
+    expect(screen.queryByText(/Tente novamente/i)).toBeNull();
+  });
 });

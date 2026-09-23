@@ -5,6 +5,7 @@ import type { InvitePayload } from "@/lib/auth/invite-token";
 import { audit, hashEmail } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { manualInviteEligible } from "@/lib/auth/manual-invite-eligibility";
+import { isExistingAccountError } from "@/lib/auth/existing-account-error";
 
 type ManualResult =
   | { kind: "email_flow" }
@@ -52,7 +53,7 @@ export async function enrollFromManualInvite(input: {
     user_metadata: { full_name: fullName, enrollment_method: "admin_shared_invite" },
   });
   if (createError || !created.user) {
-    return { kind: /already\s*(registered|exists)/i.test(createError?.message ?? "") ? "already_exists" : "failed" };
+    return { kind: isExistingAccountError(createError) ? "already_exists" : "failed" };
   }
 
   const rollback = async () => {

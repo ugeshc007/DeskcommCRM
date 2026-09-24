@@ -28,6 +28,7 @@ beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_pairing()');
   await pool.query('select fn_provision_field_sales_project_customers()');
   await pool.query('select fn_provision_field_sales_activity_notes()');
+  await pool.query('select fn_provision_field_sales_location_quality()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_lifecycle()');
@@ -36,6 +37,7 @@ beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_lifecycle()');
   await pool.query('select fn_provision_field_sales_devices()');
   await pool.query('select fn_provision_field_sales_module()');
+  await pool.query('select fn_provision_field_sales_location_quality()');
 });
 async function fixture(startAt?: string) {
   const org = randomUUID(), actor = randomUUID(), manager = randomUUID();

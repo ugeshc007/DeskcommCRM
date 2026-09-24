@@ -53,7 +53,8 @@ It intentionally refuses to run against an already-connected employee installati
 
 The service is user-started, visible and not automatically restarted after process death
 or reboot. Reopening the connected app restarts an interrupted active-session service. It requests GPS
-updates at a provisional 30-second / 20-metre threshold; real-device battery measurements
+updates at a provisional 30-second / 0-metre threshold so a stationary on-duty phone can
+refresh its position; real-device battery measurements
 must determine final configuration. This is not a guarantee of update frequency.
 An offline phone cannot immediately learn remote revocation. No hidden tracking is used.
 Network-only retries use Android JobScheduler (15-minute requested cadence, OS-controlled

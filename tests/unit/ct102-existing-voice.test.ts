@@ -17,7 +17,8 @@ describe.skipIf(process.platform === 'win32')('CT102 app correction preserves th
       for (const file of ['.env', 'docker-compose.prod.yml', 'docker-compose.ct102.yml', 'docker-compose.ct102.map.yml']) put(join(root, file), '');
       put(join(root, 'field-map-tiles/uae.pmtiles'), 'synthetic');
       const migrations = ['20260921210000_0383_field_sales_device_presence.sql', '20260922113000_0384_field_sales_project_customers.sql', '20260922160000_0385_field_sales_activity_notes.sql'].map(file => join(release, file));
-      for (const file of [...migrations, join(release, 'app-release.override.yml'), join(release, 'field-voice.override.yml')]) put(file, '');
+      const qualityMigration = join(release, '20260924180000_0388_field_sales_location_quality.sql');
+      for (const file of [...migrations, qualityMigration, join(release, 'app-release.override.yml'), join(release, 'field-voice.override.yml')]) put(file, '');
       put(join(release, 'deploy.sh'), readFileSync('ops/ct102/deploy.sh', 'utf8').replaceAll('/opt/deskcommcrm', root));
       put(join(root, 'hostgator-setup-kit/_common.sh'), 'enter_project() { :; }\nurl_do_schema() { printf synthetic; }\n');
       put(join(root, 'hostgator-setup-kit/backup.sh'), 'mkdir -p "$BACKUP_DIR"; printf synthetic > "$BACKUP_DIR/db-test.sql.gz"\n');
@@ -35,7 +36,7 @@ case "$*" in
   *"Health"*) printf healthy ;;
 esac
 `, true);
-      const result = spawnSync('bash', [join(release, 'deploy.sh'), app, revision, ...migrations, voice, 'reuse-existing'],
+      const result = spawnSync('bash', [join(release, 'deploy.sh'), app, revision, ...migrations, voice, 'reuse-existing', qualityMigration],
         { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEST_ROOT: root }, encoding: 'utf8', timeout: 10000 });
       return { status: result.status, error: result.stderr, log: readFileSync(join(root, 'docker.log'), 'utf8') };
     } finally { rmSync(root, { recursive: true, force: true }); }

@@ -9,7 +9,12 @@ const version = { id: z.uuid(), revision: z.number().int().nonnegative() };
 export const fieldManagementSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('map_config'), tile_path: z.string().regex(/^\/field-map-tiles\/(?:[a-z0-9/_-]*\{z\}\/\{x\}\/\{y\}\.(?:png|jpg|webp)|[a-z0-9][a-z0-9_-]{0,79}\.pmtiles)$/).max(300).nullable(), attribution: z.string().trim().max(500) }),
   z.strictObject({ operation: z.literal('settings'), revision: z.number().int().nonnegative(), enabled: z.boolean(),
-    retention_days: z.number().int().min(1).max(365), notice_text: z.string().trim().min(1).max(8000) }),
+    retention_days: z.number().int().min(1).max(365), notice_text: z.string().trim().min(1).max(8000),
+    moving_interval_ms: z.number().int().min(2000).max(5000).optional(),
+    stationary_interval_ms: z.number().int().min(10000).max(60000).optional(),
+    position_accuracy_m: z.number().int().min(10).max(500).optional(),
+    route_accuracy_m: z.number().int().min(5).max(200).optional(),
+    plausible_speed_m_s: z.number().int().min(1).max(100).optional() }),
   z.strictObject({ operation: z.literal('employee'), user_id: z.uuid(), display_name: z.string().trim().min(1).max(160), active: z.boolean() }),
   z.strictObject({ operation: z.literal('project'), ...version, project: projectSchema }),
   z.strictObject({ operation: z.literal('schedule'), ...version, schedule: scheduleSchema }),
@@ -37,12 +42,21 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
       if (role !== 'admin') throw new Error('field_forbidden');
       const region = organizationRegion((await db.query('select timezone,onboarding_state from public.organizations where id=$1 for share', [org])).rows[0]);
       if (input.enabled && !region.success) throw new Error('field_region_required');
-      const old = (await db.query('select revision from public.field_sales_settings where organization_id=$1 for update', [org])).rows[0];
+      const old = (await db.query('select revision,moving_interval_ms,stationary_interval_ms,position_accuracy_m,route_accuracy_m,plausible_speed_m_s from public.field_sales_settings where organization_id=$1 for update', [org])).rows[0];
       if ((old?.revision ?? 0) !== input.revision) throw new Error('field_revision_conflict');
-      await db.query(`insert into public.field_sales_settings(organization_id,enabled,revision,retention_days,notice_text)
-        values($1,$2,$3,$4,$5) on conflict(organization_id) do update set enabled=excluded.enabled,
-        revision=excluded.revision,retention_days=excluded.retention_days,notice_text=excluded.notice_text,updated_at=now()`,
-      [org, input.enabled, input.revision + 1, input.retention_days, input.notice_text]);
+      await db.query(`insert into public.field_sales_settings(organization_id,enabled,revision,retention_days,notice_text,
+        moving_interval_ms,stationary_interval_ms,position_accuracy_m,route_accuracy_m,plausible_speed_m_s)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(organization_id) do update set enabled=excluded.enabled,
+        revision=excluded.revision,retention_days=excluded.retention_days,notice_text=excluded.notice_text,
+        moving_interval_ms=excluded.moving_interval_ms,stationary_interval_ms=excluded.stationary_interval_ms,
+        position_accuracy_m=excluded.position_accuracy_m,route_accuracy_m=excluded.route_accuracy_m,
+        plausible_speed_m_s=excluded.plausible_speed_m_s,updated_at=now()`,
+      [org, input.enabled, input.revision + 1, input.retention_days, input.notice_text,
+        input.moving_interval_ms ?? old?.moving_interval_ms ?? 3000,
+        input.stationary_interval_ms ?? old?.stationary_interval_ms ?? 30000,
+        input.position_accuracy_m ?? old?.position_accuracy_m ?? 100,
+        input.route_accuracy_m ?? old?.route_accuracy_m ?? 30,
+        input.plausible_speed_m_s ?? old?.plausible_speed_m_s ?? 55]);
       result = { revision: input.revision + 1 };
     } else if (input.operation === 'employee') {
       if (role !== 'admin') throw new Error('field_forbidden');
@@ -208,7 +222,7 @@ export async function readFieldCalendar(pool: Pick<pg.Pool, 'connect'>, org: str
     const projects = (await db.query(`select p.* from public.field_sales_projects p where p.organization_id=$1
       and ($3 in ('admin','manager') or exists(select 1 from public.field_sales_schedules s where s.organization_id=$1
       and s.project_id=p.id and s.employee_id=any($2::uuid[]))) order by p.name limit 500`, [org, ids, role])).rows;
-    const settings = (await db.query('select revision,enabled,retention_days,notice_text,track_breaks from public.field_sales_settings where organization_id=$1', [org])).rows[0] ?? null;
+    const settings = (await db.query('select revision,enabled,retention_days,notice_text,track_breaks,moving_interval_ms,stationary_interval_ms,position_accuracy_m,route_accuracy_m,plausible_speed_m_s from public.field_sales_settings where organization_id=$1', [org])).rows[0] ?? null;
     const region = organizationRegion((await db.query('select timezone,onboarding_state from public.organizations where id=$1', [org])).rows[0]);
     return { role, employees, projects, settings, region: region.success ? region.data : null,
       assignments: schedules.map(s => ({ id: s.id as string, project_id: s.project_id as string,

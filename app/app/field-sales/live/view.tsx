@@ -47,7 +47,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
   const selected = data?.latest.find(person => person.employee_id === employeeId);
   const onDuty = data?.latest.filter(person => person.status) ?? [];
   const validPoints = data?.points.filter(point => !point.mock_location) ?? [];
-  const plottedRoute = displayRoute(data?.points ?? []);
+  const plottedRoute = displayRoute(data?.points ?? [], data?.quality);
   const time = (value: string | null) => value && timezone
     ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'No location yet';
   const money = (value: string | null, currency: string) => value === null ? 'Not specified'
@@ -99,12 +99,12 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{data.latest.length}</strong><p className="text-sm text-muted-foreground">Enrolled field officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{employeeId ? validPoints.length : '—'}</strong><p className="text-sm text-muted-foreground">Recorded GPS points for selected date</p></div>
       </div>
-      {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} selectedEmployeeId={employeeId} onSelect={setEmployeeId}/>}
+      {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={setEmployeeId}/>}
       <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={setEmployeeId}/>
       <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Orange means a newer GPS report was too imprecise or untrusted. Officers without a recent reliable fix remain in the cards with their last known GPS time. The shaded circle shows reported uncertainty. The blue path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
-        <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
+        <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · validated travel ${(plottedRoute.distance_m / 1000).toFixed(2)} km · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
         {plottedRoute.plotted.length > 0 && !plottedRoute.lines.length && <p className="mt-2 text-sm">Only isolated GPS fixes are available. Blue dots show recorded positions; there are not enough continuous fixes to draw a travel path.</p>}
         {!!data.points.length && !plottedRoute.plotted.length && <p className="mt-2 text-sm">The recorded fixes were too imprecise or untrusted to show a travel path. No exact building can be inferred from them.</p>}
         {!data.points.length && selected?.status && <p className="mt-2 text-sm">The work session is active, but no GPS records are available for this date. Check location and pending GPS records in the phone app’s Notifications.</p>}

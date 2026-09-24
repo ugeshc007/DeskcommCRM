@@ -31,6 +31,12 @@ public final class SmokeInstrumentation extends Instrumentation {
         return false;
     }
     @Override public void onStart() {
+        if (pilotArguments != null && "true".equals(pilotArguments.getString("snapshot_regressions"))) {
+            Bundle result = new Bundle();
+            try { SessionSnapshotTest.run(); result.putString("snapshot_regressions", "passed"); finish(0, result); }
+            catch (Exception failure) { result.putString("snapshot_regressions", "failed"); finish(1, result); }
+            return;
+        }
         if (pilotArguments != null && pilotArguments.containsKey("field_pilot_key")) { LocalPilotPairing.run(this, pilotArguments); return; }
         if (pilotArguments != null && "true".equals(pilotArguments.getString("verify_local_sync"))) { LocalPilotPairing.verifySync(this); return; }
         if (pilotArguments != null && "true".equals(pilotArguments.getString("verify_offline_queue"))) { LocalPilotPairing.verifyOfflineQueue(this); return; }

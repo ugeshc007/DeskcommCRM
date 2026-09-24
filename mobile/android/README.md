@@ -1,6 +1,6 @@
 # Android Field Sales pilot
 
-Status: development build, not a production release. No Google Maps SDK or Google API key.
+Status: development build, not a production release. Google Play services location is used on compatible devices; no Google Maps SDK or map API key is needed.
 
 ## Build and checks
 
@@ -37,9 +37,12 @@ It intentionally refuses to run against an already-connected employee installati
    time and GPS start immediately. Today's scheduled project is suggested afterward, but the
    employee may choose another active project in the same organization. The override is audited.
    Precise location and visible notification permissions are requested explicitly.
-   While on duty, the foreground service listens to enabled Android satellite and network
-   location providers, so indoor use does not depend only on a satellite fix. It preserves
-   reported accuracy and mock flags, and does not read cached pre-session locations.
+   While on duty, the visible foreground service requests fused high-accuracy updates on
+   compatible devices, with Android satellite/network providers as fallback. The organization
+   can set a 2–5 second moving request and a slower stationary request; Android may deliver
+   fewer updates. Approximate-only permission is shown in the app. It preserves raw coordinates,
+   accuracy, speed/bearing when available, mock flags and monotonic fix age. No cached
+   pre-session fix is used as live position.
 5. Breaks continue tracking. The phone stops GPS at punch-out or the 14-hour limit; the server
    rejects points at/after that limit and a minute-level worker closes forgotten shifts.
    Punch-out requests local service shutdown before disk/network
@@ -51,11 +54,13 @@ It intentionally refuses to run against an already-connected employee installati
 6. The paired device remains connected until employee sign-out or administrator revocation.
    Revocation is revalidated inside server transactions.
 
-The service is user-started, visible and not automatically restarted after process death
-or reboot. Reopening the connected app restarts an interrupted active-session service. It requests GPS
-updates at a provisional 30-second / 0-metre threshold so a stationary on-duty phone can
-refresh its position; real-device battery measurements
-must determine final configuration. This is not a guarantee of update frequency.
+The service is user-started and visible. Android may restart it after process death only while
+the encrypted state still shows an authorized active shift; it does not start at boot or after
+a force-stop. Reopening the connected app restarts an interrupted active-session service.
+The initial moving request is 3 seconds, slowing to 30 seconds after three stationary fixes.
+If the offline queue reaches 3,000 samples, it temporarily uses the slower rate to protect
+storage. These are requests, not delivery guarantees. Battery measurements must determine
+the best organization settings. The phone never invents a live position from historical fixes.
 An offline phone cannot immediately learn remote revocation. No hidden tracking is used.
 Network-only retries use Android JobScheduler (15-minute requested cadence, OS-controlled
 and not an exact guarantee), including after punch-out. This job never starts GPS.
@@ -63,6 +68,24 @@ It is re-registered when the app opens; reboot does not silently restart collect
 Pending GPS is bounded at 5,000 samples; a full/unwritable queue stops collection and shows
 an error rather than silently discarding points. Expired/out-of-interval server rejections
 remain visible for resolution; automatic rejected-record reconciliation is still pending.
+Mobile uploads retry transient failures with short exponential delays and stable sample IDs.
+The server retains the original sample fingerprint on replay and can assign an unused server
+sequence when a re-paired phone's local counter overlaps an existing shift.
+
+## Physical-device verification before a wider release
+
+- In open sky, walk a measured route and compare recorded raw fixes, reported accuracy and
+  validated distance with a surveyed/reference route. Record error distribution, not just one fix.
+- Repeat beside tall buildings and indoors. Check that uncertainty is shown, weak fixes do not
+  become precise live pins, and stationary drift does not add travel distance.
+- Lock the screen during an active shift; check the foreground notification, fresh fix times,
+  upload delay and battery drain over several hours. Swipe the UI away, then reopen it.
+- Switch mobile data and Wi-Fi off, collect points, restore connectivity, and verify the queue
+  drains once without duplicate rows. Test both approximate-only and revoked permission.
+- Turn device location off/on, then punch out and verify tracking stops. A force-stop cannot
+  be recovered automatically; opening the app is required.
+- Compare on-map raw points with the validated route. Filtering is display-only; no Kalman
+  filter or road matching is enabled. Never infer an exact building from the reported radius.
 
 ## Connected home and sign-out
 

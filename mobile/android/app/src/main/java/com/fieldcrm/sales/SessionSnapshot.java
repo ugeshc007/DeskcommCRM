@@ -24,6 +24,12 @@ final class SessionSnapshot {
             current.remove("active_local_date"); current.remove("active_project_name"); current.remove("active_site_name");
             return;
         }
+        // Restoring an existing server shift must restore its GPS cursor too. Otherwise
+        // a re-paired device starts again at sequence zero and collides on upload.
+        long serverPointSequence = selected.optLong("last_location_sequence", -1);
+        long localPointSequence = selected.getString("id").equals(current.optString("session_id"))
+            ? current.optLong("point_sequence", -1) : -1;
+        current.put("point_sequence", Math.max(localPointSequence, serverPointSequence));
         current.put("session_start_ms", java.time.Instant.parse(selected.getString("punched_in_at")).toEpochMilli())
             .put("event_sequence", selected.getInt("last_sequence"))
             .put("session_id", selected.getString("id")).put("status", selected.optString("status", "working"))

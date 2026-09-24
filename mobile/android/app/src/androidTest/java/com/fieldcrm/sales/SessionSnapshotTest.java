@@ -46,5 +46,9 @@ final class SessionSnapshotTest {
         SessionSnapshot.apply(restore, restoreRequest, open);
         if (!"working".equals(restore.getString("status")) || !"old".equals(restore.getString("session_id"))
             || restore.getInt("event_sequence") != 0) throw new AssertionError("Unchanged device must recover its active server session");
+        JSONObject restoredGps = new JSONObject().put("status", "off_duty").put("events", new JSONArray());
+        SessionSnapshot.apply(restoredGps, new JSONObject(restoredGps.toString()),
+            new JSONArray().put(session(false).put("last_location_sequence", 7)));
+        if (restoredGps.getLong("point_sequence") != 7) throw new AssertionError("Recovered shift must continue after server GPS cursor");
     }
 }

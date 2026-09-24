@@ -8,6 +8,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.io.InputStream;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -62,7 +63,21 @@ public final class SyncEngine {
             } finally { if (connection != null) connection.disconnect(); }
         });
     }
+    private static final class RetryableSyncException extends IllegalStateException {
+        RetryableSyncException(String message) { super(message); }
+    }
     private static JSONObject request(JSONObject state, String method, String suffix, JSONObject body) throws Exception {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try { return requestOnce(state, method, suffix, body); }
+            catch (IOException | RetryableSyncException temporary) {
+                if (attempt == 2) throw temporary;
+                try { Thread.sleep(1000L << attempt); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw interrupted; }
+            }
+        }
+        throw new IllegalStateException("Sync retry exhausted. Pending records are retained.");
+    }
+    private static JSONObject requestOnce(JSONObject state, String method, String suffix, JSONObject body) throws Exception {
         String base = validateBase(state.getString("server"));
         HttpURLConnection connection = (HttpURLConnection) new URI(base + "/api/v1/field-sales/mobile" + suffix).toURL().openConnection();
         connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(15000); connection.setReadTimeout(20000);
@@ -92,6 +107,7 @@ public final class SyncEngine {
                 if (code >= 400) {
                     String problem = response.optJSONObject("error") == null ? "sync_failed" : response.getJSONObject("error").optString("code", "sync_failed");
                     if (problem.equals("field_tracking_disabled")) throw new SecurityException("Tracking disabled by your organization. Punch out; contact your administrator.");
+                    if (code == 429 || code >= 500) throw new RetryableSyncException("Sync needs attention (" + problem + "). Pending records are retained.");
                     throw new IllegalStateException("Sync needs attention (" + problem + "). Pending records are retained.");
                 }
                 return response.getJSONObject("data");

@@ -4,6 +4,9 @@ import android.Manifest;
 import android.app.*;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
+import android.net.Uri;
+import android.provider.Settings;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -17,6 +20,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.math.BigDecimal;
 import org.json.*;
+import com.google.android.gms.common.api.ResolvableApiException;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.LocationSettingsRequest;
+import com.google.android.gms.location.Priority;
 
 /** A deliberately small field workflow: punch in, choose a project, punch out. */
 public final class MainActivity extends Activity {
@@ -28,6 +38,7 @@ public final class MainActivity extends Activity {
     private Spinner projectPicker;
     private final ArrayList<JSONObject> projectChoices = new ArrayList<>();
     private VoiceAssistant voiceAssistant;
+    private boolean settingsPromptShown;
     private final Handler clock = new Handler(Looper.getMainLooper());
     private final Runnable refreshClock = new Runnable() {
         @Override public void run() { render(); sync(); clock.postDelayed(this, 60000); }
@@ -136,7 +147,20 @@ public final class MainActivity extends Activity {
         long elapsed = Math.max(0, Math.min(Attendance.MAX_SHIFT_MS, System.currentTimeMillis() - state.optLong("session_start_ms", System.currentTimeMillis())));
         add(panel, label(String.format(Locale.US, "Working time: %d h %02d min", elapsed / 3600000L, (elapsed / 60000L) % 60), 15, INK, true), 7);
         if (!state.optString("active_site_name").isEmpty()) add(panel, label(state.optString("active_site_name"), 15, MUTED, false), 5);
-        add(panel, label(TrackingService.running ? "Work in progress" : "GPS is restarting automatically", 14, GREEN, true), 14);
+        add(panel, label(TrackingService.running ? "Work GPS tracking active" : "GPS is not active. Check permissions and resume tracking.", 14,
+            TrackingService.running ? GREEN : RED, true), 14);
+        if (!TrackingService.running) {
+            Button resumeGps = action("Resume GPS", BRAND); resumeGps.setOnClickListener(v -> startTracking()); add(panel, resumeGps, 8);
+        }
+        if (state.optBoolean("gps_storage_pressure")) add(panel,
+            label("Offline GPS queue is filling. Tracking uses slower updates until uploads resume.", 14, RED, true), 8);
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            add(panel, label("Approximate location only. Live pins may be unavailable; allow Precise location in Android app settings.", 14, RED, true), 10);
+            Button locationSettings = action("Open location permission", BRAND);
+            locationSettings.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName())))); add(panel, locationSettings, 8);
+        }
         JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray occurrences = snapshot == null ? null : snapshot.optJSONArray("occurrences");
         JSONArray projects = snapshot == null ? null : snapshot.optJSONArray("projects");
         String zone = state.optString("timezone", "UTC"), shiftDate = state.optString("active_local_date", LocalDate.now(ZoneId.of(zone)).toString());
@@ -389,6 +413,9 @@ public final class MainActivity extends Activity {
             int activities = state.optJSONArray("pending_activities") == null ? 0 : state.getJSONArray("pending_activities").length();
             String message = "Last sync: " + state.optString("last_sync", "Not synced yet") + "\nPending attendance: " + events + "\nPending GPS records: " + points + "\nPending activity notes: " + activities;
             if (!issue.isEmpty()) message += "\n\nNeeds attention: " + issue;
+            PowerManager power = getSystemService(PowerManager.class);
+            if (power != null && !power.isIgnoringBatteryOptimizations(getPackageName()) && WorkState.collecting(state.optString("status")))
+                message += "\n\nBattery restrictions may delay background GPS or uploads. Check Android battery settings if fresh fixes stop; the requested interval is not guaranteed.";
             new AlertDialog.Builder(this).setTitle("Notifications").setMessage(message).setNegativeButton("Close", null).setPositiveButton("Sync now", (d, w) -> sync()).show();
         } catch (Exception failure) { alert("Notifications unavailable", "Secure status could not be opened."); }
     }
@@ -436,11 +463,43 @@ public final class MainActivity extends Activity {
     }
     private void sync() { SyncEngine.sync(this, () -> runOnUiThread(this::render)); }
     private boolean permissions() {
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+        if ((checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) ||
             (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)) {
             requestPermissions(Build.VERSION.SDK_INT >= 33 ? new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS} : new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 1); return false;
         }
         return true;
     }
-    private void startTracking() { if (!permissions()) return; try { startForegroundService(new Intent(this, TrackingService.class)); } catch (Exception failure) { alert("GPS unavailable", "Allow location and notifications, then reopen the app."); } }
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        render();
+        if (requestCode == 1) try {
+            if (WorkState.collecting(SecureState.read(this).optString("status"))) startTracking();
+        } catch (Exception ignored) { }
+    }
+    private void startTracking() {
+        if (!permissions()) return;
+        LocationManager manager = getSystemService(LocationManager.class);
+        boolean enabled = Build.VERSION.SDK_INT >= 28 ? manager.isLocationEnabled()
+            : manager.isProviderEnabled(LocationManager.GPS_PROVIDER) || manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        if (!enabled) {
+            new AlertDialog.Builder(this).setTitle("Phone location is off")
+                .setMessage("Enable phone location, then return to Field Sales. Your punch-in and pending records remain saved.")
+                .setPositiveButton("Open location settings", (d, w) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                .setNegativeButton("Later", null).show(); return;
+        }
+        try {
+            startForegroundService(new Intent(this, TrackingService.class));
+            if (!settingsPromptShown && GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS) {
+                settingsPromptShown = true;
+                LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, GpsQuality.MOVING_INTERVAL_MS).build();
+                LocationServices.getSettingsClient(this).checkLocationSettings(new LocationSettingsRequest.Builder().addLocationRequest(request).build())
+                    .addOnFailureListener(error -> {
+                        if (error instanceof ResolvableApiException) try {
+                            ((ResolvableApiException) error).startResolutionForResult(this, 21);
+                        } catch (Exception ignored) { /* The service still uses available providers. */ }
+                    });
+            }
+        } catch (Exception failure) { alert("GPS unavailable", "Allow location and notifications, then reopen the app."); }
+    }
 }

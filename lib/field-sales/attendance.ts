@@ -111,7 +111,7 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
   });
 }
 
-export async function recordLocations(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, raw: unknown, acknowledgeRejected = false) {
+export async function recordLocations(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, raw: unknown, acknowledgeRejected = false, rebaseDeviceSequence = false) {
   const { samples } = locationBatchSchema.parse(raw);
   return fieldTransaction(pool, org, actor, async db => {
     await requireFieldEmployee(db, org, actor);
@@ -124,6 +124,7 @@ export async function recordLocations(pool: Pick<pg.Pool, 'connect'>, org: strin
       punched_in_at: (s.punched_in_at as Date).toISOString(), punched_out_at: s.punched_out_at ? (s.punched_out_at as Date).toISOString() : null }]));
     let inserted = 0;
     const accepted: string[] = [], rejected: Array<{ sample_id: string; reason: string }> = [];
+    const nextSequence = new Map<string, number>();
     for (const sample of samples) {
       const session = byId.get(sample.session_id);
       const at = Date.parse(sample.captured_at);
@@ -136,16 +137,38 @@ export async function recordLocations(pool: Pick<pg.Pool, 'connect'>, org: strin
       }
       if (at > now.getTime() + 60000) throw new Error('field_device_clock_ahead');
       const fingerprint = fieldFingerprint(sample);
-      const old = (await db.query(`select fingerprint from public.field_sales_locations where organization_id=$1
-        and (id=$2 or (session_id=$3 and sequence=$4))`, [org, sample.sample_id, sample.session_id, sample.sequence])).rows;
-      if (old.length) {
-        if (old.length !== 1 || old[0].fingerprint !== fingerprint) throw new Error('field_idempotency_conflict');
+      const existingId = (await db.query(`select fingerprint from public.field_sales_locations
+        where organization_id=$1 and id=$2`, [org, sample.sample_id])).rows[0];
+      if (existingId) {
+        if (existingId.fingerprint !== fingerprint) throw new Error('field_idempotency_conflict');
         accepted.push(sample.sample_id);
         continue;
       }
-      await db.query(`insert into public.field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
-        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [org, sample.sample_id, sample.session_id, sample.sequence, sample.captured_at,
-        sample.latitude, sample.longitude, sample.accuracy_m, sample.mock_location, fingerprint]);
+      const occupied = (await db.query(`select id from public.field_sales_locations
+        where organization_id=$1 and session_id=$2 and sequence=$3`, [org, sample.session_id, sample.sequence])).rows[0];
+      if (occupied && !rebaseDeviceSequence) throw new Error('field_idempotency_conflict');
+      // A restored/re-paired phone can start its local counter at zero while this
+      // session already has server GPS. Keep the immutable sample ID and original
+      // fingerprint for retries; allocate a distinct server ordering number.
+      let sequence = sample.sequence;
+      if (occupied) {
+        if (!nextSequence.has(sample.session_id)) {
+          const cursor = Number((await db.query(`select coalesce(max(sequence),-1)::bigint + 1 as next from public.field_sales_locations
+            where organization_id=$1 and session_id=$2`, [org, sample.session_id])).rows[0].next);
+          nextSequence.set(sample.session_id, cursor);
+        }
+        sequence = nextSequence.get(sample.session_id)!;
+        if (sequence > 2147483647) throw new Error('field_sample_sequence_exhausted');
+        nextSequence.set(sample.session_id, sequence + 1);
+      } else if (nextSequence.has(sample.session_id)) {
+        nextSequence.set(sample.session_id, Math.max(nextSequence.get(sample.session_id)!, sequence + 1));
+      }
+      await db.query(`insert into public.field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint,
+        device_received_at,fix_age_ms,speed_m_s,bearing_deg,quality_flags,device_sequence)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, [org, sample.sample_id, sample.session_id, sequence, sample.captured_at,
+        sample.latitude, sample.longitude, sample.accuracy_m, sample.mock_location, fingerprint,
+        sample.device_received_at ?? null, sample.fix_age_ms ?? null, sample.speed_m_s ?? null, sample.bearing_deg ?? null,
+        sample.quality_flags ?? [], sample.sequence]);
       inserted++;
       accepted.push(sample.sample_id);
     }

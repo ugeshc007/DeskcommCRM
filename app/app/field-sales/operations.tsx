@@ -11,11 +11,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { localParts, wallTimeToUtc } from '@/lib/field-sales/schedule';
 import { VisitPhotos } from './visit-photos';
 import { fieldMapStyle } from '@/lib/field-sales/map-style';
-import { accuracyRing, displayRoute, livePosition } from '@/lib/field-sales/route-quality';
+import { accuracyRing, displayRoute, livePosition, type RouteQualityConfig } from '@/lib/field-sales/route-quality';
 import { OfficerCards } from './officer-cards';
 
-type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; last_reported_at: string | null; last_reported_accuracy_m: number | null; online: boolean; last_seen_at: string | null };
-type Point = { session_id: string; latitude: number; longitude: number; captured_at: string; accuracy_m: number; mock_location: boolean };
+type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; quality_flags?: string[] | null; speed_m_s?: number | null; last_reported_at: string | null; last_reported_accuracy_m: number | null; online: boolean; last_seen_at: string | null };
+type Point = { session_id: string; latitude: number; longitude: number; captured_at: string; accuracy_m: number; mock_location: boolean; quality_flags?: string[] };
 type Session = { id: string; employee_id: string; display_name: string; project_name: string | null; site_name: string | null; status: string; punched_in_at: string; punched_out_at: string | null; corrected_in: string | null; corrected_out: string | null };
 type Correction = { id: string; employee_id: string; display_name: string; proposed_in: string; proposed_out: string; reason: string; status: string; review_note: string };
 type Visit = { id: string; revision: number; display_name: string; project_name: string; status: string; notes: string; next_action: string; next_action_at: string | null; next_action_completed_at: string | null };
@@ -26,14 +26,16 @@ export type ShopCollection = { id: string; employee_id: string; project_id: stri
   voided_at: string | null; void_reason: string | null; shop_name: string; customer_code: string | null; project_name: string; latitude: number | null; longitude: number | null; accuracy_m: number | null };
 export type FieldActivity = { id: string; employee_id: string; session_id: string; project_id: string; project_customer_id: string | null;
   note: string; source: 'voice' | 'typed'; captured_at: string; project_name: string; shop_name: string | null };
-export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; collections: ShopCollection[]; activities: FieldActivity[]; corrections: Correction[]; points: Point[]; map: { map_tile_path: string | null; map_attribution: string } | null };
+export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; collections: ShopCollection[]; activities: FieldActivity[]; corrections: Correction[]; points: Point[]; quality?: RouteQualityConfig; map: { map_tile_path: string | null; map_attribution: string } | null };
 
 export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate }: { data: Operations; selectedEmployeeId: string; onSelectEmployee: (employeeId: string) => void; routeDate: string }) {
   const container = useRef<HTMLDivElement>(null), map = useRef<LibreMap | null>(null), markers = useRef<Marker[]>([]);
+  const lastMarkerPositions = useRef(new Map<string, [number, number]>());
   const latest = useRef(data), selectEmployee = useRef(onSelectEmployee), selection = useRef(selectedEmployeeId), day = useRef(routeDate), fittedSelection = useRef('');
   const [problem, setProblem] = useState(''), [mapReady, setMapReady] = useState(false);
   useEffect(() => { latest.current = data; selectEmployee.current = onSelectEmployee; selection.current = selectedEmployeeId; day.current = routeDate; }, [data, onSelectEmployee, selectedEmployeeId, routeDate]);
   useEffect(() => {
+    const positionCache = lastMarkerPositions.current;
     let closed = false;
     let resizeObserver: ResizeObserver | null = null;
     void Promise.all([import('maplibre-gl'), import('pmtiles')]).then(async ([lib, archive]) => {
@@ -63,17 +65,22 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
         const current = latest.current;
-        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.captured_at, p.last_reported_at, livePosition(p, current.generated_at)]),
+        const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.quality_flags, p.captured_at, p.last_reported_at, livePosition(p, current.generated_at, current.quality)]),
           current.collections.filter(c => c.employee_id === selection.current).map(c => [c.id,c.latitude,c.longitude])]);
         if (markerSignature !== nextMarkerSignature) {
           activePopup?.remove(); activePopup = null;
           markers.current.forEach(marker => marker.remove()); markers.current = [];
           for (const position of current.latest) {
-            if (!livePosition(position, current.generated_at)) continue;
+            if (!livePosition(position, current.generated_at, current.quality)) continue;
             const newerImpreciseFix = !!position.last_reported_at && !!position.captured_at
               && Date.parse(position.last_reported_at) > Date.parse(position.captured_at);
+            const destination: [number, number] = [position.longitude!, position.latitude!];
+            const previous = positionCache.get(position.employee_id);
             const marker = new lib.Marker({ color: position.employee_id === selection.current ? '#2563eb' : newerImpreciseFix ? '#d97706' : '#166534' })
-              .setLngLat([position.longitude!, position.latitude!]).addTo(instance);
+              .setLngLat(previous ?? destination).addTo(instance);
+            marker.getElement().style.transition = 'transform 700ms linear';
+            if (previous) window.requestAnimationFrame(() => { if (!closed) marker.setLngLat(destination); });
+            positionCache.set(position.employee_id, destination);
             const captured = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: current.region.timezone }).format(new Date(position.captured_at!));
             const popup = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 24 })
               .setText(`${position.display_name} · last reliable fix ${captured} · approximate ±${Math.round(position.accuracy_m!)} m${newerImpreciseFix ? ' · newer GPS too imprecise or untrusted' : ''}`);
@@ -105,9 +112,9 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
           }
           markerSignature = nextMarkerSignature;
         }
-        const { lines, plotted } = displayRoute(current.points);
+        const { lines, plotted } = displayRoute(current.points, current.quality);
         const selected = current.latest.find(position => position.employee_id === selection.current);
-        const showAccuracy = selected && livePosition(selected, current.generated_at);
+        const showAccuracy = selected && livePosition(selected, current.generated_at, current.quality);
         const accuracyArea = { type: 'FeatureCollection' as const, features: showAccuracy ? [{ type: 'Feature' as const,
           properties: {}, geometry: { type: 'Polygon' as const,
             coordinates: [accuracyRing(selected.longitude!, selected.latitude!, Math.max(10, selected.accuracy_m!))] } }] : [] };
@@ -138,8 +145,8 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       instance.on('load', () => {
         instance.resize();
         draw();
-        const plotted = displayRoute(latest.current.points).plotted;
-        const points = plotted.length ? plotted : latest.current.latest.filter(p => livePosition(p, latest.current.generated_at));
+        const plotted = displayRoute(latest.current.points, latest.current.quality).plotted;
+        const points = plotted.length ? plotted : latest.current.latest.filter(p => livePosition(p, latest.current.generated_at, latest.current.quality));
         if (points.length) {
           const bounds = new lib.LngLatBounds(); points.forEach(p => bounds.extend([p.longitude!, p.latitude!]));
           instance.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
@@ -150,7 +157,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const timer = window.setInterval(draw, 2000);
       instance.once('remove', () => window.clearInterval(timer));
     }).catch(() => setProblem('Map rendering could not be loaded. Use the position list below.'));
-    return () => { closed = true; resizeObserver?.disconnect(); markers.current.forEach(marker => marker.remove()); markers.current = []; map.current?.remove(); map.current = null; };
+    return () => { closed = true; resizeObserver?.disconnect(); markers.current.forEach(marker => marker.remove()); markers.current = []; positionCache.clear(); map.current?.remove(); map.current = null; };
   }, [data.map?.map_tile_path, data.region.country_code]);
   return <section className="space-y-2">
     {!data.map?.map_tile_path && <p className="rounded-lg border p-3 text-sm">Basemap not configured. This view plots recorded coordinates only; it does not show roads. No external map tiles are requested.</p>}
@@ -201,7 +208,7 @@ export function FieldOperations({ organizationId, userId, date, onOpenRoute }: {
     {data && <>
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-semibold">Daily attendance and visit report</h2><p className="text-sm text-muted-foreground">Includes breaks; not a payroll calculation. GPS coordinates and visit notes are excluded.</p></div><Button variant="outline" disabled={busy} onClick={() => void exportReport()}>Export daily CSV</Button></section>
       {employeeId && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"><p><strong>{data.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Selected salesperson'}</strong> · complete recorded route for {date}</p><Button variant="outline" onClick={() => setEmployeeId('')}>Show all live positions</Button></div>}
-      <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
+      <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
       <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={onOpenRoute}/>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Attendance and route history</h2>
         <p className="text-sm text-muted-foreground">Session spans include breaks. Approved corrections are shown separately and never rewrite raw GPS or original punch records.</p>

@@ -1,15 +1,17 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { livePosition } from '@/lib/field-sales/route-quality';
+import { livePosition, type RouteQualityConfig } from '@/lib/field-sales/route-quality';
 import type { Operations } from './operations';
 
-export function OfficerCards({ people, timezone, date, generatedAt, selectedEmployeeId, onSelect }: {
+export function OfficerCards({ people, timezone, date, generatedAt, quality, selectedEmployeeId, onSelect }: {
   people: Operations['latest']; timezone: string; date: string; generatedAt: string; selectedEmployeeId: string;
+  quality?: RouteQualityConfig;
   onSelect: (employeeId: string) => void;
 }) {
   const time = (value: string | null) => value
     ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'Not reported';
+  const age = (value: string | null) => value ? Math.max(0, Math.floor((Date.parse(generatedAt) - Date.parse(value)) / 60000)) : null;
   const onDuty = people.filter(person => person.status);
   const onlineOffDuty = people.filter(person => !person.status && person.online);
   const offDuty = people.filter(person => !person.status && !person.online);
@@ -21,8 +23,12 @@ export function OfficerCards({ people, timezone, date, generatedAt, selectedEmpl
           : person.status ? person.online ? 'On duty · working' : 'Punch-in recorded · App offline' : 'Off duty'}
       </span></div>
     <p className="mt-2 text-sm">{person.online ? 'Online' : 'Offline'} · App last checked in: {time(person.last_seen_at)}</p>
+    <p className="mt-1 text-sm font-medium">{!person.status ? 'Stopped' : !person.online ? 'Offline · signal lost'
+      : !livePosition(person, generatedAt, quality) ? 'Weak or missing GPS signal'
+        : typeof person.speed_m_s === 'number' && person.speed_m_s <= 1.5 ? 'Likely stationary · tracking' : 'Tracking'}
+      {age(person.captured_at) !== null ? ` · last reliable fix ${age(person.captured_at)} min ago` : ''}</p>
     {!person.online && person.status && <p className="mt-1 text-sm text-amber-700">Phone offline. Last known GPS is historical; there is no current live map pin.</p>}
-    {person.online && person.status && person.captured_at && !livePosition(person, generatedAt)
+    {person.online && person.status && person.captured_at && !livePosition(person, generatedAt, quality)
       && <p className="mt-1 text-sm text-amber-700">Phone online, but no recent reliable GPS. Last known position is historical; there is no current live map pin.</p>}
     <p className="mt-1 text-sm">Last reliable position: {time(person.captured_at)}</p>
     {person.latitude === null || person.longitude === null
@@ -31,7 +37,7 @@ export function OfficerCards({ people, timezone, date, generatedAt, selectedEmpl
         : person.status ? 'Working session recorded; waiting for the phone to send a GPS position.' : 'No on-duty position available'}</p>
       : <p className="mt-1 text-sm text-muted-foreground">Approximate location ±{Math.round(person.accuracy_m ?? 0)} m · not an exact building</p>}
     {person.captured_at && person.last_reported_at && Date.parse(person.last_reported_at) > Date.parse(person.captured_at)
-      && <p className="mt-1 text-sm text-amber-700">Newer GPS at {time(person.last_reported_at)} was too imprecise or untrusted; {livePosition(person, generatedAt) ? 'pin shows the earlier reliable fix' : 'last known position uses the earlier reliable fix'}.</p>}
+      && <p className="mt-1 text-sm text-amber-700">Newer GPS at {time(person.last_reported_at)} was too imprecise or untrusted; {livePosition(person, generatedAt, quality) ? 'pin shows the earlier reliable fix' : 'last known position uses the earlier reliable fix'}.</p>}
     <Button className="mt-3" variant="outline" onClick={() => onSelect(person.employee_id)}>View route and visits</Button>
   </article>)}</div>;
   return <section className="space-y-3" aria-label="Officer duty status">

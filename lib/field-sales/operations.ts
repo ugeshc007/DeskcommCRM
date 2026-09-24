@@ -4,7 +4,7 @@ import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldScope, 
 import { fieldFingerprint } from './attendance';
 import { expandSchedule, addCalendarDays, wallTimeToUtc } from './schedule';
 import { localDateSchema, organizationRegion } from './contracts';
-import { MAX_POSITION_ACCURACY_M } from './route-quality';
+import { DEFAULT_ROUTE_QUALITY } from './route-quality';
 
 export const visitCommandSchema = z.strictObject({
   command_id: z.uuid(), visit_id: z.uuid(), schedule_id: z.uuid(), date: localDateSchema,
@@ -136,7 +136,11 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
       where s.organization_id=$1 and e.organization_id=$1 and s.employee_id=any($2::uuid[]) and s.punched_in_at<$4 and coalesce(s.punched_out_at,now())>=$3
       order by s.punched_in_at desc limit 501`, [org, ids, start, end])).rows;
     if (sessions.length > 500) throw new Error('field_operations_too_large');
-    const latest = (await db.query(`select e.user_id as employee_id,e.display_name,s.id as session_id,s.status,l.latitude,l.longitude,l.accuracy_m,l.captured_at,l.received_at,l.mock_location,
+    const qualityRow = (await db.query(`select position_accuracy_m,route_accuracy_m,plausible_speed_m_s from public.field_sales_settings where organization_id=$1`, [org])).rows[0];
+    const quality = { positionAccuracyM: qualityRow?.position_accuracy_m ?? DEFAULT_ROUTE_QUALITY.positionAccuracyM,
+      routeAccuracyM: qualityRow?.route_accuracy_m ?? DEFAULT_ROUTE_QUALITY.routeAccuracyM,
+      plausibleSpeedMps: qualityRow?.plausible_speed_m_s ?? DEFAULT_ROUTE_QUALITY.plausibleSpeedMps };
+    const latest = (await db.query(`select e.user_id as employee_id,e.display_name,s.id as session_id,s.status,l.latitude,l.longitude,l.accuracy_m,l.captured_at,l.received_at,l.mock_location,l.quality_flags,l.speed_m_s,
       raw.captured_at as last_reported_at,raw.accuracy_m as last_reported_accuracy_m,
       presence.last_seen_at,coalesce(presence.last_seen_at>=now()-interval '2 minutes',false) as online
       from public.field_sales_employees e left join public.field_sales_sessions s on s.organization_id=e.organization_id and s.employee_id=e.user_id and s.punched_out_at is null
@@ -146,11 +150,12 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
       left join lateral(select l.* from public.field_sales_locations l join public.field_sales_settings policy on policy.organization_id=l.organization_id
         where l.organization_id=$1 and l.session_id=s.id and l.captured_at>=s.punched_in_at and l.captured_at>=now()-make_interval(days=>policy.retention_days)
           and not l.mock_location and l.accuracy_m<=$3
+          and not (l.quality_flags && array['stale','poor_accuracy','duplicate','out_of_order','implausible_jump','mock']::text[])
         order by l.captured_at desc,l.sequence desc limit 1)l on true
       left join lateral(select l.captured_at,l.accuracy_m from public.field_sales_locations l join public.field_sales_settings policy on policy.organization_id=l.organization_id
         where l.organization_id=$1 and l.session_id=s.id and l.captured_at>=s.punched_in_at and l.captured_at>=now()-make_interval(days=>policy.retention_days)
         order by l.captured_at desc,l.sequence desc limit 1)raw on true
-      where e.organization_id=$1 and e.user_id=any($2::uuid[]) order by e.display_name`, [org, ids, MAX_POSITION_ACCURACY_M])).rows;
+      where e.organization_id=$1 and e.user_id=any($2::uuid[]) order by e.display_name`, [org, ids, quality.positionAccuracyM])).rows;
     const visits = (await db.query(`select v.*,v.local_date::text as local_date,p.name as project_name,e.display_name from public.field_sales_visits v
       join public.field_sales_projects p on p.organization_id=v.organization_id and p.id=v.project_id
       join public.field_sales_employees e on e.organization_id=v.organization_id and e.user_id=v.employee_id
@@ -180,12 +185,12 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
     const corrections = (await db.query(`select c.*,e.display_name from public.field_sales_corrections c join public.field_sales_employees e on e.organization_id=c.organization_id and e.user_id=c.employee_id
       where c.organization_id=$1 and e.organization_id=$1 and c.employee_id=any($2::uuid[]) and (c.status='pending' or c.created_at>=$3) order by c.created_at desc limit 501`, [org, ids, start])).rows;
     if (visits.length > 500 || corrections.length > 500 || collections.length > 500 || activities.length > 500) throw new Error('field_operations_too_large');
-    let points: Array<{ session_id: string; latitude: number; longitude: number; captured_at: Date; accuracy_m: number; mock_location: boolean }> = [];
+    let points: Array<{ session_id: string; latitude: number; longitude: number; captured_at: Date; accuracy_m: number; mock_location: boolean; quality_flags: string[] }> = [];
     if (sessionId || employeeId) {
       if (employeeId && !ids.includes(employeeId)) throw new Error('field_forbidden');
       const selected = await db.query('select id from public.field_sales_sessions where organization_id=$1 and id=$2 and employee_id=any($3::uuid[])', [org, sessionId, ids]);
       if (sessionId && !selected.rowCount) throw new Error('field_forbidden');
-      points = (await db.query(`select l.session_id,l.latitude,l.longitude,l.captured_at,l.accuracy_m,l.mock_location from public.field_sales_locations l
+      points = (await db.query(`select l.session_id,l.latitude,l.longitude,l.captured_at,l.accuracy_m,l.mock_location,l.quality_flags from public.field_sales_locations l
         join public.field_sales_sessions s on s.organization_id=l.organization_id and s.id=l.session_id
         join public.field_sales_settings policy on policy.organization_id=l.organization_id
         where l.organization_id=$1 and s.organization_id=$1 and ($2::uuid is null or l.session_id=$2)
@@ -197,6 +202,6 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
       await fieldAudit(db, org, actor, 'field_sales.route_viewed', sessionId || employeeId!, { date });
     }
     const map = (await db.query('select map_tile_path,map_attribution from public.field_sales_settings where organization_id=$1', [org])).rows[0] ?? null;
-    return { role, region: region.data, people, sessions, latest, visits, collections, activities, corrections, points, map, generated_at: new Date().toISOString() };
+    return { role, region: region.data, people, sessions, latest, visits, collections, activities, corrections, points, map, quality, generated_at: new Date().toISOString() };
   });
 }

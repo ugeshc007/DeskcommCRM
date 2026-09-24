@@ -26,7 +26,9 @@ type Assignment = { id: string; employee_id: string; project_id: string; project
   revision: number; schedule: FieldSchedule };
 type CalendarData = { installed: boolean; role?: 'field_officer' | 'agent' | 'manager' | 'admin';
   region?: { country_code: string; timezone: string } | null;
-  settings?: { revision: number; enabled: boolean; retention_days: number; notice_text: string } | null;
+  settings?: { revision: number; enabled: boolean; retention_days: number; notice_text: string;
+    moving_interval_ms: number; stationary_interval_ms: number; position_accuracy_m: number;
+    route_accuracy_m: number; plausible_speed_m_s: number } | null;
   employees?: Employee[]; projects?: Project[]; occurrences?: Occurrence[]; assignments?: Assignment[];
   overlaps?: Array<[string, string]>; warnings?: Array<{ schedule_id: string; reason: string }> };
 type Member = { user_id: string; full_name: string | null; role: string };
@@ -260,11 +262,22 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         </TabsContent>
         {administrator && <TabsContent value="policy"><form key={data.settings?.revision ?? 0} className="max-w-2xl space-y-4 rounded-xl border p-5" onSubmit={event => {
           event.preventDefault(); const f = new FormData(event.currentTarget); void save({ operation: 'settings', revision: data.settings?.revision ?? 0,
-            enabled: f.has('enabled'), retention_days: Number(f.get('retention')), notice_text: String(f.get('notice') ?? '') });
+            enabled: f.has('enabled'), retention_days: Number(f.get('retention')), notice_text: String(f.get('notice') ?? ''),
+            moving_interval_ms: Number(f.get('moving_interval_ms')), stationary_interval_ms: Number(f.get('stationary_interval_ms')),
+            position_accuracy_m: Number(f.get('position_accuracy_m')), route_accuracy_m: Number(f.get('route_accuracy_m')),
+            plausible_speed_m_s: Number(f.get('plausible_speed_m_s')) });
         }}><h2 className="text-lg font-semibold">On-duty location policy</h2>
           <p className="text-sm text-muted-foreground">GPS continues during declared breaks and stops at punch-out. No tracking starts just because a project is assigned.</p>
           <Field label="Employee notice"><Textarea name="notice" required maxLength={8000} defaultValue={data.settings?.notice_text ?? ''} placeholder="Explain who can view location, when tracking runs and how employees can raise concerns."/></Field>
           <Field label="Raw location retention (days)"><Input name="retention" type="number" min={1} max={365} required defaultValue={data.settings?.retention_days}/></Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Moving update request (ms)"><Input name="moving_interval_ms" type="number" min={2000} max={5000} required defaultValue={data.settings?.moving_interval_ms ?? 3000}/></Field>
+            <Field label="Stationary update request (ms)"><Input name="stationary_interval_ms" type="number" min={10000} max={60000} required defaultValue={data.settings?.stationary_interval_ms ?? 30000}/></Field>
+            <Field label="Live position accuracy limit (m)"><Input name="position_accuracy_m" type="number" min={10} max={500} required defaultValue={data.settings?.position_accuracy_m ?? 100}/></Field>
+            <Field label="Route accuracy limit (m)"><Input name="route_accuracy_m" type="number" min={5} max={200} required defaultValue={data.settings?.route_accuracy_m ?? 30}/></Field>
+            <Field label="Plausible speed limit (m/s)"><Input name="plausible_speed_m_s" type="number" min={1} max={100} required defaultValue={data.settings?.plausible_speed_m_s ?? 55}/></Field>
+          </div>
+          <p className="text-xs text-muted-foreground">Update intervals are requests to Android. Lower limits can use more battery; a larger accuracy limit may show less certain locations.</p>
           <label className="flex items-start gap-2"><input name="enabled" type="checkbox" defaultChecked={data.settings?.enabled ?? false} disabled={!timezone}/>Enable collection for enrolled staff after punch-in</label>
           <Button disabled={busy || !timezone}>Save policy</Button>
         </form></TabsContent>}

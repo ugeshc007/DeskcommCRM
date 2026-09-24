@@ -22,6 +22,17 @@ describe('displayRoute', () => {
     expect(displayRoute(raw)).toMatchObject({ omitted: 29, lines: [], plotted: [raw[0]] });
     expect(raw).toHaveLength(30);
   });
+  it('counts only confirmed movement and excludes flagged raw fixes', () => {
+    const raw = [point(25, 0), point(25.0004, 20), point(25.00041, 40),
+      { ...point(25.001, 50), quality_flags: ['implausible_jump'] },
+      point(25.0008, 60), point(25.00081, 80)];
+    const result = displayRoute(raw);
+    expect(result.distance_m).toBeGreaterThan(0);
+    expect(result.distance_m).toBeLessThan(100);
+    expect(result.plotted).not.toContain(raw[3]);
+    expect(livePosition({ status: 'working', online: true, latitude: 25, longitude: 55,
+      accuracy_m: 10, mock_location: false, quality_flags: ['stale'], captured_at: '2026-09-22T18:00:00Z' }, '2026-09-22T18:01:00Z')).toBe(false);
+  });
   it('retains indoor 70 m fixes only in raw history, not as route dots', () => {
     const raw = [point(25, 0, 70), point(25.001, 20, 70), point(25.00101, 40, 70)];
     expect(displayRoute(raw)).toMatchObject({ omitted: 3, lines: [], plotted: [] });
@@ -43,6 +54,7 @@ describe('displayRoute', () => {
     expect(reliablePosition(point(25, 0, 101))).toBe(false);
     expect(reliablePosition({ ...point(25, 0), mock_location: true })).toBe(false);
     expect(reliablePosition(point(25, 0, 30))).toBe(true);
+    expect(reliablePosition(point(25, 0, 30), { positionAccuracyM: 20, routeAccuracyM: 20, plausibleSpeedMps: 15 })).toBe(false);
     const ring = accuracyRing(55, 25, 30);
     expect(ring).toHaveLength(33);
     expect(ring[0]).toEqual(ring[32]);

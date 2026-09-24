@@ -562,6 +562,15 @@ describe('optional field-sales foundation', () => {
     expect((await recordLocations(pool, f.org, f.actor, { samples: [point] })).inserted).toBe(1);
     expect((await recordLocations(pool, f.org, f.actor, { samples: [point] })).inserted).toBe(0);
     await expect(recordLocations(pool, f.org, f.actor, { samples: [{ ...point, latitude: 26 }] })).rejects.toThrow('field_idempotency_conflict');
+    const restoredPhonePoint = { ...point, sample_id: randomUUID(), captured_at: new Date(Date.parse(point.captured_at) + 1000).toISOString(),
+      device_received_at: new Date().toISOString(), fix_age_ms: 950, speed_m_s: 2.5, bearing_deg: 90, quality_flags: [] };
+    await expect(recordLocations(pool, f.org, f.actor, { samples: [restoredPhonePoint] })).rejects.toThrow('field_idempotency_conflict');
+    expect((await recordLocations(pool, f.org, f.actor, { samples: [restoredPhonePoint] }, true, true)).inserted).toBe(1);
+    expect((await recordLocations(pool, f.org, f.actor, { samples: [restoredPhonePoint] }, true, true)).inserted).toBe(0);
+    expect((await pool.query('select sequence from field_sales_locations where organization_id=$1 and id=$2', [f.org, restoredPhonePoint.sample_id])).rows[0].sequence).toBe(1);
+    const metadata = (await pool.query('select device_sequence,fix_age_ms,speed_m_s,bearing_deg,quality_flags from field_sales_locations where organization_id=$1 and id=$2', [f.org, restoredPhonePoint.sample_id])).rows[0];
+    expect(metadata).toMatchObject({ device_sequence: 0, fix_age_ms: 950, speed_m_s: 2.5, bearing_deg: 90, quality_flags: [] });
+    await expect(recordLocations(pool, f.org, f.actor, { samples: [{ ...restoredPhonePoint, latitude: 26 }] }, true, true)).rejects.toThrow('field_idempotency_conflict');
     const stop = { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 1, captured_at: point.captured_at };
     await recordAttendance(pool, f.org, f.actor, stop);
     expect((await pool.query('select count(*)::int n from field_sales_locations where organization_id=$1', [f.org])).rows[0].n).toBe(0);

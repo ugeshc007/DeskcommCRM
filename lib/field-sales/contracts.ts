@@ -103,6 +103,11 @@ export const locationSampleSchema = z.strictObject({
   latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180),
   accuracy_m: z.number().min(0).max(100000),
   mock_location: z.boolean(),
+  device_received_at: instant.optional(),
+  fix_age_ms: z.number().int().min(0).max(2147483647).optional(),
+  speed_m_s: z.number().min(0).max(100000).nullable().optional(),
+  bearing_deg: z.number().min(0).max(360).nullable().optional(),
+  quality_flags: z.array(z.enum(['stale', 'poor_accuracy', 'duplicate', 'out_of_order', 'implausible_jump', 'mock'])).max(6).optional(),
 });
 export type LocationSample = z.infer<typeof locationSampleSchema>;
 export const locationBatchSchema = z.strictObject({ samples: z.array(locationSampleSchema).min(1).max(100) });

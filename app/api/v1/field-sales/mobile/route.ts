@@ -37,7 +37,7 @@ async function handle(req: Request, write: boolean) {
       const input = envelope.parse(await readFieldJson(req));
       const result = input.operation === 'attendance'
         ? await recordAttendance(pool, auth.org, auth.actor, input.command)
-        : input.operation === 'locations' ? await recordLocations(pool, auth.org, auth.actor, input.batch, true)
+        : input.operation === 'locations' ? await recordLocations(pool, auth.org, auth.actor, input.batch, true, true)
         : input.operation === 'visit' ? await recordVisit(pool, auth.org, auth.actor, input.command)
         : input.operation === 'photo' ? await saveFieldPhoto(pool, auth.org, auth.actor, input.command)
         : input.operation === 'collection' ? await recordCustomerCollection(pool, auth.org, auth.actor, input.command)
@@ -60,6 +60,7 @@ async function handle(req: Request, write: boolean) {
       order by p.name limit 500`, [auth.org, auth.actor, today])).rows);
     const customers = await readAssignedCustomers(pool, auth.org, auth.actor, today);
     const sessions = await fieldTransaction(pool, auth.org, auth.actor, async db => (await db.query(`select s.id,s.status,s.punched_in_at,s.punched_out_at,s.last_sequence,
+      coalesce((select max(l.sequence) from public.field_sales_locations l where l.organization_id=s.organization_id and l.session_id=s.id),-1) as last_location_sequence,
       s.project_id,s.schedule_id,s.local_date::text,p.name as project_name,p.site_name
       from public.field_sales_sessions s left join public.field_sales_projects p on p.organization_id=s.organization_id and p.id=s.project_id
       where s.organization_id=$1 and s.employee_id=$2 order by s.punched_in_at desc limit 10`, [auth.org, auth.actor])).rows);

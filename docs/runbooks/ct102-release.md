@@ -41,8 +41,8 @@ refuses a missing/failed/cancelled check or mismatched image revision. It does
 not rebuild on CT102. The local app and migration can be prepared while CI is
 running, but the production switch must wait for a green gate.
 
-This workflow currently carries migrations `0383`, `0384`, and `0385` for Field Sales
-device presence, project customers, and activity notes. Before a later release with schema changes, update the explicit
+This workflow currently carries migrations `0383`, `0384`, `0385`, and `0388` for Field Sales
+device presence, project customers, activity notes, and location quality. Before a later release with schema changes, update the explicit
 migration file in the workflow and deploy script; do not assume the old file
 covers a new schema. This is a **one-click release after checks**, not an
 instantaneous release or a Docker container running the pipeline. Build/cache
@@ -50,16 +50,11 @@ work happens on GitHub runners; CT102 only pulls, migrates, and restarts.
 Existing self-host installations continue to use the standard versioned
 release workflow.
 
-This Field Sales release also pins and starts the private speech sidecar before
-switching the app. Its health is checked locally; it has no published port. The
-release refuses to replace an existing voice container without manual review.
-For an app-only correction after that first release, an operator may pass
-`reuse-existing` as the seventh `deploy.sh` argument after reviewing that the
-voice source and override are unchanged. Argument six must be the **currently
-running pinned voice digest**. This mode requires that exact container to be
-healthy, leaves it running, and still verifies the new app's exact commit,
-takes a fresh backup, and retains app rollback. The default workflow does not
-opt into this mode automatically.
+This app-only correction keeps the existing private speech sidecar. The workflow
+reads its pinned digest from CT102; `deploy.sh` requires that exact container to
+be healthy and leaves it running. It still verifies the new app's exact commit,
+takes a fresh backup, applies the additive migrations, and retains app rollback.
+The eighth `deploy.sh` argument is the exact location-quality migration path.
 If the release fails, the newly started voice container is stopped along with
 restoring the previous app image. Confirm CT102 memory headroom for the 1536 MiB
 container limit before approving the production environment.

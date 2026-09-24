@@ -50,10 +50,18 @@ describe('duty cards when GPS is missing', () => {
     render(<OfficerCards people={[{ ...officer, online: false, latitude: 25, longitude: 55,
       accuracy_m: 19, captured_at: '2026-09-22T13:00:00Z' }]} timezone="Asia/Dubai" date="2026-09-22" generatedAt="2026-09-22T18:02:00Z" selectedEmployeeId="" onSelect={vi.fn()}/>);
     expect(screen.getByRole('heading', { name: 'On-duty officers · 1' })).toBeVisible();
+    expect(screen.getByText('Punch-in recorded · App offline')).toBeVisible();
+    expect(screen.queryByText('On duty · working')).not.toBeInTheDocument();
     expect(screen.getByText(/Offline · App last checked in/)).toBeVisible();
     expect(screen.getByText('Phone offline. Last known GPS is historical; there is no current live map pin.')).toBeVisible();
     expect(screen.getByText(/Last reliable position:/)).toBeVisible();
     expect(screen.getByRole('button', { name: 'View route and visits' })).toBeVisible();
+  });
+  it('does not present an offline break as a live online status', () => {
+    render(<OfficerCards people={[{ ...officer, status: 'on_break', online: false }]} timezone="Asia/Dubai" date="2026-09-22"
+      generatedAt="2026-09-22T18:02:00Z" selectedEmployeeId="" onSelect={vi.fn()}/>);
+    expect(screen.getByText('On break · App offline')).toBeVisible();
+    expect(screen.queryByText('On duty · on break')).not.toBeInTheDocument();
   });
   it('does not call an online phone’s old GPS a live position', () => {
     render(<OfficerCards people={[{ ...officer, latitude: 25, longitude: 55, accuracy_m: 19,

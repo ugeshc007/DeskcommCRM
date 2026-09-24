@@ -16,8 +16,9 @@ export function OfficerCards({ people, timezone, date, generatedAt, selectedEmpl
   const cards = (items: Operations['latest']) => <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{items.map(person => <article
     key={person.employee_id} className={`rounded-xl border bg-card p-4 ${selectedEmployeeId === person.employee_id ? 'border-primary bg-primary/5' : ''}`}>
     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3>
-      <span className={`rounded-full px-2 py-1 text-xs font-medium ${person.status ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>
-        {person.status === 'on_break' ? 'On duty · on break' : person.status ? 'On duty · working' : 'Off duty'}
+      <span className={`rounded-full px-2 py-1 text-xs font-medium ${person.status ? person.online ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900' : 'bg-muted text-muted-foreground'}`}>
+        {person.status === 'on_break' ? person.online ? 'On duty · on break' : 'On break · App offline'
+          : person.status ? person.online ? 'On duty · working' : 'Punch-in recorded · App offline' : 'Off duty'}
       </span></div>
     <p className="mt-2 text-sm">{person.online ? 'Online' : 'Offline'} · App last checked in: {time(person.last_seen_at)}</p>
     {!person.online && person.status && <p className="mt-1 text-sm text-amber-700">Phone offline. Last known GPS is historical; there is no current live map pin.</p>}

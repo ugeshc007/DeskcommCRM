@@ -291,7 +291,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Attendance' })).toHaveAttribute('data-state', 'active');
   await expect(page.getByRole('region', { name: 'Daily field officer attendance' }).getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Daily field officer attendance' }).getByText('Working time')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Daily field officer attendance' }).getByText('Working time', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-attendance-desktop.png'), fullPage: true });
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await officerCard.getByRole('button', { name: 'View route and visits' }).click();

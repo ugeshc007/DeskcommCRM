@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { addCalendarDays, mondayOfWeek } from '@/lib/field-sales/schedule';
 import { FieldOperations, type ShopCollection } from './operations';
 import { FieldLiveView } from './live/view';
+import { AttendanceView } from './attendance-view';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
 
@@ -69,6 +70,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('calendar');
+  const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('all');
   const [activityDate, setActivityDate] = useState('');
   const [routeSelection, setRouteSelection] = useState<{ employeeId: string; date: string } | null>(null);
   const [editing, setEditing] = useState<Occurrence | null>(null);
@@ -196,7 +198,8 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       </section>
       {!timezone && <p role="alert" className="rounded-lg border p-4">Configure the organization country and time zone before scheduling.</p>}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
+        <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger><TabsTrigger value="attendance" onClick={() => setAttendanceEmployeeId('all')}>Attendance</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
+        <TabsContent value="attendance"><AttendanceView organizationId={organizationId} userId={userId} initialDate={teamDate} selectedEmployeeId={attendanceEmployeeId} onSelectEmployee={setAttendanceEmployeeId}/></TabsContent>
         <TabsContent value="activity" className="space-y-4">
           <div className="flex flex-wrap items-end gap-3"><Field label="Activity date"><Input type="date" value={activityDate || teamDate} onChange={event => { if (event.target.value) setActivityDate(event.target.value); }}/></Field>
             <Button variant="outline" onClick={() => setActivityDate('')}>Today</Button></div>
@@ -244,9 +247,9 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               const openSession = sessions.find(item => !item.punched_out_at);
               const lastSession = openSession ?? sessions[0];
               const latestShop = teamPresence.data?.collections.find(item => item.employee_id === person.user_id && !item.voided_at);
-              const present = person.active && Boolean(openSession && position?.status);
+              const onDuty = person.active && Boolean(openSession && position?.status);
               return <article className="rounded-xl border bg-card p-4" key={person.user_id}>
-                <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3><div className="flex flex-wrap gap-1"><span className={`rounded-full px-2 py-1 text-xs font-medium ${position?.online ? 'bg-sky-100 text-sky-900' : 'bg-muted text-muted-foreground'}`}>{position?.online ? 'Online' : 'Offline'}</span><span className={`rounded-full px-2 py-1 text-xs font-medium ${present ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>{!person.active ? 'Inactive' : present ? position?.status === 'break' ? 'Present · on break' : 'Present' : 'Absent / off duty'}</span></div></div>
+                <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3><div className="flex flex-wrap gap-1"><span className={`rounded-full px-2 py-1 text-xs font-medium ${position?.online ? 'bg-sky-100 text-sky-900' : 'bg-muted text-muted-foreground'}`}>{position?.online ? 'Online' : 'Offline'}</span><span className={`rounded-full px-2 py-1 text-xs font-medium ${onDuty ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>{!person.active ? 'Inactive' : onDuty ? position?.status === 'break' ? 'On duty · break' : 'On duty' : 'Off duty'}</span></div></div>
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><div><dt className="text-muted-foreground">Punched in</dt><dd>{formatTime(lastSession?.punched_in_at)}</dd></div><div><dt className="text-muted-foreground">Punched out</dt><dd>{formatTime(lastSession?.punched_out_at)}</dd></div></dl>
                 <p className="mt-3 text-xs text-muted-foreground">Last position: {position?.latitude !== null && position?.longitude !== null && position?.captured_at ? formatTime(position.captured_at) : 'Not reported'}</p>
                 <p className="mt-1 text-xs text-muted-foreground">App last checked in: {formatTime(position?.last_seen_at)}</p>
@@ -254,6 +257,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
                 <div className="mt-3 flex flex-wrap gap-2">
                   {manager && <Button variant="outline" onClick={() => setRouteSelection({ employeeId: person.user_id, date: teamDate })}>View route and visits</Button>}
                   {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
+                  <Button variant="outline" onClick={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</Button>
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>
               </article>;

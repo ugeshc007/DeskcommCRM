@@ -25,6 +25,7 @@ test.beforeAll(async () => {
   await pool.query(readFileSync('supabase/migrations/20260922113000_0384_field_sales_project_customers.sql', 'utf8'));
   await pool.query(readFileSync('supabase/migrations/20260922160000_0385_field_sales_activity_notes.sql', 'utf8'));
   await pool.query(readFileSync('supabase/migrations/20260924180000_0388_field_sales_location_quality.sql', 'utf8'));
+  await pool.query(readFileSync('supabase/migrations/20260925120000_0389_field_sales_attendance_leave.sql', 'utf8'));
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: 'Synthetic field administrator' } });
   if (created.error || !created.data.user) throw new Error('Synthetic field account creation failed');
   actor = created.data.user.id;
@@ -284,9 +285,15 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByRole('heading', { name: 'Manager visibility' })).toHaveCount(0);
   const officerCard = page.getByRole('article').filter({ has: page.getByRole('button', { name: 'View route and visits' }) });
   await expect(officerCard.getByText('Online', { exact: true })).toBeVisible();
-  await expect(officerCard.getByText('Present', { exact: true })).toBeVisible();
+  await expect(officerCard.getByText('On duty', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Punched in')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-team-presence-desktop.png'), fullPage: true });
+  await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Attendance' })).toHaveAttribute('data-state', 'active');
+  await expect(page.getByRole('region', { name: 'Daily field officer attendance' }).getByText('Synthetic salesperson')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Daily field officer attendance' }).getByText('Working time')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('field-attendance-desktop.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await officerCard.getByRole('button', { name: 'View route and visits' }).click();
   await expect(page).toHaveURL(/\/app\/field-sales$/);
   const routeDialog = page.getByRole('dialog', { name: 'Route and visits', exact: true });

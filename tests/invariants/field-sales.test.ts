@@ -10,6 +10,7 @@ import { manageFieldSales, readFieldCalendar } from '@/lib/field-sales/managemen
 import { saveFieldPhoto, readFieldPhoto, listFieldPhotos, deleteFieldPhoto } from '@/lib/field-sales/photos';
 import { manageProjectCustomers, readProjectCustomers, readAssignedCustomers, recordCustomerCollection, removeProjectCustomer, voidCustomerCollection } from '@/lib/field-sales/collections';
 import { recordFieldActivity } from '@/lib/field-sales/activity';
+import { manageAttendanceLeave, readAttendanceDay } from '@/lib/field-sales/attendance-calendar';
 import sharp from 'sharp';
 
 if (!process.env.TEST_DB_CONTAINER) throw new Error('Run through scripts/test-db.sh');
@@ -29,6 +30,7 @@ beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_project_customers()');
   await pool.query('select fn_provision_field_sales_activity_notes()');
   await pool.query('select fn_provision_field_sales_location_quality()');
+  await pool.query('select fn_provision_field_sales_attendance_leave()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_lifecycle()');
@@ -602,5 +604,29 @@ describe('optional field-sales foundation', () => {
     await pool.query("insert into field_sales_projects(organization_id,id,name,site_name) values($1,$2,'Synthetic','Site')", [a.org, id]);
     await expect(pool.query(`insert into field_sales_schedules(organization_id,project_id,employee_id,timezone,country_code,rule)
       values($1,$2,$3,'Asia/Dubai','AE','{}')`, [b.org, id, b.actor])).rejects.toThrow();
+  });
+  it('keeps leave manager-scoped and organization-isolated, without overriding recorded work', async () => {
+    const a = await fixture(), b = await fixture();
+    const date = a.localDate;
+    await expect(manageAttendanceLeave(pool, a.org, a.actor,
+      { operation: 'approve_leave', employee_id: a.actor, date })).rejects.toThrow('field_forbidden');
+    await expect(manageAttendanceLeave(pool, b.org, b.manager,
+      { operation: 'approve_leave', employee_id: a.actor, date })).rejects.toThrow('field_employee_unavailable');
+    await manageAttendanceLeave(pool, a.org, a.manager,
+      { operation: 'approve_leave', employee_id: a.actor, date, note: 'Approved day off' });
+    expect((await readAttendanceDay(pool, a.org, a.actor, date)).rows[0]?.status).toBe('leave');
+    await expect(readAttendanceDay(pool, b.org, b.actor, date, a.actor)).rejects.toThrow('field_forbidden');
+    const db = await pool.connect();
+    try {
+      await db.query('begin'); await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claim.sub',$1,true)", [a.actor]);
+      await expect(db.query('select * from public.field_sales_leave_days')).rejects.toThrow();
+    } finally { await db.query('rollback'); db.release(); }
+    await manageAttendanceLeave(pool, a.org, a.manager,
+      { operation: 'revoke_leave', employee_id: a.actor, date });
+    await recordAttendance(pool, a.org, a.actor, a.command);
+    await expect(manageAttendanceLeave(pool, a.org, a.manager,
+      { operation: 'approve_leave', employee_id: a.actor, date })).rejects.toThrow('field_leave_has_work');
+    expect((await readAttendanceDay(pool, a.org, a.manager, date, a.actor)).rows[0]?.status).toBe('present');
   });
 });

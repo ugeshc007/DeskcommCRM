@@ -279,10 +279,20 @@ not only Phase 9. Phases 3–6 require native Android behavior; a webview is not
 These are planned connections, not claims of existing implementation:
 CRM organization/membership -> scoped field service -> calendar/mobile assignments;
 mobile attendance/GPS -> validated session store -> manager dashboard;
+
 visit outcome -> CRM next task -> scheduled assignment;
 sync failure -> visible mobile queue/manager stale state -> retry or operator correction.
 Field operations are employee-driven; AI cannot access raw employee journeys or start tracking.
 Navigation will expose Field Sales under CRM; failures must have a visible action, not only logs.
+
+### Daily attendance (confirmed 2026-09-25)
+
+- Attendance is derived from the authenticated Android punch-in and punch-out records, in the organization's time zone. A session crossing midnight contributes time to each local calendar date it overlaps. Recorded breaks are excluded from working minutes; an open session shows elapsed working time so far.
+- A recorded punch on a date means **Present**. With no punch, an approved manager/admin leave day means **Leave**. With neither, an unpunched date is **Absent** only after the local calendar day ends; the current or a future date remains pending. The owner confirmed that every calendar day is in scope, with no separate weekly schedule or minimum-hours threshold.
+- The Team card reports live duty and connectivity separately. **Off duty** never by itself means Absent.
+- Managers/admins may approve or remove leave in the CRM calendar. An existing work session prevents leave approval. The audit log records each change without storing the leave note in audit metadata.
+- Daily travel is an estimate from sampled, quality-filtered GPS using the route display's uncertainty/jump/drift rules. Missing or insufficient GPS is shown as unavailable, never zero distance. Raw GPS is retained separately under the organization's existing retention policy.
+- The Team card's third Attendance button selects that employee. The Attendance tab also lists the full team together and lets managers select another date or employee.
 
 ## Release prerequisites (not permission to fabricate completion)
 

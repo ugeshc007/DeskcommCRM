@@ -99,6 +99,7 @@ jobs:
             supabase/migrations/20260922113000_0384_field_sales_project_customers.sql \
             supabase/migrations/20260922160000_0385_field_sales_activity_notes.sql \
             supabase/migrations/20260924180000_0388_field_sales_location_quality.sql \
+            supabase/migrations/20260925120000_0389_field_sales_attendance_leave.sql \
             ops/ct102/deploy.sh ops/ct102/rollback.sh ops/ct102/app-release.override.yml \
             ops/ct102/field-voice.override.yml \
             "$target:$stage/"
@@ -107,11 +108,12 @@ jobs:
              pct push 102 '$stage/20260922113000_0384_field_sales_project_customers.sql' '$destination/20260922113000_0384_field_sales_project_customers.sql' && \
              pct push 102 '$stage/20260922160000_0385_field_sales_activity_notes.sql' '$destination/20260922160000_0385_field_sales_activity_notes.sql' && \
              pct push 102 '$stage/20260924180000_0388_field_sales_location_quality.sql' '$destination/20260924180000_0388_field_sales_location_quality.sql' && \
+             pct push 102 '$stage/20260925120000_0389_field_sales_attendance_leave.sql' '$destination/20260925120000_0389_field_sales_attendance_leave.sql' && \
              pct push 102 '$stage/deploy.sh' '$destination/deploy.sh' && \
              pct push 102 '$stage/rollback.sh' '$destination/rollback.sh' && \
              pct push 102 '$stage/app-release.override.yml' '$destination/app-release.override.yml' && \
              pct push 102 '$stage/field-voice.override.yml' '$destination/field-voice.override.yml' && \
-             pct exec 102 -- bash '$destination/deploy.sh' '$IMAGE' '$GITHUB_SHA' '$destination/20260921210000_0383_field_sales_device_presence.sql' '$destination/20260922113000_0384_field_sales_project_customers.sql' '$destination/20260922160000_0385_field_sales_activity_notes.sql' '$VOICE_IMAGE' reuse-existing '$destination/20260924180000_0388_field_sales_location_quality.sql'"
+             pct exec 102 -- bash '$destination/deploy.sh' '$IMAGE' '$GITHUB_SHA' '$destination/20260921210000_0383_field_sales_device_presence.sql' '$destination/20260922113000_0384_field_sales_project_customers.sql' '$destination/20260922160000_0385_field_sales_activity_notes.sql' '$VOICE_IMAGE' reuse-existing '$destination/20260924180000_0388_field_sales_location_quality.sql' '$destination/20260925120000_0389_field_sales_attendance_leave.sql'"
 
       - name: Public post-release smoke
         run: |

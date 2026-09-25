@@ -11,6 +11,7 @@ activity_migration="${5:?activity migration path required}"
 voice_image="${6:?voice image digest required}"
 voice_mode="${7:-create}"
 quality_migration="${8:?location quality migration path required}"
+attendance_migration="${9:?attendance leave migration path required}"
 [[ "$voice_mode" == create || "$voice_mode" == reuse-existing ]] || { echo 'Invalid voice deployment mode' >&2; exit 2; }
 release_override="$(cd "$(dirname "$0")" && pwd)/app-release.override.yml"
 release_dir="$(cd "$(dirname "$0")" && pwd)"
@@ -24,7 +25,8 @@ project=/opt/deskcommcrm
 [[ "$customers_migration" == "$project"/releases/"$revision"/20260922113000_0384_field_sales_project_customers.sql ]] || { echo 'Unexpected customer migration path' >&2; exit 2; }
 [[ "$activity_migration" == "$project"/releases/"$revision"/20260922160000_0385_field_sales_activity_notes.sql ]] || { echo 'Unexpected activity migration path' >&2; exit 2; }
 [[ "$quality_migration" == "$project"/releases/"$revision"/20260924180000_0388_field_sales_location_quality.sql ]] || { echo 'Unexpected location quality migration path' >&2; exit 2; }
-[[ -f "$migration" && -f "$customers_migration" && -f "$activity_migration" && -f "$quality_migration" && -f "$release_override" && -f "$voice_override" ]] || { echo 'Release files missing' >&2; exit 2; }
+[[ "$attendance_migration" == "$project"/releases/"$revision"/20260925120000_0389_field_sales_attendance_leave.sql ]] || { echo 'Unexpected attendance migration path' >&2; exit 2; }
+[[ -f "$migration" && -f "$customers_migration" && -f "$activity_migration" && -f "$quality_migration" && -f "$attendance_migration" && -f "$release_override" && -f "$voice_override" ]] || { echo 'Release files missing' >&2; exit 2; }
 cd "$project"
 [[ -f .env && -f docker-compose.prod.yml && -f docker-compose.ct102.yml && -f docker-compose.ct102.map.yml ]] || { echo 'CT102 compose files missing' >&2; exit 2; }
 [[ -s field-map-tiles/uae.pmtiles ]] || { echo 'Self-hosted map archive missing' >&2; exit 2; }
@@ -92,9 +94,10 @@ fi
 docker run --rm -v "$migration:/release-migration.sql:ro" \
   -v "$customers_migration:/customers-migration.sql:ro" \
   -v "$activity_migration:/activity-migration.sql:ro" \
-  -v "$quality_migration:/location-quality-migration.sql:ro" postgres:17-alpine \
+  -v "$quality_migration:/location-quality-migration.sql:ro" \
+  -v "$attendance_migration:/attendance-migration.sql:ro" postgres:17-alpine \
   psql "$(url_do_schema)" -1 -q -v ON_ERROR_STOP=1 \
-  -f /release-migration.sql -f /customers-migration.sql -f /activity-migration.sql -f /location-quality-migration.sql
+  -f /release-migration.sql -f /customers-migration.sql -f /activity-migration.sql -f /location-quality-migration.sql -f /attendance-migration.sql
 
 # Retain the exact prior image for the runner's external public-health rollback.
 printf '%s\n%s\n' "$previous_image" "$previous_version" > "$release_dir/previous-app.txt"

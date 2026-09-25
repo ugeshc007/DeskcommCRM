@@ -41,8 +41,8 @@ refuses a missing/failed/cancelled check or mismatched image revision. It does
 not rebuild on CT102. The local app and migration can be prepared while CI is
 running, but the production switch must wait for a green gate.
 
-This workflow currently carries migrations `0383`, `0384`, `0385`, and `0388` for Field Sales
-device presence, project customers, activity notes, and location quality. Before a later release with schema changes, update the explicit
+This workflow currently carries migrations `0383`, `0384`, `0385`, `0388`, and `0389` for Field Sales
+device presence, project customers, activity notes, location quality, and approved attendance leave. Before a later release with schema changes, update the explicit
 migration file in the workflow and deploy script; do not assume the old file
 covers a new schema. This is a **one-click release after checks**, not an
 instantaneous release or a Docker container running the pipeline. Build/cache
@@ -54,7 +54,7 @@ This app-only correction keeps the existing private speech sidecar. The workflow
 reads its pinned digest from CT102; `deploy.sh` requires that exact container to
 be healthy and leaves it running. It still verifies the new app's exact commit,
 takes a fresh backup, applies the additive migrations, and retains app rollback.
-The eighth `deploy.sh` argument is the exact location-quality migration path.
+The eighth and ninth `deploy.sh` arguments are the exact location-quality and attendance-leave migration paths.
 If the release fails, the newly started voice container is stopped along with
 restoring the previous app image. Confirm CT102 memory headroom for the 1536 MiB
 container limit before approving the production environment.

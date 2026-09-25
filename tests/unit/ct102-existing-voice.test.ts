@@ -18,7 +18,8 @@ describe.skipIf(process.platform === 'win32')('CT102 app correction preserves th
       put(join(root, 'field-map-tiles/uae.pmtiles'), 'synthetic');
       const migrations = ['20260921210000_0383_field_sales_device_presence.sql', '20260922113000_0384_field_sales_project_customers.sql', '20260922160000_0385_field_sales_activity_notes.sql'].map(file => join(release, file));
       const qualityMigration = join(release, '20260924180000_0388_field_sales_location_quality.sql');
-      for (const file of [...migrations, qualityMigration, join(release, 'app-release.override.yml'), join(release, 'field-voice.override.yml')]) put(file, '');
+      const attendanceMigration = join(release, '20260925120000_0389_field_sales_attendance_leave.sql');
+      for (const file of [...migrations, qualityMigration, attendanceMigration, join(release, 'app-release.override.yml'), join(release, 'field-voice.override.yml')]) put(file, '');
       put(join(release, 'deploy.sh'), readFileSync('ops/ct102/deploy.sh', 'utf8').replaceAll('/opt/deskcommcrm', root));
       put(join(root, 'hostgator-setup-kit/_common.sh'), 'enter_project() { :; }\nurl_do_schema() { printf synthetic; }\n');
       put(join(root, 'hostgator-setup-kit/backup.sh'), 'mkdir -p "$BACKUP_DIR"; printf synthetic > "$BACKUP_DIR/db-test.sql.gz"\n');
@@ -36,7 +37,7 @@ case "$*" in
   *"Health"*) printf healthy ;;
 esac
 `, true);
-      const result = spawnSync('bash', [join(release, 'deploy.sh'), app, revision, ...migrations, voice, 'reuse-existing', qualityMigration],
+      const result = spawnSync('bash', [join(release, 'deploy.sh'), app, revision, ...migrations, voice, 'reuse-existing', qualityMigration, attendanceMigration],
         { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEST_ROOT: root }, encoding: 'utf8', timeout: 10000 });
       return { status: result.status, error: result.stderr, log: readFileSync(join(root, 'docker.log'), 'utf8') };
     } finally { rmSync(root, { recursive: true, force: true }); }
@@ -45,6 +46,7 @@ esac
     const result = run('healthy');
     expect(result.status, result.error).toBe(0);
     expect(result.log).toContain('up -d --no-deps app');
+    expect(result.log).toContain('attendance-migration.sql');
     expect(result.log).not.toContain('up -d --no-deps field-voice');
     expect(result.log).not.toContain(`pull ${voice}`);
   });

@@ -28,17 +28,18 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.Priority;
 
-/** A deliberately small field workflow: punch in, choose a project, punch out. */
+/** A deliberately small field workflow: choose a project, confirm work, punch out. */
 public final class MainActivity extends Activity {
     private static final int INK = Color.rgb(23, 37, 61), MUTED = Color.rgb(91, 105, 125);
     private static final int BRAND = Color.rgb(91, 70, 255), BRAND_DARK = Color.rgb(62, 46, 194);
     private static final int GREEN = Color.rgb(14, 159, 110), RED = Color.rgb(214, 55, 71);
     private static final int PAGE = Color.rgb(245, 247, 255), CARD = Color.WHITE;
     private LinearLayout content;
-    private Spinner projectPicker;
     private final ArrayList<JSONObject> projectChoices = new ArrayList<>();
     private VoiceAssistant voiceAssistant;
     private boolean settingsPromptShown;
+    private boolean trackingStartPending;
+    private JSONObject pendingPunchInProject;
     private final Handler clock = new Handler(Looper.getMainLooper());
     private final Runnable refreshClock = new Runnable() {
         @Override public void run() { render(); sync(); clock.postDelayed(this, 60000); }
@@ -53,7 +54,10 @@ public final class MainActivity extends Activity {
     }
     @Override public void onResume() {
         super.onResume(); try { Attendance.autoPunchOut(this); } catch (Exception ignored) { }
-        render(); sync(); clock.removeCallbacks(refreshClock); clock.postDelayed(refreshClock, 60000);
+        render(); sync(); offerPermissions();
+        try { if (hasLocationPermission() && WorkState.collecting(SecureState.read(this).optString("status"))) startTracking(); }
+        catch (Exception ignored) { /* Secure storage error is already shown by render. */ }
+        clock.removeCallbacks(refreshClock); clock.postDelayed(refreshClock, 60000);
     }
     @Override public void onPause() { clock.removeCallbacks(refreshClock); voiceAssistant.cancel(); super.onPause(); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -117,7 +121,7 @@ public final class MainActivity extends Activity {
             String code = key.getText().toString().trim();
             if (!code.matches("[0-9]{6}")) { alert("Check code", "Enter the six digits shown in Team → Android keys."); return; }
             connect.setEnabled(false);
-            SyncEngine.pair(this, code, () -> runOnUiThread(() -> { key.setText(""); render(); sync(); }),
+            SyncEngine.pair(this, code, () -> runOnUiThread(() -> { key.setText(""); render(); sync(); offerPermissions(); }),
                 () -> runOnUiThread(() -> { connect.setEnabled(true); alert("Could not connect", "The code may be wrong, expired or already used. Ask your administrator for a new code."); }));
         });
     }
@@ -130,15 +134,25 @@ public final class MainActivity extends Activity {
         String status = state.optString("status", "off_duty"); boolean working = WorkState.collecting(status);
         LinearLayout hero = card(); hero.setBackground(shape(working ? Color.rgb(228, 249, 240) : Color.rgb(235, 232, 255), 20));
         add(hero, label(working ? "You are punched in" : "Ready for today's work", 23, working ? Color.rgb(7, 105, 74) : BRAND_DARK, true), 0);
-        add(hero, label(working ? "Your work session is in progress. Punch out when finished or after the 14-hour limit." : "Punch in to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
-        if (state.getJSONArray("events").length() > 0)
-            add(hero, label("Attendance not yet confirmed by CRM. Open Notifications for sync details.", 15, RED, true), 10);
+        add(hero, label(working ? "Your work session is in progress. Punch out when finished or after the 14-hour limit." : "Choose a project to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
+        int pending = state.getJSONArray("events").length();
+        String syncIssue = state.optString("attendance_sync_error");
+        if (pending > 0) add(hero, label(syncIssue.isEmpty()
+            ? "Attendance saved on this phone · syncing with CRM (" + pending + " pending)."
+            : "Attendance saved on this phone · sync needs attention. Open Notifications for details.", 14,
+            syncIssue.isEmpty() ? MUTED : RED, true), 10);
+        else if (!state.optString("last_attendance_confirmed_at").isEmpty())
+            add(hero, label("CRM confirmed " + state.optString("last_attendance_action", "attendance").replace('_', ' ')
+                + " · " + state.optString("last_attendance_confirmed_at"), 14, GREEN, true), 10);
         if (working) activeShift(state); else offDuty(state);
     }
     private void offDuty(JSONObject state) throws Exception {
         LinearLayout panel = card(); add(panel, label("Start work", 18, INK, true), 0);
-        add(panel, label("Your working hours and GPS begin when you punch in. Choose the project afterward.", 15, MUTED, false), 8);
-        Button punch = action("Punch in", GREEN); punch.setOnClickListener(v -> confirmPunchIn()); add(panel, punch, 18);
+        add(panel, label("Tap an assigned project, review the tracking notice, then confirm to start working hours and GPS.", 15, MUTED, false), 8);
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+            add(panel, label("Approximate location only. For reliable live pins, allow Precise location in Android app settings.", 14, RED, true), 10);
+        renderProjectButtons(panel, state, false);
         add(content, panel, 16);
     }
     private void activeShift(JSONObject state) throws Exception {
@@ -147,9 +161,20 @@ public final class MainActivity extends Activity {
         long elapsed = Math.max(0, Math.min(Attendance.MAX_SHIFT_MS, System.currentTimeMillis() - state.optLong("session_start_ms", System.currentTimeMillis())));
         add(panel, label(String.format(Locale.US, "Working time: %d h %02d min", elapsed / 3600000L, (elapsed / 60000L) % 60), 15, INK, true), 7);
         if (!state.optString("active_site_name").isEmpty()) add(panel, label(state.optString("active_site_name"), 15, MUTED, false), 5);
-        add(panel, label(TrackingService.running ? "Work GPS tracking active" : "GPS is not active. Check permissions and resume tracking.", 14,
-            TrackingService.running ? GREEN : RED, true), 14);
-        if (!TrackingService.running) {
+        String trackingIssue = state.optString("tracking_error");
+        boolean tracking = TrackingService.running && trackingIssue.isEmpty();
+        String trackingStatus = "GPS service active · waiting for a fresh reading. No current live pin yet.";
+        if (tracking) try {
+            long fixAt = Instant.parse(state.optString("last_fix_at")).toEpochMilli();
+            long age = Math.max(0, System.currentTimeMillis() - fixAt);
+            if (fixAt >= state.optLong("session_start_ms") && age < 300000)
+                trackingStatus = "GPS service active · last reading " + Math.max(0, age / 1000) + " seconds ago"
+                    + " · reported accuracy ±" + Math.round(state.optDouble("last_fix_accuracy_m")) + " m.";
+        } catch (Exception ignored) { /* No reading from this shift yet. */ }
+        add(panel, label(tracking ? trackingStatus : trackingStartPending ? "Starting GPS tracking…"
+            : trackingIssue.isEmpty() ? "GPS stopped. Tap Resume GPS to check permissions and phone location."
+            : trackingIssue, 14, tracking ? GREEN : trackingStartPending ? MUTED : RED, true), 14);
+        if (!tracking && !trackingStartPending) {
             Button resumeGps = action("Resume GPS", BRAND); resumeGps.setOnClickListener(v -> startTracking()); add(panel, resumeGps, 8);
         }
         if (state.optBoolean("gps_storage_pressure")) add(panel,
@@ -161,9 +186,16 @@ public final class MainActivity extends Activity {
             locationSettings.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + getPackageName())))); add(panel, locationSettings, 8);
         }
+        renderProjectButtons(panel, state, true);
+        if (!state.optString("active_project_id").isEmpty()) showProjectCustomers(state);
+        Button out = action("Punch out", RED); out.setOnClickListener(v -> confirmPunchOut()); add(panel, out, 22); add(content, panel, 16);
+    }
+    private void renderProjectButtons(LinearLayout panel, JSONObject state, boolean working) throws Exception {
         JSONObject snapshot = state.optJSONObject("snapshot"); JSONArray occurrences = snapshot == null ? null : snapshot.optJSONArray("occurrences");
         JSONArray projects = snapshot == null ? null : snapshot.optJSONArray("projects");
-        String zone = state.optString("timezone", "UTC"), shiftDate = state.optString("active_local_date", LocalDate.now(ZoneId.of(zone)).toString());
+        String zone = state.optString("timezone", "UTC"), shiftDate = working
+            ? state.optString("active_local_date", LocalDate.now(ZoneId.of(zone)).toString())
+            : LocalDate.now(ZoneId.of(zone)).toString();
         projectChoices.clear(); ArrayList<String> choices = new ArrayList<>(); java.util.Set<String> scheduled = new java.util.HashSet<>();
         if (occurrences != null) for (int i = 0; i < occurrences.length(); i++) {
             JSONObject item = occurrences.getJSONObject(i); if (!shiftDate.equals(item.optString("date"))) continue;
@@ -181,40 +213,51 @@ public final class MainActivity extends Activity {
                 .put("project_name", item.optString("name", "Project")).put("site_name", item.optString("site_name", "")));
             choices.add("Other project: " + item.optString("name", "Project"));
         }
-        if (choices.isEmpty()) add(panel, label("No active projects are available. Ask your manager; GPS and working time continue until punch-out.", 15, RED, false), 12);
+        if (choices.isEmpty()) add(panel, label(working ? "No active projects are available. Ask your manager; GPS and working time continue until punch-out."
+            : "No assigned projects are available. Ask your manager to assign one, then refresh.", 15, RED, false), 12);
         else {
-            if (state.optBoolean("voice_enabled")) {
+            if (working && state.optBoolean("voice_enabled")) {
                 add(panel, label("Voice AI asks for the next shop after you choose a project or save a shop visit.", 14, MUTED, false), 16);
                 Button speak = action("Ask AI for next shop", BRAND);
                 speak.setOnClickListener(v -> startDestinationConversation(false)); add(panel, speak, 10);
             }
-            projectPicker = new Spinner(this); projectPicker.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, choices));
-            projectPicker.setMinimumHeight(dp(56)); add(panel, projectPicker, 12);
-            Button choose = action(state.optString("active_project_id").isEmpty() ? "Choose project" : "Change project", BRAND);
-            choose.setOnClickListener(v -> chooseProject()); add(panel, choose, 10);
+            for (int i = 0; i < choices.size(); i++) {
+                final JSONObject project = projectChoices.get(i);
+                Button choice = action(choices.get(i) + (working && project.optString("project_id").equals(state.optString("active_project_id")) ? " · Current" : ""),
+                    working ? BRAND : GREEN);
+                choice.setOnClickListener(v -> { if (working) chooseProject(project); else confirmPunchIn(project); });
+                add(panel, choice, 10);
+            }
         }
-        if (!state.optString("active_project_id").isEmpty()) showProjectCustomers(state);
-        Button out = action("Punch out", RED); out.setOnClickListener(v -> confirmPunchOut()); add(panel, out, 22); add(content, panel, 16);
-        if (!TrackingService.running) startTracking();
     }
-    private void confirmPunchIn() {
-        if (!permissions()) return;
+    private void confirmPunchIn(JSONObject project) {
+        if (!hasLocationPermission()) { pendingPunchInProject = project; permissions(); return; }
+        LocationManager location = getSystemService(LocationManager.class);
+        boolean locationEnabled = location != null && (Build.VERSION.SDK_INT >= 28 ? location.isLocationEnabled()
+            : location.isProviderEnabled(LocationManager.GPS_PROVIDER) || location.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
+        if (!locationEnabled) {
+            new AlertDialog.Builder(this).setTitle("Phone location is off")
+                .setMessage("Enable phone location, then tap the project again to start work and GPS together.")
+                .setPositiveButton("Open location settings", (d, w) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                .setNegativeButton("Later", null).show();
+            return;
+        }
         try {
             JSONObject snapshot = SecureState.read(this).optJSONObject("snapshot"), policy = snapshot == null ? null : snapshot.optJSONObject("settings");
             if (policy == null || !policy.optBoolean("enabled")) throw new IllegalStateException();
             new AlertDialog.Builder(this).setTitle("Start your work session?")
-                .setMessage(policy.optString("notice_text") + "\n\nGPS starts now and stops at punch-out or after 14 hours. Choose a project after punching in.")
-                .setNegativeButton("Cancel", null).setPositiveButton("Agree and punch in", (dialog, which) -> {
+                .setMessage("Project: " + project.optString("project_name") + "\n\n" + policy.optString("notice_text")
+                    + "\n\nGPS starts now and stops at punch-out or after 14 hours.")
+                .setNegativeButton("Cancel", null).setPositiveButton("Confirm and start", (dialog, which) -> {
                     try {
-                        Attendance.punchIn(this);
+                        Attendance.punchInWithProject(this, project, () -> runOnUiThread(this::render));
                         startTracking(); render();
                     } catch (Exception failure) { alert("Punch in not saved", "Refresh and try again."); }
                 }).show();
         } catch (Exception failure) { alert("Policy unavailable", "Refresh assignments before punching in."); }
     }
-    private void chooseProject() {
-        if (projectPicker == null || projectChoices.isEmpty()) return;
-        try { Attendance.selectProject(this, projectChoices.get(projectPicker.getSelectedItemPosition()), () -> runOnUiThread(() -> {
+    private void chooseProject(JSONObject project) {
+        try { Attendance.selectProject(this, project, () -> runOnUiThread(() -> {
             try {
                 JSONObject current = SecureState.read(this);
                 if (current.optBoolean("voice_enabled") && WorkState.collecting(current.optString("status", "off_duty"))
@@ -462,22 +505,60 @@ public final class MainActivity extends Activity {
         } catch (Exception failure) { alert("Sign out unavailable", "Pending records were retained. Try again after syncing."); }
     }
     private void sync() { SyncEngine.sync(this, () -> runOnUiThread(this::render)); }
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+    private void offerPermissions() {
+        try {
+            JSONObject state = SecureState.read(this);
+            if (!state.has("token")) return;
+            if (!hasLocationPermission() && !state.optBoolean("location_permission_asked")) {
+                SecureState.mutate(this, current -> current.put("location_permission_asked", true));
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
+            } else if (Build.VERSION.SDK_INT >= 33 && hasLocationPermission()
+                && pendingPunchInProject == null
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && !state.optBoolean("notification_permission_asked")) {
+                SecureState.mutate(this, current -> current.put("notification_permission_asked", true));
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2);
+            }
+        } catch (Exception ignored) { /* The employee can retry from the work card. */ }
+    }
     private boolean permissions() {
-        if ((checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-            && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) ||
-            (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)) {
-            requestPermissions(Build.VERSION.SDK_INT >= 33 ? new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS} : new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 1); return false;
+        if (!hasLocationPermission()) {
+            try {
+                if (SecureState.read(this).optBoolean("location_permission_asked")
+                    && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
+                    && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                    new AlertDialog.Builder(this).setTitle("Location permission needed")
+                        .setMessage("Allow location for Field Sales in Android app settings, then tap the project again. Your work has not started.")
+                        .setPositiveButton("Open app settings", (d, w) -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + getPackageName())))).setNegativeButton("Later", null).show();
+                    return false;
+                }
+            } catch (Exception ignored) { }
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
+            return false;
         }
         return true;
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
         render();
-        if (requestCode == 1) try {
-            if (WorkState.collecting(SecureState.read(this).optString("status"))) startTracking();
-        } catch (Exception ignored) { }
+        if (requestCode == 1) {
+            JSONObject project = pendingPunchInProject;
+            pendingPunchInProject = null;
+            if (hasLocationPermission() && project != null) { confirmPunchIn(project); return; }
+            offerPermissions();
+            try { if (hasLocationPermission() && WorkState.collecting(SecureState.read(this).optString("status"))) startTracking(); }
+            catch (Exception ignored) { }
+        }
     }
     private void startTracking() {
+        if (trackingStartPending) return;
+        try { if (TrackingService.running && SecureState.read(this).optString("tracking_error").isEmpty()) return; }
+        catch (Exception ignored) { }
         if (!permissions()) return;
         LocationManager manager = getSystemService(LocationManager.class);
         boolean enabled = Build.VERSION.SDK_INT >= 28 ? manager.isLocationEnabled()
@@ -489,7 +570,10 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Later", null).show(); return;
         }
         try {
+            trackingStartPending = true;
             startForegroundService(new Intent(this, TrackingService.class));
+            render();
+            clock.postDelayed(() -> { trackingStartPending = false; render(); }, 1500);
             if (!settingsPromptShown && GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS) {
                 settingsPromptShown = true;
                 LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, GpsQuality.MOVING_INTERVAL_MS).build();
@@ -500,6 +584,11 @@ public final class MainActivity extends Activity {
                         } catch (Exception ignored) { /* The service still uses available providers. */ }
                     });
             }
-        } catch (Exception failure) { alert("GPS unavailable", "Allow location and notifications, then reopen the app."); }
+        } catch (Exception failure) {
+            trackingStartPending = false;
+            try { SecureState.mutate(this, state -> state.put("tracking_error", "GPS could not start. Check location permission and phone settings.")); }
+            catch (Exception ignored) { }
+            render();
+        }
     }
 }

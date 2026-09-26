@@ -21,6 +21,14 @@ public final class SmokeInstrumentation extends Instrumentation {
         }
         return false;
     }
+    private boolean containsPrefix(View view, String value) {
+        if (view instanceof TextView && ((TextView) view).getText().toString().startsWith(value)) return true;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) if (containsPrefix(group.getChildAt(i), value)) return true;
+        }
+        return false;
+    }
     private boolean described(View view, String value) {
         CharSequence description = view.getContentDescription();
         if (description != null && value.contentEquals(description)) return true;
@@ -87,6 +95,16 @@ public final class SmokeInstrumentation extends Instrumentation {
                 || !firstSession.equals(second.getJSONArray("events").getJSONObject(0).getString("session_id"))
                 || second.getJSONArray("events").getJSONObject(4).getInt("sequence") != 0)
                 throw new AssertionError("Multiple offline shifts lost session identity or order");
+            org.json.JSONObject selected = new org.json.JSONObject().put("project_id", java.util.UUID.randomUUID().toString())
+                .put("project_name", "Synthetic project").put("schedule_id", "");
+            Attendance.punchInWithProject(testContext, selected, null);
+            org.json.JSONObject withProject = SecureState.read(testContext);
+            org.json.JSONArray queued = withProject.getJSONArray("events");
+            if (queued.length() != 8 || !"punch_in".equals(queued.getJSONObject(6).getString("action"))
+                || !"select_project".equals(queued.getJSONObject(7).getString("action"))
+                || queued.getJSONObject(7).getInt("sequence") != 1
+                || !selected.getString("project_id").equals(withProject.getString("active_project_id")))
+                throw new AssertionError("Project and punch-in were not saved in one offline action");
             stage = "test-photo-queue";
             SecureState.mutate(testContext, state -> state.put("pending_photos", new org.json.JSONArray()));
             android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(12, 12, android.graphics.Bitmap.Config.ARGB_8888);
@@ -111,15 +129,31 @@ public final class SmokeInstrumentation extends Instrumentation {
             });
             activity = startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); waitForIdleSync(); Activity connected = activity;
             final boolean[] simple = {false}; runOnMainSync(() -> simple[0] = contains(connected.getWindow().getDecorView(), "Start work")
-                && contains(connected.getWindow().getDecorView(), "Punch in") && described(connected.getWindow().getDecorView(), "Notifications and sync status")
+                && containsPrefix(connected.getWindow().getDecorView(), "Scheduled: Synthetic project · ")
+                && !contains(connected.getWindow().getDecorView(), "Punch in")
+                && described(connected.getWindow().getDecorView(), "Notifications and sync status")
                 && described(connected.getWindow().getDecorView(), "Profile and sign out") && !contains(connected.getWindow().getDecorView(), "Sync now")
                 && !contains(connected.getWindow().getDecorView(), "Start break") && !contains(connected.getWindow().getDecorView(), "Attach visit photo"));
             if (!simple[0]) throw new AssertionError("Connected home is not the simplified project/punch workflow");
             final boolean[] pendingVisible = {false};
-            runOnMainSync(() -> pendingVisible[0] = contains(connected.getWindow().getDecorView(), "Attendance not yet confirmed by CRM. Open Notifications for sync details."));
+            runOnMainSync(() -> pendingVisible[0] = containsPrefix(connected.getWindow().getDecorView(), "Attendance saved on this phone ·"));
             if (!pendingVisible[0]) throw new AssertionError("Pending attendance must be visible on the home screen");
+            if (pilotArguments != null && "true".equals(pilotArguments.getString("synthetic_screenshot"))) {
+                runOnMainSync(() -> {
+                    try {
+                        View view = connected.getWindow().getDecorView();
+                        android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(view.getWidth(), view.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+                        view.draw(new android.graphics.Canvas(frame));
+                        try (java.io.FileOutputStream output = new java.io.FileOutputStream(
+                            new java.io.File(getTargetContext().getFilesDir(), "field-sales-project-card-smoke.png"))) {
+                            frame.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output);
+                        }
+                        frame.recycle();
+                    } catch (Exception failure) { throw new IllegalStateException("Synthetic screenshot failed", failure); }
+                });
+            }
             SecureState.clear(getTargetContext());
-            result.putString("stream", "PASS: connection screen; simplified connected project/Punch In home; notification/profile controls; off-duty GPS; Android Keystore round trip; no plaintext preferences; offline attendance retained. Isolated synthetic records only; no credentials or GPS collected.\n");
+            result.putString("stream", "PASS: connection screen; project-first connected home; notification/profile controls; off-duty GPS; Android Keystore round trip; no plaintext preferences; offline attendance and project choice retained. Isolated synthetic records only; no credentials or GPS collected.\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable failure) {
             result.putString("stream", "FAIL: " + stage + " (" + failure.getClass().getSimpleName() + "). No sensitive data printed.\n");

@@ -103,12 +103,13 @@ public final class TrackingService extends Service implements LocationListener {
             if (!locationEnabled()) throw new IllegalStateException("Turn on phone location to resume tracking.");
             running = true;
             requestUpdates();
+            SecureState.mutate(this, current -> current.remove("tracking_error"));
             handler.removeCallbacks(cutoff);
             handler.postDelayed(cutoff, Math.max(0, state.optLong("session_start_ms") + Attendance.MAX_SHIFT_MS - System.currentTimeMillis()));
             handler.removeCallbacks(sync); handler.post(sync);
         } catch (Exception error) {
             running = false;
-            try { SecureState.mutate(this, state -> state.put("sync_error", "Tracking stopped. Check location permissions and phone settings, then resume in the app.")); } catch (Exception ignored) { }
+            try { SecureState.mutate(this, state -> state.put("tracking_error", "Tracking stopped. Check location permissions and phone settings, then resume in the app.")); } catch (Exception ignored) { }
             stopSelf();
         }
         return running ? START_STICKY : START_NOT_STICKY;
@@ -138,7 +139,11 @@ public final class TrackingService extends Service implements LocationListener {
                     .addOnFailureListener(error -> {
                         fusedActive = false;
                         try { if (running && mayCollect(SecureState.read(this))) requestPlatformUpdates(interval); }
-                        catch (Exception ignored) { stopSelf(); }
+                        catch (Exception ignored) {
+                            try { SecureState.mutate(this, state -> state.put("tracking_error", "GPS providers unavailable. Check phone location and resume tracking.")); }
+                            catch (Exception storageError) { /* Preserve existing encrypted records. */ }
+                            stopSelf();
+                        }
                     });
                 fusedActive = true;
                 return;
@@ -155,7 +160,7 @@ public final class TrackingService extends Service implements LocationListener {
             if (locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
                 locations.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, interval, 0f, this);
         } catch (SecurityException denied) {
-            try { SecureState.mutate(this, state -> state.put("sync_error", "Location permission changed. Open the app to restore precise access.")); } catch (Exception ignored) { }
+            try { SecureState.mutate(this, state -> state.put("tracking_error", "Location permission changed. Open the app to restore precise access.")); } catch (Exception ignored) { }
             stopSelf();
         }
     }
@@ -164,7 +169,7 @@ public final class TrackingService extends Service implements LocationListener {
         pausedForSettings = true;
         if (fused != null && fusedCallback != null) fused.removeLocationUpdates(fusedCallback);
         if (locations != null) locations.removeUpdates(this);
-        try { SecureState.mutate(this, state -> state.put("sync_error", "Phone location is off. Enable it to resume the current work session.")); }
+        try { SecureState.mutate(this, state -> state.put("tracking_error", "Phone location is off. Enable it to resume the current work session.")); }
         catch (Exception ignored) { }
     }
     @Override public void onLocationChanged(Location location) {
@@ -212,7 +217,7 @@ public final class TrackingService extends Service implements LocationListener {
                 stationary = nextStationary; queuePressure = pressure[0]; requestUpdates();
             }
         } catch (Exception failure) {
-            try { SecureState.mutate(this, state -> state.put("sync_error", "Location storage unavailable or full. Sync and resume tracking.")); } catch (Exception ignored) { }
+            try { SecureState.mutate(this, state -> state.put("tracking_error", "Location storage unavailable or full. Sync and resume tracking.")); } catch (Exception ignored) { }
             stopSelf();
         }
     }
@@ -223,7 +228,8 @@ public final class TrackingService extends Service implements LocationListener {
     }
     @Override public void onProviderEnabled(String provider) {
         if (!pausedForSettings || !running) return;
-        try { if (mayCollect(SecureState.read(this))) { pausedForSettings = false; requestUpdates(); } }
+        try { if (mayCollect(SecureState.read(this))) { pausedForSettings = false; requestUpdates();
+            SecureState.mutate(this, state -> state.remove("tracking_error")); } }
         catch (Exception ignored) { stopSelf(); }
     }
     @Override public void onStatusChanged(String provider, int status, Bundle extras) {}

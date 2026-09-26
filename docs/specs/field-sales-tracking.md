@@ -32,6 +32,22 @@ clearer satellite view; the map must not snap a fix to a shop or building withou
 - The speech sidecar is optional and private. If absent or unavailable, the app continues by
   touch. Its container image must be published by CI before any production enablement.
 
+## Android project-first and status revision — 2026-09-26
+
+- An off-duty officer taps an assigned project card, reviews the existing tracking notice,
+  and confirms once. Android persists `punch_in` and `select_project` in one encrypted local
+  mutation, then uploads them in sequence through the existing idempotent attendance API.
+  The backend session and project IDs are unchanged; no separate start button is presented.
+- Pending attendance is a neutral saved-on-phone status during normal upload. Only an actual
+  sync failure becomes an attention warning. A successful server acknowledgment records the
+  last confirmed punch action and time. GPS failures are tracked separately from sync errors.
+- The connected app requests location permission at first open and permits an explicit retry.
+  Approximate-only access remains visible. On Android 13+, the notification prompt is separate
+  and denial does not block the foreground location service. Android cannot grant runtime
+  permission during APK installation.
+- This revision describes the Android source and test contract; it does not assert that a
+  physical device has received the APK or that live phone tracking was verified.
+
 ## Flexible shift revision — 2026-09-21
 
 - A weekly project assignment may omit both start and end time. An omitted start date means

@@ -33,10 +33,14 @@ It intentionally refuses to run against an already-connected employee installati
    with its own HTTPS origin. The server stores only HMAC(code) until exchange, then replaces
    it with the hash of a random 256-bit, revocable device bearer. Android stores that bearer,
    cache and pending queue encrypted with Android Keystore. A six-digit code is never a bearer.
-4. Sync the organization policy, accept the displayed tracking notice and punch in. Working
-   time and GPS start immediately. Today's scheduled project is suggested afterward, but the
-   employee may choose another active project in the same organization. The override is audited.
-   Precise location and visible notification permissions are requested explicitly.
+4. Sync the organization policy, tap an assigned project card, review the tracking notice and
+   confirm to start. The punch-in and project choice enter the encrypted offline queue together;
+   the server confirms them in order. Today's scheduled projects appear first, followed by other
+   assigned projects. The employee may change project during a shift; the override is audited.
+   Android requests precise/coarse location when the connected app first opens (or again when
+   the employee retries). Notification permission is requested separately on Android 13+;
+   declining it does not block the location foreground service, though its notification may be
+   absent from the notification drawer. The app explains approximate-only access.
    While on duty, the visible foreground service requests fused high-accuracy updates on
    compatible devices, with Android satellite/network providers as fallback. The organization
    can set a 2–5 second moving request and a slower stationary request; Android may deliver
@@ -50,7 +54,10 @@ It intentionally refuses to run against an already-connected employee installati
    A delayed sync response cannot replace attendance changed while the request was in flight.
    Repeated punch-out events remain audited and ordered without moving the original stop time.
    A confirmed closed session stops local tracking; pending records remain encrypted for sync.
-   Pending attendance is shown on the home screen as not yet confirmed by the CRM.
+   Pending attendance is labelled as safely saved on the phone and syncing. A real sync error is
+   shown separately; after server acknowledgment the home displays the last confirmed punch
+   action and time. GPS startup/permission errors have their own status and cannot masquerade
+   as attendance sync failures. The app never claims CRM confirmation before acknowledgment.
 6. The paired device remains connected until employee sign-out or administrator revocation.
    Revocation is revalidated inside server transactions.
 
@@ -89,8 +96,8 @@ sequence when a re-paired phone's local counter overlaps an existing shift.
 
 ## Connected home and sign-out
 
-The connected home deliberately contains only today's assigned-project selector, Punch In and
-Punch Out. Sync and GPS retry remain automatic. A notification icon shows last sync and pending
+The connected home offers assigned project cards that open one confirm-and-start action, then
+Punch Out while working. Sync and GPS retry remain automatic. A notification icon shows last sync and pending
 attendance/GPS counts without coordinates. Profile shows the employee and organization time zone.
 Sign-out is refused while working or while any queue is pending. The app revokes its device token
 on the CRM before deleting Android Keystore-backed local state; a failed revocation leaves the

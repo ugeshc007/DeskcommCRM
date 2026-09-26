@@ -142,7 +142,14 @@ public final class SyncEngine {
                     request(state, "POST", "", new JSONObject().put("operation", "attendance").put("command", event));
                     String id = event.getString("event_id");
                     SecureState.mutate(context, current -> { JSONArray pending = current.getJSONArray("events");
-                        if (pending.length() > 0 && id.equals(pending.getJSONObject(0).getString("event_id"))) pending.remove(0); });
+                        if (pending.length() > 0 && id.equals(pending.getJSONObject(0).getString("event_id"))) {
+                            pending.remove(0);
+                            if (pending.length() == 0) current.remove("attendance_sync_error");
+                            String action = event.optString("action");
+                            if ("punch_in".equals(action) || "punch_out".equals(action)) current
+                                .put("last_attendance_action", action)
+                                .put("last_attendance_confirmed_at", java.time.Instant.now().toString());
+                        } });
                 }
                 state = SecureState.read(context);
                 if (state.getJSONArray("events").length() > 0) throw new IllegalStateException("Attendance sync is still pending.");
@@ -266,14 +273,21 @@ public final class SyncEngine {
                     context.stopService(new Intent(context, TrackingService.class));
                 if (policy == null || !policy.optBoolean("enabled")) {
                     context.stopService(new Intent(context, TrackingService.class));
-                    SecureState.mutate(context, current -> current.put("sync_error", "Tracking is disabled by your organization. Punch out to close the session."));
+                    SecureState.mutate(context, current -> current.put("tracking_error", "Tracking is disabled by your organization. Punch out to close the session."));
                 }
             } catch (SecurityException denied) {
                 context.stopService(new Intent(context, TrackingService.class));
-                try { SecureState.mutate(context, current -> { current.put("access_denied", true); current.put("sync_error", denied.getMessage()); }); } catch (Exception ignored) { }
+                try { SecureState.mutate(context, current -> {
+                    current.put("access_denied", true).put("sync_error", denied.getMessage());
+                    if (current.getJSONArray("events").length() > 0) current.put("attendance_sync_error", denied.getMessage());
+                }); } catch (Exception ignored) { }
             } catch (Exception failure) {
                 // No credentials, GPS payloads or server response bodies in logs or crash reports.
-                try { SecureState.mutate(context, current -> current.put("sync_error", failure instanceof IllegalStateException ? failure.getMessage() : "Offline or server unavailable. Pending records are retained.")); } catch (Exception ignored) { }
+                try { SecureState.mutate(context, current -> {
+                    String issue = failure instanceof IllegalStateException ? failure.getMessage() : "Offline or server unavailable. Pending records are retained.";
+                    current.put("sync_error", issue);
+                    if (current.getJSONArray("events").length() > 0) current.put("attendance_sync_error", issue);
+                }); } catch (Exception ignored) { }
             } finally {
                 boolean again; ArrayList<Runnable> callbacks;
                 synchronized (SyncEngine.class) {

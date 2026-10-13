@@ -23,6 +23,10 @@ repository, GitHub checks and the running installation before any release claim.
   15 seconds while the Projects tab is open. This describes source behavior in this worktree,
   not a deployed version. The map still loads a selected officer's path rather than overlaying
   every officer's full day at once.
+- The optional field-voice image pins Transformers 4.48.3 in its build-only Kokoro prompt stage;
+  Kokoro's unbounded dependency resolved to Transformers 5.19.0 in CI, which could not import
+  AlbertModel with the stage's Torch 2.5.1. This image-build correction does not replace the
+  running voice sidecar during the app-only CT102 release.
 - Historical operational report from the prior task: CT102 web app was released from commit
   `31f7f05455eafb579ff750cfb255c842e438b745` after its full GitHub test gate. This Android
   revision has **not** been installed on a physical phone or deployed by that fact. Verify the

@@ -2,7 +2,8 @@
 FROM python:3.11-slim AS prompt
 RUN apt-get update && apt-get install -y --no-install-recommends git espeak-ng libsndfile1 && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-RUN pip install --no-cache-dir "git+https://github.com/hexgrad/kokoro.git@dfb907a02bba8152ca444717ca5d78747ccb4bec" soundfile==0.13.1
+# Kokoro 0.9.4 leaves Transformers unbounded; 5.x requires a newer Torch API.
+RUN pip install --no-cache-dir "git+https://github.com/hexgrad/kokoro.git@dfb907a02bba8152ca444717ca5d78747ccb4bec" soundfile==0.13.1 transformers==4.48.3
 COPY generate_prompt.py /opt/field-voice/generate_prompt.py
 RUN python /opt/field-voice/generate_prompt.py /opt/field-voice/where-going.wav 'Which shop are we going to now?'
 RUN python /opt/field-voice/generate_prompt.py /opt/field-voice/next-shop.wav 'Which shop are we going to next?'

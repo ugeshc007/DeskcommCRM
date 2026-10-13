@@ -245,8 +245,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   // The administrator's dedicated map uses real scoped GPS rows and an independent date selector.
   const liveSession = randomUUID(), start = new Date(Date.now() - 120000);
   const day = `${part('year')}-${part('month')}-${part('day')}`;
-  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,status,punched_in_at,last_event_at)
-    values($1,$2,$3,'working',$4,$4)`, [org, liveSession, employee, start]);
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,status,punched_in_at,last_event_at)
+    values($1,$2,$3,$4,'working',$5,$5)`, [org, liveSession, employee, project, start]);
   await page.goto('/app/field-sales');
   await page.getByLabel('Week of').fill('2027-01-04');
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();
@@ -288,6 +288,12 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(officerCard.getByText('On duty', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('Punched in')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-team-presence-desktop.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Projects', exact: true }).click();
+  const staffedProject = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Synthetic showroom', exact: true }) });
+  await expect(staffedProject.getByText('Working now · 1')).toBeVisible();
+  await expect(staffedProject.getByText('Working now · 1').locator('..').getByText('Synthetic salesperson')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('project-working-officer.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Attendance' })).toHaveAttribute('data-state', 'active');
   await expect(page.getByRole('region', { name: 'Daily field officer attendance' }).getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
@@ -304,6 +310,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
   await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
+  await expect(routeDialog.getByLabel('Route color for Synthetic salesperson')).toBeVisible();
   await expect(page.getByRole('heading', { name: `Activity notes · ${day}` })).toBeVisible();
   await expect(page.getByText('Going to Synthetic showroom', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Synthetic visited shop', exact: true })).toBeVisible();

@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-09-26. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-14. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -17,6 +17,12 @@ repository, GitHub checks and the running installation before any release claim.
   actions, and GPS start errors. Runtime location permission is requested on connected open;
   notification permission is separate and non-blocking. This source revision is Android
   `0.1.2-pilot` (code 3); the version number alone is not evidence of installation.
+- The Field Sales route map colors the selected recorded path, isolated fixes, accuracy area,
+  and reliable live pin by officer, with a labeled route swatch. The Project cards list active
+  assignments and officers with an open session on that project; attendance refreshes every
+  15 seconds while the Projects tab is open. This describes source behavior in this worktree,
+  not a deployed version. The map still loads a selected officer's path rather than overlaying
+  every officer's full day at once.
 - Historical operational report from the prior task: CT102 web app was released from commit
   `31f7f05455eafb579ff750cfb255c842e438b745` after its full GitHub test gate. This Android
   revision has **not** been installed on a physical phone or deployed by that fact. Verify the

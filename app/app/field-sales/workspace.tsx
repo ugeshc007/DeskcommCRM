@@ -16,6 +16,7 @@ import { addCalendarDays, mondayOfWeek } from '@/lib/field-sales/schedule';
 import { FieldOperations, type ShopCollection } from './operations';
 import { FieldLiveView } from './live/view';
 import { AttendanceView } from './attendance-view';
+import { ProjectStaff } from './project-staff';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
 
@@ -34,7 +35,7 @@ type CalendarData = { installed: boolean; role?: 'field_officer' | 'agent' | 'ma
   overlaps?: Array<[string, string]>; warnings?: Array<{ schedule_id: string; reason: string }> };
 type Member = { user_id: string; full_name: string | null; role: string };
 type TeamPresence = { generated_at: string; region: { timezone: string }; latest: Array<{ employee_id: string; status: string | null; captured_at: string | null; latitude: number | null; longitude: number | null; online: boolean; last_seen_at: string | null }>;
-  sessions: Array<{ employee_id: string; punched_in_at: string; punched_out_at: string | null }>;
+  sessions: Array<{ employee_id: string; project_id: string | null; punched_in_at: string; punched_out_at: string | null }>;
   collections: ShopCollection[] };
 const selectClass = 'h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm';
 
@@ -86,7 +87,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const teamDate = timezone ? dateInZone(new Date(), timezone) : start;
   const teamPresence = useQuery({ queryKey: ['field-sales-team-presence', organizationId, userId, teamDate],
     queryFn: () => readJson<TeamPresence>(`/api/v1/field-sales/operations?date=${teamDate}`),
-    enabled: data?.installed === true && activeTab === 'team', refetchInterval: 15000, gcTime: 0 });
+    enabled: data?.installed === true && (activeTab === 'team' || activeTab === 'projects'), refetchInterval: 15000, gcTime: 0 });
   const customerRoster = useQuery({ queryKey: ['field-sales-customers', organizationId, customerProjectId],
     queryFn: () => readJson<Array<{ id: string; customer_code: string; shop_name: string; address: string; balance_cents: string | null; currency: string; revision: number }>>(`/api/v1/field-sales/customers?project_id=${customerProjectId}`),
     enabled: dialog === 'customers' && Boolean(customerProjectId), gcTime: 0 });
@@ -232,6 +233,8 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <TabsContent value="projects" className="space-y-4">{administrator && <Button variant="outline" onClick={() => setDialog('project')}><Plus aria-hidden/>New project</Button>}
           {!projects.length && <p className="rounded-xl border p-6">No projects yet. Add a project and its site, then assign a calendar visit.</p>}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{projects.map(p => <article key={p.id} className="rounded-xl border p-5"><h2 className="font-semibold">{p.name}</h2><p>{p.site_name}</p><p className="text-sm text-muted-foreground">{p.active ? 'Active' : 'Archived'}</p>
+            <ProjectStaff projectId={p.id} employees={people} assignments={data.assignments ?? []} sessions={teamPresence.data?.sessions ?? []}
+              date={teamDate} loading={teamPresence.isPending} error={Boolean(teamPresence.error)}/>
             {manager && <Button className="mt-3" variant="outline" onClick={() => { setError(''); setCustomerProjectId(p.id); setDialog('customers'); }}>Manage shops and due</Button>}</article>)}</div>
         </TabsContent>
         <TabsContent value="team" className="space-y-4">{administrator && <Button variant="outline" onClick={() => setDialog('employee')}><Plus aria-hidden/>Enroll salesperson</Button>}

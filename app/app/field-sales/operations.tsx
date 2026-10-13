@@ -12,6 +12,7 @@ import { localParts, wallTimeToUtc } from '@/lib/field-sales/schedule';
 import { VisitPhotos } from './visit-photos';
 import { fieldMapStyle } from '@/lib/field-sales/map-style';
 import { accuracyRing, displayRoute, livePosition, type RouteQualityConfig } from '@/lib/field-sales/route-quality';
+import { routeColor } from '@/lib/field-sales/route-colors';
 import { OfficerCards } from './officer-cards';
 
 type Position = { employee_id: string; display_name: string; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; quality_flags?: string[] | null; speed_m_s?: number | null; last_reported_at: string | null; last_reported_accuracy_m: number | null; online: boolean; last_seen_at: string | null };
@@ -33,6 +34,9 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
   const lastMarkerPositions = useRef(new Map<string, [number, number]>());
   const latest = useRef(data), selectEmployee = useRef(onSelectEmployee), selection = useRef(selectedEmployeeId), day = useRef(routeDate), fittedSelection = useRef('');
   const [problem, setProblem] = useState(''), [mapReady, setMapReady] = useState(false);
+  const routeEmployeeId = selectedEmployeeId || data.sessions.find(session => session.id === data.points[0]?.session_id)?.employee_id || '';
+  const routePerson = data.latest.find(person => person.employee_id === routeEmployeeId);
+  const color = routeColor(routeEmployeeId, data.latest.map(person => person.employee_id));
   useEffect(() => { latest.current = data; selectEmployee.current = onSelectEmployee; selection.current = selectedEmployeeId; day.current = routeDate; }, [data, onSelectEmployee, selectedEmployeeId, routeDate]);
   useEffect(() => {
     const positionCache = lastMarkerPositions.current;
@@ -65,6 +69,9 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
       const draw = () => {
         if (!instance.isStyleLoaded()) return;
         const current = latest.current;
+        const employeeIds = current.latest.map(person => person.employee_id);
+        const currentRouteEmployeeId = selection.current || current.sessions.find(session => session.id === current.points[0]?.session_id)?.employee_id || '';
+        const currentRouteColor = routeColor(currentRouteEmployeeId, employeeIds);
         const nextMarkerSignature = JSON.stringify([selection.current, current.latest.map(p => [p.employee_id, p.display_name, p.latitude, p.longitude, p.accuracy_m, p.mock_location, p.quality_flags, p.captured_at, p.last_reported_at, livePosition(p, current.generated_at, current.quality)]),
           current.collections.filter(c => c.employee_id === selection.current).map(c => [c.id,c.latitude,c.longitude])]);
         if (markerSignature !== nextMarkerSignature) {
@@ -76,7 +83,7 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
               && Date.parse(position.last_reported_at) > Date.parse(position.captured_at);
             const destination: [number, number] = [position.longitude!, position.latitude!];
             const previous = positionCache.get(position.employee_id);
-            const marker = new lib.Marker({ color: position.employee_id === selection.current ? '#2563eb' : newerImpreciseFix ? '#d97706' : '#166534' })
+            const marker = new lib.Marker({ color: newerImpreciseFix ? '#d97706' : routeColor(position.employee_id, employeeIds) })
               .setLngLat(previous ?? destination).addTo(instance);
             marker.getElement().style.transition = 'transform 700ms linear';
             if (previous) window.requestAnimationFrame(() => { if (!closed) marker.setLngLat(destination); });
@@ -122,20 +129,24 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
         if (accuracySource) accuracySource.setData(accuracyArea);
         else { instance.addSource('position-accuracy', { type: 'geojson', data: accuracyArea });
           instance.addLayer({ id: 'position-accuracy-area', type: 'fill', source: 'position-accuracy',
-            paint: { 'fill-color': '#2563eb', 'fill-opacity': 0.12 } });
+            paint: { 'fill-color': currentRouteColor, 'fill-opacity': 0.12 } });
           instance.addLayer({ id: 'position-accuracy-edge', type: 'line', source: 'position-accuracy',
-            paint: { 'line-color': '#2563eb', 'line-opacity': 0.65, 'line-width': 1 } }); }
+            paint: { 'line-color': currentRouteColor, 'line-opacity': 0.65, 'line-width': 1 } }); }
+        if (instance.getLayer('position-accuracy-area')) instance.setPaintProperty('position-accuracy-area', 'fill-color', currentRouteColor);
+        if (instance.getLayer('position-accuracy-edge')) instance.setPaintProperty('position-accuracy-edge', 'line-color', currentRouteColor);
         const route = { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'MultiLineString' as const, coordinates: lines } }] };
         const source = instance.getSource('route') as GeoJSONSource | undefined;
         if (source) source.setData(route);
-        else { instance.addSource('route', { type: 'geojson', data: route }); instance.addLayer({ id: 'recorded-route', type: 'line', source: 'route', paint: { 'line-color': '#2563eb', 'line-width': 4 } }); }
+        else { instance.addSource('route', { type: 'geojson', data: route }); instance.addLayer({ id: 'recorded-route', type: 'line', source: 'route', paint: { 'line-color': currentRouteColor, 'line-width': 4 } }); }
+        if (instance.getLayer('recorded-route')) instance.setPaintProperty('recorded-route', 'line-color', currentRouteColor);
         // Isolated fixes remain visible without inventing a path across missing GPS.
         const samples = { type: 'FeatureCollection' as const, features: plotted.map(point => ({ type: 'Feature' as const,
           properties: {}, geometry: { type: 'Point' as const, coordinates: [point.longitude, point.latitude] } })) };
         const sampleSource = instance.getSource('route-samples') as GeoJSONSource | undefined;
         if (sampleSource) sampleSource.setData(samples);
         else { instance.addSource('route-samples', { type: 'geojson', data: samples }); instance.addLayer({ id: 'recorded-route-samples', type: 'circle', source: 'route-samples',
-          paint: { 'circle-radius': 4, 'circle-color': '#2563eb', 'circle-stroke-width': 1, 'circle-stroke-color': '#ffffff' } }); }
+          paint: { 'circle-radius': 4, 'circle-color': currentRouteColor, 'circle-stroke-width': 1, 'circle-stroke-color': '#ffffff' } }); }
+        if (instance.getLayer('recorded-route-samples')) instance.setPaintProperty('recorded-route-samples', 'circle-color', currentRouteColor);
         const selectionKey = `${selection.current}:${day.current}`;
         if (selection.current && fittedSelection.current !== selectionKey && plotted.length) {
           const bounds = new lib.LngLatBounds(); plotted.forEach(point => bounds.extend([point.longitude, point.latitude]));
@@ -164,8 +175,12 @@ export function RouteMap({ data, selectedEmployeeId, onSelectEmployee, routeDate
     {problem && <p role="alert">{problem}</p>}
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
     <div ref={container} data-map-ready={mapReady} className="h-[420px] overflow-hidden rounded-xl border" aria-label="Recorded employee positions and selected work route"/>
+    {routePerson && <p className="flex items-center gap-2 text-sm" aria-label={`Route color for ${routePerson.display_name}`}>
+      <span aria-hidden className="inline-block h-1 w-7 rounded-full" style={{ backgroundColor: color }}/>
+      {routePerson.display_name} · recorded route
+    </p>}
     {data.map?.map_tile_path && <p className="text-xs text-muted-foreground">{data.map.map_attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></p>}
-    <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Orange means a newer GPS report was too imprecise or untrusted. Older positions remain in officer cards and recorded routes, without appearing as current pins. Blue lines require precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
+    <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Amber pins mean a newer GPS report was too imprecise or untrusted. Older positions remain in officer cards and recorded routes, without appearing as current pins. Each officer’s colored route requires precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>
   </section>;
 }
 

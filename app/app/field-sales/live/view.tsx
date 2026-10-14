@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { RouteMap, type Operations, type ShopCollection } from '../operations';
 import { displayRoute } from '@/lib/field-sales/route-quality';
 import { OfficerCards } from '../officer-cards';
+import { OfficerLayoutToggle, type OfficerLayout } from '../officer-layout-toggle';
 
 function localDate(instant: string, timezone: string) {
   const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(instant));
@@ -22,6 +23,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
   const [employeeId, setEmployeeId] = useState(initialEmployeeId ?? '');
   const [voiding, setVoiding] = useState<ShopCollection | null>(null);
   const [voidBusy, setVoidBusy] = useState(false), [voidError, setVoidError] = useState('');
+  const [visitLayout, setVisitLayout] = useState<OfficerLayout>('list');
   const dateTouched = useRef(Boolean(initialDate));
   const query = useQuery({
     queryKey: ['field-sales-live', organizationId, userId, date, employeeId],
@@ -120,18 +122,19 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         </article>)}
       </section>}
       {employeeId && <section className="space-y-3" aria-label="Officer shop visits and collections">
-        <h2 className="text-lg font-semibold">Shop visits and collections · {date}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold">Shop visits and collections · {date}</h2>
+          <OfficerLayoutToggle label="Visit display" layout={visitLayout} onChange={setVisitLayout}/></div>
         <p className="text-sm text-muted-foreground">Recorded payments are money already received, not online charges. A negative remaining balance is advance credit. Shop pins appear only when a nearby, accurate GPS fix is available within the location-retention period.</p>
         {!selectedCollections.length && <p className="rounded-xl border p-4 text-sm">No shop visit or collection recorded for this officer on this date.</p>}
-        <div className="grid gap-3 md:grid-cols-2">{selectedCollections.map(item => <article key={item.id} className={`rounded-xl border bg-card p-4 ${item.voided_at ? 'opacity-70' : ''}`}>
-          <h3 className="font-semibold">{item.shop_name}</h3>
-          <p className="text-sm text-muted-foreground">{item.project_name} · {time(item.captured_at)}</p>
-          <p className="mt-2 text-sm">{item.amount_cents === null ? 'Shop visit · no amount entered' : `Received: ${money(item.amount_cents, item.currency)}`}</p>
-          {item.voided_at ? <p className="text-sm text-destructive">Voided {time(item.voided_at)} · {item.void_reason}</p>
-            : <p className="text-sm">{item.balance_after_cents === null ? 'Due not specified' : Number(item.balance_after_cents) < 0 ? `Advance credit: ${money(item.balance_after_cents, item.currency)}` : `Due after visit: ${money(item.balance_after_cents, item.currency)}`}</p>}
-          <p className="mt-1 text-xs text-muted-foreground">{item.latitude === null ? 'No reliable shop map pin for this visit' : `Shop pin · accuracy ±${Math.round(item.accuracy_m ?? 0)} m`}</p>
+        <div data-layout={visitLayout} className={visitLayout === 'grid' ? 'grid gap-3 md:grid-cols-2' : 'divide-y rounded-lg border bg-card'}>{selectedCollections.map(item => <article key={item.id} className={`${visitLayout === 'grid' ? 'rounded-xl border bg-card p-4' : 'grid gap-1 p-2 sm:grid-cols-[minmax(10rem,1.2fr)_minmax(10rem,1fr)_minmax(9rem,1fr)_auto] sm:items-center sm:gap-3'} ${item.voided_at ? 'opacity-70' : ''}`}>
+          <div><h3 className="font-semibold">{item.shop_name}</h3>
+            <p className="text-sm text-muted-foreground">{item.project_name} · {time(item.captured_at)}</p></div>
+          <div><p className="text-sm">{item.amount_cents === null ? 'Shop visit · no amount entered' : `Received: ${money(item.amount_cents, item.currency)}`}</p>
+            {item.voided_at ? <p className="text-sm text-destructive">Voided {time(item.voided_at)} · {item.void_reason}</p>
+              : <p className="text-sm">{item.balance_after_cents === null ? 'Due not specified' : Number(item.balance_after_cents) < 0 ? `Advance credit: ${money(item.balance_after_cents, item.currency)}` : `Due after visit: ${money(item.balance_after_cents, item.currency)}`}</p>}</div>
+          <p className="text-xs text-muted-foreground">{item.latitude === null ? 'No reliable shop map pin for this visit' : `Shop pin · accuracy ±${Math.round(item.accuracy_m ?? 0)} m`}</p>
           {!item.voided_at && item.employee_id !== userId && (data.role === 'admin' || data.role === 'manager') &&
-            <Button className="mt-2" variant="outline" onClick={() => { setVoidError(''); setVoiding(item); }}>Correct mistaken record</Button>}
+            <Button variant="outline" onClick={() => { setVoidError(''); setVoiding(item); }}>Correct mistaken record</Button>}
         </article>)}</div>
       </section>}
       <Dialog open={Boolean(voiding)} onOpenChange={open => { if (!open && !voidBusy) setVoiding(null); }}>

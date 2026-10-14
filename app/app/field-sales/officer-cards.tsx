@@ -18,14 +18,14 @@ export function OfficerCards({ people, timezone, date, generatedAt, quality, sel
   const onDuty = people.filter(person => person.status);
   const onlineOffDuty = people.filter(person => !person.status && person.online);
   const offDuty = people.filter(person => !person.status && !person.online);
-  const cards = (items: Operations['latest']) => <div data-layout={layout} className={layout === 'grid' ? 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'grid gap-3'}>{items.map(person => <article
-    key={person.employee_id} className={`rounded-xl border bg-card p-4 ${layout === 'list' ? 'md:grid md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] md:items-start md:gap-4' : ''} ${selectedEmployeeId === person.employee_id ? 'border-primary bg-primary/5' : ''}`}>
+  const cards = (items: Operations['latest']) => <div data-layout={layout} className={layout === 'grid' ? 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'divide-y rounded-lg border bg-card'}>{items.map(person => <article
+    key={person.employee_id} className={`${layout === 'list' ? 'grid gap-2 p-2 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] md:items-center md:gap-3' : 'rounded-xl border bg-card p-4'} ${selectedEmployeeId === person.employee_id ? 'bg-primary/5' : ''}`}>
     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3>
       <span className={`rounded-full px-2 py-1 text-xs font-medium ${person.status ? person.online ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900' : 'bg-muted text-muted-foreground'}`}>
         {person.status === 'on_break' ? person.online ? 'On duty · on break' : 'On break · App offline'
           : person.status ? person.online ? 'On duty · working' : 'Punch-in recorded · App offline' : 'Off duty'}
       </span></div>
-    <div><p className={`mt-2 text-sm ${layout === 'list' ? 'md:mt-0' : ''}`}>{person.online ? 'Online' : 'Offline'} · App last checked in: {time(person.last_seen_at)}</p>
+    <div><p className={`text-sm ${layout === 'grid' ? 'mt-2' : ''}`}>{person.online ? 'Online' : 'Offline'} · App last checked in: {time(person.last_seen_at)}</p>
     <p className="mt-1 text-sm font-medium">{!person.status ? 'Stopped' : !person.online ? 'Offline · signal lost'
       : !livePosition(person, generatedAt, quality) ? 'Weak or missing GPS signal'
         : typeof person.speed_m_s === 'number' && person.speed_m_s <= 1.5 ? 'Likely stationary · tracking' : 'Tracking'}
@@ -42,7 +42,7 @@ export function OfficerCards({ people, timezone, date, generatedAt, quality, sel
     {person.captured_at && person.last_reported_at && Date.parse(person.last_reported_at) > Date.parse(person.captured_at)
       && <p className="mt-1 text-sm text-amber-700">Newer GPS at {time(person.last_reported_at)} was too imprecise or untrusted; {livePosition(person, generatedAt, quality) ? 'pin shows the earlier reliable fix' : 'last known position uses the earlier reliable fix'}.</p>}
     </div>
-    <Button className={`mt-3 ${layout === 'list' ? 'md:mt-0' : ''}`} variant="outline" onClick={() => onSelect(person.employee_id)}>View route and visits</Button>
+    <Button className={layout === 'grid' ? 'mt-3' : ''} variant="outline" onClick={() => onSelect(person.employee_id)}>View route and visits</Button>
   </article>)}</div>;
   return <section className="space-y-3" aria-label="Officer duty status">
     <div className="flex flex-wrap items-start justify-between gap-3">

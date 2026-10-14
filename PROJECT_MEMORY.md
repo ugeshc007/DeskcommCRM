@@ -23,9 +23,10 @@ repository, GitHub checks and the running installation before any release claim.
   15 seconds while the Projects tab is open. This describes source behavior in this worktree,
   not a deployed version. The map still loads a selected officer's path rather than overlaying
   every officer's full day at once.
-- In this worktree's Live view, the existing self-hosted map appears before the officer cards.
-  The Live view, Team, and Attendance officer lists default to List and expose the same Grid/List
-  control. Changing layout does not change attendance records or GPS pins. The provider remains
+- In this worktree's Live view, the existing self-hosted map appears before the officer list.
+  The Live view, Team, and Attendance officer lists default to compact List rows and expose the
+  same Grid/List control. The route-and-visits preview also defaults its shop visits to compact
+  List rows, with Grid available. Changing layout does not change attendance records or GPS pins. The provider remains
   the configured self-hosted basemap; 2GIS is advice only and has not been integrated.
 - The optional field-voice image pins Transformers 4.48.3 in its build-only Kokoro prompt stage;
   Kokoro's unbounded dependency resolved to Transformers 5.19.0 in CI, which could not import

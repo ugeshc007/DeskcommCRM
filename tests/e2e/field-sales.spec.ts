@@ -336,6 +336,12 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByRole('heading', { name: `Activity notes · ${day}` })).toBeVisible();
   await expect(page.getByText('Going to Synthetic showroom', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Synthetic visited shop', exact: true })).toBeVisible();
+  const visits = routeDialog.getByRole('region', { name: 'Officer shop visits and collections' });
+  await expect(visits.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(visits.locator('[data-layout="list"]')).toBeVisible();
+  await visits.getByRole('button', { name: 'Grid' }).click();
+  await expect(visits.locator('[data-layout="grid"]')).toBeVisible();
+  await visits.getByRole('button', { name: 'List' }).click();
   await expect(page.getByText('Shop visit · no amount entered', { exact: true })).toBeVisible();
   await expect(page.getByText('Shop pin · accuracy ±12 m', { exact: true })).toBeVisible();
   if (process.env.FIELD_MAP_PILOT === 'true') await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 20000 });

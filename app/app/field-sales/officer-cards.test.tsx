@@ -8,6 +8,22 @@ const officer: Operations['latest'][number] = { employee_id: 'officer-a', displa
   latitude: null, longitude: null, captured_at: null, accuracy_m: null, mock_location: null, last_reported_at: null, last_reported_accuracy_m: null, online: true, last_seen_at: '2026-09-22T18:00:00Z' };
 
 describe('duty cards when GPS is missing', () => {
+  it('switches the same officers between grid and list without losing their route action', async () => {
+    const user = userEvent.setup(), select = vi.fn();
+    render(<OfficerCards people={[officer, { ...officer, employee_id: 'officer-b', display_name: 'Second officer' }]}
+      timezone="Asia/Dubai" date="2026-09-22" generatedAt="2026-09-22T18:02:00Z" selectedEmployeeId="" onSelect={select}/>);
+    const display = screen.getByRole('group', { name: 'Officer display' });
+    expect(within(display).getByRole('button', { name: 'Grid' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="grid"]')).toBeInTheDocument();
+    await user.click(within(display).getByRole('button', { name: 'List' }));
+    expect(within(display).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="list"]')).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'View route and visits' })[1]!);
+    expect(select).toHaveBeenCalledWith('officer-b');
+    await user.click(within(display).getByRole('button', { name: 'Grid' }));
+    expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="grid"]')).toBeInTheDocument();
+  });
+
   it('keeps a working officer visible and opens route history without requiring a map pin', async () => {
     const user = userEvent.setup(), select = vi.fn();
     render(<OfficerCards people={[officer]} timezone="Asia/Dubai" date="2026-09-22" generatedAt="2026-09-22T18:02:00Z" selectedEmployeeId="" onSelect={select}/>);

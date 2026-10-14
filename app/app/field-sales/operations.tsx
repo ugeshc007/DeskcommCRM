@@ -223,8 +223,8 @@ export function FieldOperations({ organizationId, userId, date, onOpenRoute }: {
     {data && <>
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-semibold">Daily attendance and visit report</h2><p className="text-sm text-muted-foreground">Includes breaks; not a payroll calculation. GPS coordinates and visit notes are excluded.</p></div><Button variant="outline" disabled={busy} onClick={() => void exportReport()}>Export daily CSV</Button></section>
       {employeeId && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"><p><strong>{data.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Selected salesperson'}</strong> · complete recorded route for {date}</p><Button variant="outline" onClick={() => setEmployeeId('')}>Show all live positions</Button></div>}
-      <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
       <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={onOpenRoute}/>
+      <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Attendance and route history</h2>
         <p className="text-sm text-muted-foreground">Session spans include breaks. Approved corrections are shown separately and never rewrite raw GPS or original punch records.</p>
         {(sessionId || employeeId) && <Button variant="outline" onClick={() => { setSessionId(''); setEmployeeId(''); }}>Return to current positions</Button>}

@@ -252,6 +252,15 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();
   await expect(page.getByLabel('Activity date')).toHaveValue(day);
   await expect(page.getByRole('heading', { name: 'On-duty officers · 1' })).toBeVisible();
+  const map = page.getByLabel('Recorded employee positions and selected work route');
+  const dutyCards = page.getByRole('region', { name: 'Officer duty status' });
+  await expect(map).toBeVisible();
+  expect(await map.evaluate(element => element.compareDocumentPosition(document.querySelector('[aria-label="Officer duty status"]')!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+  await dutyCards.getByRole('button', { name: 'List' }).click();
+  await expect(dutyCards.locator('[data-layout="list"]')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('field-live-map-first-list.png'), fullPage: true });
+  await dutyCards.getByRole('button', { name: 'Grid' }).click();
+  await expect(dutyCards.locator('[data-layout="grid"]')).toBeVisible();
   await expect(page.getByText(/waiting for the phone to send a GPS position/)).toBeVisible();
   await page.getByRole('button', { name: 'View route and visits', exact: true }).click();
   const emptyRoute = page.getByRole('dialog', { name: 'Route and visits', exact: true });

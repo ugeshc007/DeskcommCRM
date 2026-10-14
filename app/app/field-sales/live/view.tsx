@@ -94,14 +94,14 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
     {query.isPending && <p role="status">Loading field locations…</p>}
     {query.error && <p role="alert" className="rounded-lg border border-destructive p-3">{query.error.message}</p>}
     {data && <>
+      <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={setEmployeeId}/>
+      <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Amber pins mean a newer GPS report was too imprecise or untrusted. Officers without a recent reliable fix remain in the cards with their last known GPS time. The shaded circle shows reported uncertainty. Each officer’s colored path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{onDuty.length}</strong><p className="text-sm text-muted-foreground">On-duty officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{data.latest.length}</strong><p className="text-sm text-muted-foreground">Enrolled field officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{employeeId ? validPoints.length : '—'}</strong><p className="text-sm text-muted-foreground">Recorded GPS points for selected date</p></div>
       </div>
       {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={setEmployeeId}/>}
-      <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={setEmployeeId}/>
-      <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Amber pins mean a newer GPS report was too imprecise or untrusted. Officers without a recent reliable fix remain in the cards with their last known GPS time. The shaded circle shows reported uncertainty. Each officer’s colored path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · validated travel ${(plottedRoute.distance_m / 1000).toFixed(2)} km · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>

@@ -245,8 +245,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   // The administrator's dedicated map uses real scoped GPS rows and an independent date selector.
   const liveSession = randomUUID(), start = new Date(Date.now() - 120000);
   const day = `${part('year')}-${part('month')}-${part('day')}`;
-  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,status,punched_in_at,last_event_at)
-    values($1,$2,$3,$4,'working',$5,$5)`, [org, liveSession, employee, project, start]);
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,local_date,status,punched_in_at,last_event_at)
+    values($1,$2,$3,$4,$5::date,'working',$6,$6)`, [org, liveSession, employee, project, day, start]);
   await page.goto('/app/field-sales');
   await page.getByLabel('Week of').fill('2027-01-04');
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();

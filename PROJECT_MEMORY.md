@@ -24,8 +24,8 @@ repository, GitHub checks and the running installation before any release claim.
   not a deployed version. The map still loads a selected officer's path rather than overlaying
   every officer's full day at once.
 - In this worktree's Live view, the existing self-hosted map appears before the officer cards.
-  A Grid/List control changes the presentation of on-duty, connected-without-session, and
-  off-duty cards without changing which records or GPS pins are shown. The provider remains
+  The Live view, Team, and Attendance officer lists default to List and expose the same Grid/List
+  control. Changing layout does not change attendance records or GPS pins. The provider remains
   the configured self-hosted basemap; 2GIS is advice only and has not been integrated.
 - The optional field-voice image pins Transformers 4.48.3 in its build-only Kokoro prompt stage;
   Kokoro's unbounded dependency resolved to Transformers 5.19.0 in CI, which could not import
@@ -33,8 +33,8 @@ repository, GitHub checks and the running installation before any release claim.
   running voice sidecar during the app-only CT102 release.
 - The Android emulator CI job enables KVM access on Ubuntu before creating its API 35 AVD;
   the earlier runner lacked KVM permission and timed out booting before instrumented tests.
-- Historical operational report from the prior task: CT102 web app was released from commit
-  `31f7f05455eafb579ff750cfb255c842e438b745` after its full GitHub test gate. This Android
+- Historical operational report checked on 2026-10-14: CT102 web app was released from commit
+  `3ae49bfa9eae7bd00eca6915eaace4a78d255397` after its full GitHub test gate. This Android
   revision has **not** been installed on a physical phone or deployed by that fact. Verify the
   current live image and device state before claiming either.
 - No customer bots or messages should be published/sent as part of Field Sales work. Live web

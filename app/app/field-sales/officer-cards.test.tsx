@@ -13,15 +13,15 @@ describe('duty cards when GPS is missing', () => {
     render(<OfficerCards people={[officer, { ...officer, employee_id: 'officer-b', display_name: 'Second officer' }]}
       timezone="Asia/Dubai" date="2026-09-22" generatedAt="2026-09-22T18:02:00Z" selectedEmployeeId="" onSelect={select}/>);
     const display = screen.getByRole('group', { name: 'Officer display' });
-    expect(within(display).getByRole('button', { name: 'Grid' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="grid"]')).toBeInTheDocument();
-    await user.click(within(display).getByRole('button', { name: 'List' }));
     expect(within(display).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="list"]')).toBeInTheDocument();
+    await user.click(within(display).getByRole('button', { name: 'Grid' }));
+    expect(within(display).getByRole('button', { name: 'Grid' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="grid"]')).toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'View route and visits' })[1]!);
     expect(select).toHaveBeenCalledWith('officer-b');
-    await user.click(within(display).getByRole('button', { name: 'Grid' }));
-    expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="grid"]')).toBeInTheDocument();
+    await user.click(within(display).getByRole('button', { name: 'List' }));
+    expect(screen.getByRole('region', { name: 'Officer duty status' }).querySelector('[data-layout="list"]')).toBeInTheDocument();
   });
 
   it('keeps a working officer visible and opens route history without requiring a map pin', async () => {

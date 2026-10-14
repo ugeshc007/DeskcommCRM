@@ -17,6 +17,7 @@ import { FieldOperations, type ShopCollection } from './operations';
 import { FieldLiveView } from './live/view';
 import { AttendanceView } from './attendance-view';
 import { ProjectStaff } from './project-staff';
+import { OfficerLayoutToggle, type OfficerLayout } from './officer-layout-toggle';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
 
@@ -72,6 +73,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('calendar');
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('all');
+  const [teamLayout, setTeamLayout] = useState<OfficerLayout>('list');
   const [activityDate, setActivityDate] = useState('');
   const [routeSelection, setRouteSelection] = useState<{ employeeId: string; date: string } | null>(null);
   const [editing, setEditing] = useState<Occurrence | null>(null);
@@ -240,29 +242,31 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <TabsContent value="team" className="space-y-4">{administrator && <Button variant="outline" onClick={() => setDialog('employee')}><Plus aria-hidden/>Enroll salesperson</Button>}
           <p className="text-sm text-muted-foreground">Enrollment does not start tracking. Staff must punch in from their authorized Android app.</p>
           <section className="space-y-3" aria-label="Field officer attendance">
-            <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
+              <OfficerLayoutToggle label="Team display" layout={teamLayout} onChange={setTeamLayout}/></div>
             {teamPresence.isPending && <p role="status">Loading team attendance…</p>}
             {teamPresence.error && <p role="alert">{teamPresence.error.message} <Button variant="outline" onClick={() => void teamPresence.refetch()}>Retry</Button></p>}
             {!people.length && <p className="rounded-xl border p-4">No field officers enrolled yet.</p>}
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{people.map(person => {
+            <div data-layout={teamLayout} className={teamLayout === 'grid' ? 'grid gap-3 md:grid-cols-2 xl:grid-cols-3' : 'grid gap-3'}>{people.map(person => {
               const position = teamPresence.data?.latest.find(item => item.employee_id === person.user_id);
               const sessions = teamPresence.data?.sessions.filter(item => item.employee_id === person.user_id) ?? [];
               const openSession = sessions.find(item => !item.punched_out_at);
               const lastSession = openSession ?? sessions[0];
               const latestShop = teamPresence.data?.collections.find(item => item.employee_id === person.user_id && !item.voided_at);
               const onDuty = person.active && Boolean(openSession && position?.status);
-              return <article className="rounded-xl border bg-card p-4" key={person.user_id}>
+              return <article className={`rounded-xl border bg-card p-4 ${teamLayout === 'list' ? 'lg:grid lg:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] lg:items-start lg:gap-4' : ''}`} key={person.user_id}>
                 <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3><div className="flex flex-wrap gap-1"><span className={`rounded-full px-2 py-1 text-xs font-medium ${position?.online ? 'bg-sky-100 text-sky-900' : 'bg-muted text-muted-foreground'}`}>{position?.online ? 'Online' : 'Offline'}</span><span className={`rounded-full px-2 py-1 text-xs font-medium ${onDuty ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>{!person.active ? 'Inactive' : onDuty ? position?.status === 'break' ? 'On duty · break' : 'On duty' : 'Off duty'}</span></div></div>
-                <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><div><dt className="text-muted-foreground">Punched in</dt><dd>{formatTime(lastSession?.punched_in_at)}</dd></div><div><dt className="text-muted-foreground">Punched out</dt><dd>{formatTime(lastSession?.punched_out_at)}</dd></div></dl>
+                <div><dl className={`mt-3 grid grid-cols-2 gap-2 text-sm ${teamLayout === 'list' ? 'lg:mt-0' : ''}`}><div><dt className="text-muted-foreground">Punched in</dt><dd>{formatTime(lastSession?.punched_in_at)}</dd></div><div><dt className="text-muted-foreground">Punched out</dt><dd>{formatTime(lastSession?.punched_out_at)}</dd></div></dl>
                 <p className="mt-3 text-xs text-muted-foreground">Last position: {position?.latitude !== null && position?.longitude !== null && position?.captured_at ? formatTime(position.captured_at) : 'Not reported'}</p>
                 <p className="mt-1 text-xs text-muted-foreground">App last checked in: {formatTime(position?.last_seen_at)}</p>
-                <p className="mt-2 text-sm">{latestShop ? `Latest shop: ${latestShop.shop_name} · ${formatTime(latestShop.captured_at)}${latestShop.amount_cents === null ? ' · visit only' : ` · received ${latestShop.currency} ${(Number(latestShop.amount_cents) / 100).toFixed(2)}`}` : 'No shop visits recorded today'}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <p className="mt-2 text-sm">{latestShop ? `Latest shop: ${latestShop.shop_name} · ${formatTime(latestShop.captured_at)}${latestShop.amount_cents === null ? ' · visit only' : ` · received ${latestShop.currency} ${(Number(latestShop.amount_cents) / 100).toFixed(2)}`}` : 'No shop visits recorded today'}</p></div>
+                <div className={`mt-3 ${teamLayout === 'list' ? 'lg:mt-0' : ''}`}><div className="flex flex-wrap gap-2">
                   {manager && <Button variant="outline" onClick={() => setRouteSelection({ employeeId: person.user_id, date: teamDate })}>View route and visits</Button>}
                   {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
                   <Button variant="outline" onClick={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</Button>
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>
+                </div>
               </article>;
             })}</div>
           </section>

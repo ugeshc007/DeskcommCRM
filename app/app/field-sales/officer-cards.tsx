@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { livePosition, type RouteQualityConfig } from '@/lib/field-sales/route-quality';
 import type { Operations } from './operations';
+import { OfficerLayoutToggle, type OfficerLayout } from './officer-layout-toggle';
 
 export function OfficerCards({ people, timezone, date, generatedAt, quality, selectedEmployeeId, onSelect }: {
   people: Operations['latest']; timezone: string; date: string; generatedAt: string; selectedEmployeeId: string;
   quality?: RouteQualityConfig;
   onSelect: (employeeId: string) => void;
 }) {
-  const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [layout, setLayout] = useState<OfficerLayout>('list');
   const time = (value: string | null) => value
     ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'Not reported';
   const age = (value: string | null) => value ? Math.max(0, Math.floor((Date.parse(generatedAt) - Date.parse(value)) / 60000)) : null;
@@ -46,10 +47,7 @@ export function OfficerCards({ people, timezone, date, generatedAt, quality, sel
   return <section className="space-y-3" aria-label="Officer duty status">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="text-lg font-semibold">On-duty officers · {onDuty.length}</h2><p className="text-sm text-muted-foreground">Current work status · route and visits for {date}</p></div>
-      <div role="group" aria-label="Officer display" className="inline-flex rounded-md border bg-background p-1">
-        <Button size="sm" variant={layout === 'grid' ? 'secondary' : 'ghost'} aria-pressed={layout === 'grid'} onClick={() => setLayout('grid')}>Grid</Button>
-        <Button size="sm" variant={layout === 'list' ? 'secondary' : 'ghost'} aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>List</Button>
-      </div>
+      <OfficerLayoutToggle label="Officer display" layout={layout} onChange={setLayout}/>
     </div>
     {onDuty.length ? cards(onDuty) : <p className="rounded-xl border p-4">No officers are on duty.</p>}
     {!!onlineOffDuty.length && <div className="space-y-3"><h3 className="font-semibold">Online · no active work session</h3>

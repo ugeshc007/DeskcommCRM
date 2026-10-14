@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { addCalendarDays } from '@/lib/field-sales/schedule';
+import { OfficerLayoutToggle, type OfficerLayout } from './officer-layout-toggle';
 
 type AttendanceRow = { employee_id: string; display_name: string; status: 'present' | 'leave' | 'absent' | 'pending' | 'inactive'; leave_conflict: boolean;
   leave_note: string | null; first_in_at: string | null; last_out_at: string | null; open: boolean;
@@ -24,6 +25,7 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
   const [busyId, setBusyId] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
   const [note, setNote] = useState('');
+  const [layout, setLayout] = useState<OfficerLayout>('list');
   const query = useQuery({ queryKey: ['field-attendance', organizationId, userId, date],
     queryFn: async () => {
       const response = await fetch(`/api/v1/field-sales/attendance?date=${encodeURIComponent(date)}`, { cache: 'no-store' });
@@ -48,8 +50,9 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
     finally { setBusyId(null); }
   }
   return <section className="space-y-4" aria-label="Daily field officer attendance">
-    <div><h2 className="text-lg font-semibold">Daily attendance</h2>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Daily attendance</h2>
       <p className="text-sm text-muted-foreground">Punch records determine attendance and working time. Each organization calendar day ends at midnight in {query.data?.timezone ?? 'the organization time zone'}. Unpunched past days are Absent unless approved leave is recorded.</p></div>
+      <OfficerLayoutToggle label="Attendance display" layout={layout} onChange={setLayout}/></div>
     <div className="flex flex-wrap items-end gap-3">
       <label className="grid gap-1 text-sm font-medium">Date<Input type="date" value={date} onChange={event => { if (event.target.value) setDate(event.target.value); }}/></label>
       <Button variant="outline" aria-label="Previous attendance day" onClick={() => setDate(addCalendarDays(date, -1))}>Previous</Button>
@@ -63,9 +66,9 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
     {query.error && <p role="alert">{query.error.message} <Button variant="outline" onClick={() => void query.refetch()}>Retry</Button></p>}
     {problem && <p role="alert">{problem}</p>}
     {manager && <label className="grid max-w-md gap-1 text-sm font-medium">Leave reason (optional)<Input value={note} maxLength={500} onChange={event => setNote(event.target.value)} placeholder="Approved leave note"/></label>}
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{rows.map(row => <article key={row.employee_id} className="rounded-xl border bg-card p-4">
+    <div data-layout={layout} className={layout === 'grid' ? 'grid gap-3 md:grid-cols-2 xl:grid-cols-3' : 'grid gap-3'}>{rows.map(row => <article key={row.employee_id} className={`rounded-xl border bg-card p-4 ${layout === 'list' ? 'lg:grid lg:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] lg:items-start lg:gap-4' : ''}`}>
       <div className="flex items-start justify-between gap-2"><h3 className="font-semibold">{row.display_name}</h3><span className={`rounded-full px-2 py-1 text-xs font-medium ${row.status === 'present' ? 'bg-emerald-100 text-emerald-900' : row.status === 'leave' ? 'bg-sky-100 text-sky-900' : 'bg-muted text-muted-foreground'}`}>{statusLabel[row.status]}</span></div>
-      <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+      <div><dl className={`mt-3 grid grid-cols-2 gap-2 text-sm ${layout === 'list' ? 'lg:mt-0' : ''}`}>
         <div><dt className="text-muted-foreground">First punch-in</dt><dd>{time(row.first_in_at)}</dd></div>
         <div><dt className="text-muted-foreground">Last punch-out</dt><dd>{row.open ? 'Still on duty' : time(row.last_out_at)}</dd></div>
         <div><dt className="text-muted-foreground">Working time</dt><dd>{duration(row.working_minutes)}{row.open ? ' so far' : ''}</dd></div>
@@ -75,6 +78,7 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       {row.leave_note && <p className="mt-2 text-sm">Leave: {row.leave_note}</p>}
       {row.leave_conflict && <p className="mt-2 text-sm text-amber-800" role="alert">Approved leave overlaps a recorded punch. Review this day.</p>}
       {row.gps_points > 0 && <p className="mt-2 text-xs text-muted-foreground">Distance is estimated from quality-filtered, sampled GPS. It may undercount travel.</p>}
+      </div>
       {manager && row.status !== 'inactive' && <div className="mt-3">
         {row.status === 'leave' ? <Button variant="outline" disabled={busyId !== null} onClick={() => void leave(row, 'revoke_leave')}>Remove leave</Button>
           : row.status !== 'present' && <Button variant="outline" disabled={busyId !== null} onClick={() => void leave(row, 'approve_leave')}>Approve leave</Button>}

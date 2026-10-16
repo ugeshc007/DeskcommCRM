@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RouteMap, type Operations, type ShopCollection } from '../operations';
 import { displayRoute } from '@/lib/field-sales/route-quality';
+import { routeColor } from '@/lib/field-sales/route-colors';
 import { OfficerCards } from '../officer-cards';
 import { OfficerLayoutToggle, type OfficerLayout } from '../officer-layout-toggle';
 
@@ -20,18 +21,20 @@ function localDate(instant: string, timezone: string) {
 
 export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate, embedded = false }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string; embedded?: boolean }) {
   const [date, setDate] = useState(() => initialDate ?? new Date().toISOString().slice(0, 10));
-  const [employeeId, setEmployeeId] = useState(initialEmployeeId ?? '');
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(initialEmployeeId ? [initialEmployeeId] : []);
+  const employeeId = selectedEmployeeIds.length === 1 ? selectedEmployeeIds[0]! : '';
   const [voiding, setVoiding] = useState<ShopCollection | null>(null);
   const [voidBusy, setVoidBusy] = useState(false), [voidError, setVoidError] = useState('');
   const [visitLayout, setVisitLayout] = useState<OfficerLayout>('list');
   const dateTouched = useRef(Boolean(initialDate));
   const query = useQuery({
-    queryKey: ['field-sales-live', organizationId, userId, date, employeeId],
+    queryKey: ['field-sales-live', organizationId, userId, date, selectedEmployeeIds],
     refetchInterval: 15000,
     gcTime: 0,
     queryFn: async (): Promise<Operations> => {
       const params = new URLSearchParams({ date });
-      if (employeeId) params.set('employee_id', employeeId);
+      if (selectedEmployeeIds.length === 1) params.set('employee_id', selectedEmployeeIds[0]!);
+      else selectedEmployeeIds.forEach(id => params.append('employee_ids', id));
       const response = await fetch(`/api/v1/field-sales/operations?${params}`, { cache: 'no-store' });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? 'Unable to load field locations.');
@@ -84,33 +87,53 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         <Input type="date" value={date} onChange={event => { if (event.target.value) { dateTouched.current = true; setDate(event.target.value); } }}/>
       </label>
       <Button variant="outline" onClick={() => setDate(today)}>Today</Button>
-      <label className="grid min-w-56 gap-2 text-sm font-medium">Field officer
-        <select className="h-10 rounded-md border bg-background px-3" value={employeeId} onChange={event => setEmployeeId(event.target.value)}>
-          <option value="">All current positions</option>
-          {data?.latest.map(person => <option value={person.employee_id} key={person.employee_id}>{person.display_name}</option>)}
-        </select>
-      </label>
+      <div className="grid min-w-56 gap-2 text-sm font-medium"><span>Field officers</span>
+        <details className="relative"><summary className="flex h-10 cursor-pointer items-center rounded-md border bg-background px-3">
+          {selectedEmployeeIds.length === 0 ? 'All current positions' : selectedEmployeeIds.length === 1
+            ? data?.latest.find(person => person.employee_id === selectedEmployeeIds[0])?.display_name ?? '1 officer'
+            : `${selectedEmployeeIds.length} officers selected`}
+        </summary><div className="absolute left-0 top-full z-[70] mt-1 max-h-72 w-72 overflow-y-auto rounded-md border bg-background p-2 shadow-lg">
+          <div className="mb-2 flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedEmployeeIds(data?.latest.map(person => person.employee_id) ?? [])}>All routes</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setSelectedEmployeeIds([])}>Positions only</Button></div>
+          {data?.latest.map(person => <label key={person.employee_id} className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 hover:bg-muted">
+            <input type="checkbox" checked={selectedEmployeeIds.includes(person.employee_id)} onChange={event => setSelectedEmployeeIds(ids => event.target.checked
+              ? [...ids, person.employee_id] : ids.filter(id => id !== person.employee_id))}/>{person.display_name}
+          </label>)}
+        </div></details>
+      </div>
       <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}>Refresh locations</Button>
       {timezone && <p className="pb-2 text-xs text-muted-foreground">Dates and times use {timezone}.</p>}
     </section>
     {query.isPending && <p role="status">Loading field locations…</p>}
     {query.error && <p role="alert" className="rounded-lg border border-destructive p-3">{query.error.message}</p>}
     {data && <>
-      <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={setEmployeeId}/>
+      <RouteMap data={data} selectedEmployeeId={employeeId} selectedEmployeeIds={selectedEmployeeIds} routeDate={date} onSelectEmployee={id => setSelectedEmployeeIds([id])}/>
       <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Amber pins mean a newer GPS report was too imprecise or untrusted. Officers without a recent reliable fix remain in the cards with their last known GPS time. The shaded circle shows reported uncertainty. Each officer’s colored path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{onDuty.length}</strong><p className="text-sm text-muted-foreground">On-duty officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{data.latest.length}</strong><p className="text-sm text-muted-foreground">Enrolled field officers</p></div>
-        <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{employeeId ? validPoints.length : '—'}</strong><p className="text-sm text-muted-foreground">Recorded GPS points for selected date</p></div>
+        <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{selectedEmployeeIds.length ? validPoints.length : '—'}</strong><p className="text-sm text-muted-foreground">Recorded GPS points for selected date{selectedEmployeeIds.length > 1 ? ' · sampled every 30 seconds per officer' : ''}</p></div>
       </div>
-      {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={setEmployeeId}/>}
+      {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={id => setSelectedEmployeeIds([id])}/>}
+      {selectedEmployeeIds.length > 1 && <section className="rounded-xl border bg-card p-3" aria-label="Selected officer routes">
+        <h2 className="font-semibold">Routes for {selectedEmployeeIds.length} officers · {date}</h2>
+        <p className="text-xs text-muted-foreground">Multi-officer routes use one GPS sample per 30 seconds. Each officer keeps a separate color and route; gaps and uncertain fixes are not joined.</p>
+        <div className="mt-2 divide-y">{data.latest.filter(person => selectedEmployeeIds.includes(person.employee_id)).map(person => {
+          const route = displayRoute(data.points.filter(point => point.employee_id === person.employee_id), data.quality);
+          return <div key={person.employee_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+            <span className="flex items-center gap-2"><span aria-hidden className="inline-block h-1 w-7 rounded-full" style={{ backgroundColor: routeColor(person.employee_id, data.latest.map(item => item.employee_id)) }}/>{person.display_name}</span>
+            <span className="text-muted-foreground">{route.plotted.length} quality-checked points · {(route.distance_m / 1000).toFixed(2)} km</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => setSelectedEmployeeIds([person.employee_id])}>View only this officer</Button>
+          </div>;
+        })}</div>
+      </section>}
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · validated travel ${(plottedRoute.distance_m / 1000).toFixed(2)} km · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
         {plottedRoute.plotted.length > 0 && !plottedRoute.lines.length && <p className="mt-2 text-sm">Only isolated GPS fixes are available. Colored dots show recorded positions; there are not enough continuous fixes to draw a travel path.</p>}
         {!!data.points.length && !plottedRoute.plotted.length && <p className="mt-2 text-sm">The recorded fixes were too imprecise or untrusted to show a travel path. No exact building can be inferred from them.</p>}
         {!data.points.length && selected?.status && <p className="mt-2 text-sm">The work session is active, but no GPS records are available for this date. Check location and pending GPS records in the phone app’s Notifications.</p>}
-        <Button className="mt-3" variant="outline" onClick={() => setEmployeeId('')}>Show all current positions</Button>
+        <Button className="mt-3" variant="outline" onClick={() => setSelectedEmployeeIds([])}>Show all current positions</Button>
       </section>}
       {employeeId && <section className="space-y-3" aria-label="Officer activity notes">
         <h2 className="text-lg font-semibold">Activity notes · {date}</h2>

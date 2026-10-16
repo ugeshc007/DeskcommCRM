@@ -275,6 +275,26 @@ describe('optional field-sales foundation', () => {
     expect(employeeDay.points).toEqual([expect.objectContaining({ session_id: f.session, latitude: 1, longitude: 2 })]);
     await expect(readFieldOperations(pool, other.org, other.manager, date, null, f.actor)).rejects.toThrow('field_forbidden');
   });
+  it('returns separately attributed routes for selected officers and refuses foreign or out-of-scope selections', async () => {
+    const f = await fixture(), foreign = await fixture(), second = randomUUID(), secondSession = randomUUID();
+    await pool.query('insert into auth.users(id,email) values($1,$2)', [second, `${second}@synthetic.test`]);
+    await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [second, f.org]);
+    await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Second officer')", [f.org, second]);
+    await recordAttendance(pool, f.org, f.actor, f.command);
+    await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,local_date,status,punched_in_at,last_event_at)
+      values($1,$2,$3,$4,$5::date,'working',$6,$6)`, [f.org, secondSession, second, f.project, f.localDate, f.start]);
+    for (const [session, latitude] of [[f.session, 25.1], [secondSession, 25.2]] as const) {
+      await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
+        values($1,$2,$3,0,$4,$5,55.1,8,false,$6)`, [f.org, randomUUID(), session,
+        new Date(Date.parse(f.start) + 30_000), latitude, 'a'.repeat(64)]);
+    }
+    const routes = await readFieldOperations(pool, f.org, f.manager, f.localDate, null, null, [f.actor, second]);
+    expect(new Set(routes.points.map(point => point.employee_id))).toEqual(new Set([f.actor, second]));
+    await expect(readFieldOperations(pool, f.org, f.manager, f.localDate, null, null, [f.actor, foreign.actor]))
+      .rejects.toThrow('field_forbidden');
+    await expect(readFieldOperations(pool, f.org, f.actor, f.localDate, null, null, [f.actor, second]))
+      .rejects.toThrow('field_forbidden');
+  });
   it('keeps the last reliable on-duty pin when a newer GPS fix is too imprecise', async () => {
     const f = await fixture();
     await recordAttendance(pool, f.org, f.actor, f.command);

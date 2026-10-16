@@ -108,7 +108,7 @@ test("crio um tipo COM responsável, e ele passa a ser marcável na Agenda", asy
   // só passa na primeira execução é pior que spec nenhuma.
   const nome = `Retorno E2E ${Date.now().toString().slice(-6)}`;
 
-  await page.getByTestId("abrir-novo-tipo").click();
+  await page.locator('[data-testid="abrir-novo-tipo"]:visible').click();
   await expect(page.getByTestId("form-novo-tipo")).toBeVisible();
   await page.getByTestId("novo-tipo-nome").fill(nome);
   await page.getByTestId("novo-tipo-categoria").selectOption("retorno");
@@ -172,7 +172,7 @@ test("o tipo NASCE com responsável — e quem escolhe 'Definir depois' recebe a
 
   // ── METADE A: sem tocar no seletor, o tipo nasce COM dono ──────────────────
   const comDono = `Nasce Com Dono E2E ${Date.now().toString().slice(-6)}`;
-  await page.getByTestId("abrir-novo-tipo").click();
+  await page.locator('[data-testid="abrir-novo-tipo"]:visible').click();
   await page.getByTestId("novo-tipo-nome").fill(comDono);
   await page.getByTestId("salvar-novo-tipo").click();
 
@@ -203,7 +203,7 @@ test("o tipo NASCE com responsável — e quem escolhe 'Definir depois' recebe a
   // ── METADE B: quem escolhe "Definir depois" é acusado E recebe a saída ────
   const semDono = `Definir Depois E2E ${Date.now().toString().slice(-6)}`;
   await page.goto("/app/settings/tenant/agenda");
-  await page.getByTestId("abrir-novo-tipo").click();
+  await page.locator('[data-testid="abrir-novo-tipo"]:visible').click();
   await page.getByTestId("novo-tipo-nome").fill(semDono);
   // Índice 0 é "Definir depois", e a ordem importa: o outro caso desta spec faz
   // `selectOption({ index: 1 })` contando que a ausência seja a primeira opção.
@@ -245,7 +245,7 @@ test("desativar tira o tipo da tela de marcar, sem apagar a história", async ({
   await expect(page.locator('[data-testid="tipos-de-agendamento-config"]:visible')).toBeVisible({ timeout: 20_000 });
 
   const nome = `Temporario E2E ${Date.now().toString().slice(-6)}`;
-  await page.getByTestId("abrir-novo-tipo").click();
+  await page.locator('[data-testid="abrir-novo-tipo"]:visible').click();
   await page.getByTestId("novo-tipo-nome").fill(nome);
   await page.getByTestId("salvar-novo-tipo").click();
 
@@ -296,7 +296,7 @@ test("ligo o aviso do compromisso pela tela, e ele fica ligado", async ({ page }
   await expect(page.locator('[data-testid="tipos-de-agendamento-config"]:visible')).toBeVisible({ timeout: 20_000 });
 
   const nome = `Lembrete E2E ${Date.now().toString().slice(-6)}`;
-  await page.getByTestId("abrir-novo-tipo").click();
+  await page.locator('[data-testid="abrir-novo-tipo"]:visible').click();
   await page.getByTestId("novo-tipo-nome").fill(nome);
   await page.getByTestId("salvar-novo-tipo").click();
 

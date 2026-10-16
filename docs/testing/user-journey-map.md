@@ -2103,6 +2103,16 @@ Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos apr
 
 - [P1] `field-sales.spec.ts`: on the Live view tab, confirm the map precedes officer status,
   confirm List is the default, switch to Grid and back, and capture the map-first list state.
-  On Team and Attendance, confirm the List default and Grid/List switch preserves status,
-  punch times, shop details, and officer actions. No GPS or attendance records change.
+  Team and Attendance previously offered the same switch; see the newer list-only journey below.
 - `officer-cards.test.tsx`: both layouts preserve officer identities and route/visit actions.
+
+### Field Sales compact team and multi-officer route view — 2026-10-16 (local development)
+
+- [P1] `field-sales.spec.ts`: Team and Attendance show compact list rows only, preserving
+  status, punch times, shop details and actions. Route and visits can fill the viewport; the
+  map has its own full-screen control. The officer chooser lists the whole authorized team,
+  can select all or several, and identifies their routes with distinct color swatches.
+- `tests/invariants/field-sales.test.ts`: a multi-officer route response attributes each GPS
+  point to the right employee and rejects foreign-tenant or out-of-scope selections.
+- Multi-officer route history uses 30-second samples to bound display volume. Raw GPS remains
+  unchanged. Browser screenshots and the full E2E gate are required before live release.

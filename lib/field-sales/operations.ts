@@ -121,9 +121,10 @@ async function visibleEmployees(db: FieldDb, org: string, actor: string, role: F
     and ($3 in ('admin','manager') or user_id=$2) order by display_name for share`, [org, actor, role])).rows;
 }
 export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, date: string,
-  sessionId?: string | null, employeeId?: string | null) {
+  sessionId?: string | null, employeeId?: string | null, employeeIds?: string[] | null) {
   localDateSchema.parse(date); if (sessionId) z.uuid().parse(sessionId); if (employeeId) z.uuid().parse(employeeId);
-  if (sessionId && employeeId) throw new Error('field_invalid_request');
+  if (employeeIds) z.array(z.uuid()).min(1).max(100).parse(employeeIds);
+  if ((sessionId && employeeId) || (employeeIds && (sessionId || employeeId))) throw new Error('field_invalid_request');
   return fieldTransaction(pool, org, actor, async (db, role) => {
     const people = await visibleEmployees(db, org, actor, role), ids = people.map(p => p.user_id);
     const region = organizationRegion((await db.query('select timezone,onboarding_state from public.organizations where id=$1', [org])).rows[0]);
@@ -185,21 +186,30 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
     const corrections = (await db.query(`select c.*,e.display_name from public.field_sales_corrections c join public.field_sales_employees e on e.organization_id=c.organization_id and e.user_id=c.employee_id
       where c.organization_id=$1 and e.organization_id=$1 and c.employee_id=any($2::uuid[]) and (c.status='pending' or c.created_at>=$3) order by c.created_at desc limit 501`, [org, ids, start])).rows;
     if (visits.length > 500 || corrections.length > 500 || collections.length > 500 || activities.length > 500) throw new Error('field_operations_too_large');
-    let points: Array<{ session_id: string; latitude: number; longitude: number; captured_at: Date; accuracy_m: number; mock_location: boolean; quality_flags: string[] }> = [];
-    if (sessionId || employeeId) {
-      if (employeeId && !ids.includes(employeeId)) throw new Error('field_forbidden');
-      const selected = await db.query('select id from public.field_sales_sessions where organization_id=$1 and id=$2 and employee_id=any($3::uuid[])', [org, sessionId, ids]);
-      if (sessionId && !selected.rowCount) throw new Error('field_forbidden');
-      points = (await db.query(`select l.session_id,l.latitude,l.longitude,l.captured_at,l.accuracy_m,l.mock_location,l.quality_flags from public.field_sales_locations l
+    let points: Array<{ employee_id: string; session_id: string; latitude: number; longitude: number; captured_at: Date; accuracy_m: number; mock_location: boolean; quality_flags: string[] }> = [];
+    const selectedIds = employeeIds ? [...new Set(employeeIds)] : employeeId ? [employeeId] : [];
+    if (sessionId || selectedIds.length) {
+      if (selectedIds.some(id => !ids.includes(id))) throw new Error('field_forbidden');
+      if (sessionId) {
+        const selected = await db.query('select id from public.field_sales_sessions where organization_id=$1 and id=$2 and employee_id=any($3::uuid[])', [org, sessionId, ids]);
+        if (!selected.rowCount) throw new Error('field_forbidden');
+      }
+      const multi = selectedIds.length > 1;
+      const samples = `select s.employee_id,l.session_id,l.latitude,l.longitude,l.captured_at,l.accuracy_m,l.mock_location,l.quality_flags from public.field_sales_locations l
         join public.field_sales_sessions s on s.organization_id=l.organization_id and s.id=l.session_id
         join public.field_sales_settings policy on policy.organization_id=l.organization_id
         where l.organization_id=$1 and s.organization_id=$1 and ($2::uuid is null or l.session_id=$2)
-        and ($4::uuid is null or s.employee_id=$4) and s.employee_id=any($3::uuid[])
+        and ($4::uuid[] is null or s.employee_id=any($4::uuid[])) and s.employee_id=any($3::uuid[])
         and l.captured_at>=$5 and l.captured_at<$6 and l.captured_at>=s.punched_in_at
-        and (s.punched_out_at is null or l.captured_at<s.punched_out_at) and l.captured_at>=now()-make_interval(days=>policy.retention_days)
-        order by l.captured_at,l.sequence limit 10001`, [org, sessionId || null, ids, employeeId || null, start, end])).rows;
-      if (points.length > 10000) throw new Error('field_operations_too_large');
-      await fieldAudit(db, org, actor, 'field_sales.route_viewed', sessionId || employeeId!, { date });
+        and (s.punched_out_at is null or l.captured_at<s.punched_out_at) and l.captured_at>=now()-make_interval(days=>policy.retention_days)`;
+      const sql = multi
+        ? `select * from (select distinct on (employee_id,session_id,bucket) employee_id,session_id,latitude,longitude,captured_at,accuracy_m,mock_location,quality_flags from
+          (select raw.*,date_bin('30 seconds',raw.captured_at,timestamptz '2000-01-01') as bucket from (${samples}) raw) b
+          order by employee_id,session_id,bucket,accuracy_m,captured_at) sampled order by employee_id,captured_at limit 50001`
+        : `${samples} order by l.captured_at,l.sequence limit 10001`;
+      points = (await db.query(sql, [org, sessionId || null, ids, selectedIds.length ? selectedIds : null, start, end])).rows;
+      if (points.length > (multi ? 50000 : 10000)) throw new Error('field_operations_too_large');
+      await fieldAudit(db, org, actor, 'field_sales.route_viewed', sessionId || selectedIds[0]!, { date, selected_count: selectedIds.length || 1 });
     }
     const map = (await db.query('select map_tile_path,map_attribution from public.field_sales_settings where organization_id=$1', [org])).rows[0] ?? null;
     return { role, region: region.data, people, sessions, latest, visits, collections, activities, corrections, points, map, quality, generated_at: new Date().toISOString() };

@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-10-14. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-16. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -17,16 +17,17 @@ repository, GitHub checks and the running installation before any release claim.
   actions, and GPS start errors. Runtime location permission is requested on connected open;
   notification permission is separate and non-blocking. This source revision is Android
   `0.1.2-pilot` (code 3); the version number alone is not evidence of installation.
-- The Field Sales route map colors the selected recorded path, isolated fixes, accuracy area,
-  and reliable live pin by officer, with a labeled route swatch. The Project cards list active
+- The Field Sales route map colors recorded paths, isolated fixes, accuracy area,
+  and reliable live pins by officer, with labeled route swatches. The route view can select
+  one, several, or all visible officers for the date; multi-officer history is sampled at
+  30-second buckets per officer and shown as distinct, non-joined paths. The Project cards list active
   assignments and officers with an open session on that project; attendance refreshes every
   15 seconds while the Projects tab is open. This describes source behavior in this worktree,
-  not a deployed version. The map still loads a selected officer's path rather than overlaying
-  every officer's full day at once.
+  not a deployed version. Route and live maps have a full-screen control.
 - In this worktree's Live view, the existing self-hosted map appears before the officer list.
-  The Live view, Team, and Attendance officer lists default to compact List rows and expose the
-  same Grid/List control. The route-and-visits preview also defaults its shop visits to compact
-  List rows, with Grid available. Changing layout does not change attendance records or GPS pins. The provider remains
+  Team and Attendance now use compact List rows only. The Live view officer list retains its
+  Grid/List control. The route-and-visits preview defaults its shop visits to compact List rows,
+  with Grid available. Display layout does not change attendance records or GPS pins. The provider remains
   the configured self-hosted basemap; 2GIS is advice only and has not been integrated.
 - The optional field-voice image pins Transformers 4.48.3 in its build-only Kokoro prompt stage;
   Kokoro's unbounded dependency resolved to Transformers 5.19.0 in CI, which could not import

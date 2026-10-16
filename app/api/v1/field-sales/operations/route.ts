@@ -15,8 +15,9 @@ export async function GET(req: Request) {
   try {
     const query = new URL(req.url).searchParams;
     const date = query.get('date') ?? '', pool = getRequestPool();
+    const employeeIds = query.getAll('employee_ids');
     const data = await readFieldOperations(pool, auth.org.orgId, auth.user.id, date,
-      query.get('session_id'), query.get('employee_id'));
+      query.get('session_id'), query.get('employee_id'), employeeIds.length ? employeeIds : null);
     if (query.get('report') === 'daily') {
       const csv = dailyFieldReport(date, data.region.timezone, data.sessions, data.visits);
       await fieldTransaction(pool, auth.org.orgId, auth.user.id, db => fieldAudit(db, auth.org.orgId, auth.user.id, 'field_sales.daily_report_exported', auth.user.id));

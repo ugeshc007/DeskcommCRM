@@ -293,16 +293,13 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   const team = page.getByRole('region', { name: 'Field officer attendance' });
-  await expect(team.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
   await expect(team.locator('[data-layout="list"]')).toBeVisible();
-  await team.getByRole('button', { name: 'Grid' }).click();
-  await expect(team.locator('[data-layout="grid"]')).toBeVisible();
-  await team.getByRole('button', { name: 'List' }).click();
+  await expect(team.getByRole('button', { name: 'Grid' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Manager visibility' })).toHaveCount(0);
-  const officerCard = page.getByRole('article').filter({ has: page.getByRole('button', { name: 'View route and visits' }) });
+  const officerCard = team.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Synthetic salesperson', exact: true }) });
   await expect(officerCard.getByText('Online', { exact: true })).toBeVisible();
   await expect(officerCard.getByText('On duty', { exact: true })).toBeVisible();
-  await expect(officerCard.getByText('Punched in')).toBeVisible();
+  await expect(officerCard.getByText('In:', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-team-presence-desktop.png'), fullPage: true });
   await page.getByRole('tab', { name: 'Projects', exact: true }).click();
   const staffedProject = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Synthetic showroom', exact: true }) });
@@ -313,25 +310,50 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Attendance' })).toHaveAttribute('data-state', 'active');
   const attendance = page.getByRole('region', { name: 'Daily field officer attendance' });
-  await expect(attendance.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
   await expect(attendance.locator('[data-layout="list"]')).toBeVisible();
-  await attendance.getByRole('button', { name: 'Grid' }).click();
-  await expect(attendance.locator('[data-layout="grid"]')).toBeVisible();
-  await attendance.getByRole('button', { name: 'List' }).click();
+  await expect(attendance.getByRole('button', { name: 'Grid' })).toHaveCount(0);
   await expect(attendance.getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
   await expect(attendance.getByText('Working time', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-attendance-desktop.png'), fullPage: true });
+  const secondEmployee = randomUUID(), secondSession = randomUUID();
+  await pool.query('insert into auth.users(id,email) values($1,$2)', [secondEmployee, `${secondEmployee}@synthetic.test`]);
+  await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [secondEmployee, org]);
+  await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Second salesperson')", [org, secondEmployee]);
+  const secondStart = new Date(start.getTime() - 180000), secondEnd = new Date(start.getTime() - 60000);
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,local_date,status,punched_in_at,punched_out_at,last_event_at)
+    values($1,$2,$3,$4,$5::date,'off_duty',$6,$7,$7)`, [org, secondSession, secondEmployee, project, day, secondStart, secondEnd]);
+  for (const [sequence, latitude, longitude] of [[0, 25.1900, 55.2500], [1, 25.1950, 55.2550], [2, 25.1951, 55.2551]] as const) {
+    await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
+      values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), secondSession, sequence,
+      new Date(secondStart.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
+  }
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await officerCard.getByRole('button', { name: 'View route and visits' }).click();
   await expect(page).toHaveURL(/\/app\/field-sales$/);
   const routeDialog = page.getByRole('dialog', { name: 'Route and visits', exact: true });
   await expect(routeDialog).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Route and visits', exact: true })).toBeVisible();
+  await routeDialog.getByRole('button', { name: 'Full screen', exact: true }).click();
+  expect(await routeDialog.evaluate(element => Math.round(element.getBoundingClientRect().width))).toBe(1440);
+  await routeDialog.getByRole('button', { name: 'Exit full screen', exact: true }).click();
   await page.getByLabel('Travel date').fill(day);
-  await routeDialog.getByLabel('Field officer').selectOption(employee);
+  await routeDialog.getByText('Field officers', { exact: true }).locator('..').locator('summary').click();
+  await expect(routeDialog.getByLabel('Synthetic salesperson', { exact: true })).toBeChecked();
+  await routeDialog.getByRole('button', { name: 'All routes' }).click();
+  await routeDialog.getByText('Field officers', { exact: true }).locator('..').locator('summary').click();
+  await expect(routeDialog.getByRole('region', { name: 'Selected officer routes' })).toBeVisible();
+  await expect(routeDialog.getByLabel('Route color for Second salesperson')).toBeVisible();
+  const colorA = await routeDialog.getByLabel('Route color for Synthetic salesperson').locator('span').getAttribute('style');
+  const colorB = await routeDialog.getByLabel('Route color for Second salesperson').locator('span').getAttribute('style');
+  expect(colorA).not.toBe(colorB);
+  await routeDialog.getByRole('region', { name: 'Selected officer routes' }).getByText('Synthetic salesperson', { exact: true })
+    .locator('..').getByRole('button', { name: 'View only this officer' }).click();
   await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
   await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
+  await routeDialog.getByRole('button', { name: 'Full screen map' }).click();
+  expect(await page.getByLabel('Recorded employee positions and selected work route').evaluate(element => Math.round(element.getBoundingClientRect().height))).toBeGreaterThan(650);
+  await routeDialog.getByRole('button', { name: 'Exit full screen map' }).click();
   await expect(routeDialog.getByLabel('Route color for Synthetic salesperson')).toBeVisible();
   await expect(page.getByRole('heading', { name: `Activity notes · ${day}` })).toBeVisible();
   await expect(page.getByText('Going to Synthetic showroom', { exact: true })).toBeVisible();

@@ -42,3 +42,7 @@ repository, GitHub checks and the running installation before any release claim.
 - No customer bots or messages should be published/sent as part of Field Sales work. Live web
   changes require a green full GitHub gate for the exact release commit and CT102 guarded
   deployment with backup/rollback, as the user directed.
+- On 2026-10-16, the full browser gate for `7e161e581` failed on a 5.5px sidebar overflow
+  at 1280×900 and on a map canvas intercepting the full-screen exit control. The source
+  corrections are local until a new commit and its complete gate pass; neither failure may be
+  treated as a green release or evidence of CT102 deployment.

@@ -2116,3 +2116,8 @@ Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos apr
   point to the right employee and rejects foreign-tenant or out-of-scope selections.
 - Multi-officer route history uses 30-second samples to bound display volume. Raw GPS remains
   unchanged. Browser screenshots and the full E2E gate are required before live release.
+- The first full browser gate for commit `7e161e581` caught two regressions: at 1280×900 the
+  sidebar needed 744px in 738.5px of available height, and the full-screen map canvas blocked
+  its own exit button. This revision reduces only inter-group/outer nav spacing and layers the
+  map control above its canvas. The existing browser assertions remain in force; this fix is
+  pending a fresh full gate and is not evidence of deployment.

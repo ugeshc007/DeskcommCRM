@@ -171,11 +171,11 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
     return () => { closed = true; resizeObserver?.disconnect(); markers.current.forEach(marker => marker.remove()); markers.current = []; positionCache.clear(); map.current?.remove(); map.current = null; };
   }, [data.map?.map_tile_path, data.region.country_code]);
   return <section className={fullscreen ? 'fixed inset-0 z-[60] flex flex-col gap-2 bg-background p-3' : 'space-y-2'}>
-    <div className="flex justify-end"><Button type="button" variant="outline" size="sm" onClick={() => setFullscreen(value => !value)}>{fullscreen ? 'Exit full screen map' : 'Full screen map'}</Button></div>
+    <div className="relative z-10 flex shrink-0 justify-end"><Button type="button" variant="outline" size="sm" onClick={() => setFullscreen(value => !value)}>{fullscreen ? 'Exit full screen map' : 'Full screen map'}</Button></div>
     {!data.map?.map_tile_path && <p className="rounded-lg border p-3 text-sm">Basemap not configured. This view plots recorded coordinates only; it does not show roads. No external map tiles are requested.</p>}
     {problem && <p role="alert">{problem}</p>}
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
-    <div ref={container} data-map-ready={mapReady} className={fullscreen ? 'min-h-0 flex-1 overflow-hidden rounded-xl border' : 'h-[420px] overflow-hidden rounded-xl border'} aria-label="Recorded employee positions and selected work route"/>
+    <div ref={container} data-map-ready={mapReady} className={fullscreen ? 'relative z-0 min-h-0 flex-1 overflow-hidden rounded-xl border' : 'relative h-[420px] overflow-hidden rounded-xl border'} aria-label="Recorded employee positions and selected work route"/>
     {(selectedEmployeeIds?.length ? data.latest.filter(person => selectedEmployeeIds.includes(person.employee_id)) : routePerson ? [routePerson] : []).length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Officer route colors">{(selectedEmployeeIds?.length ? data.latest.filter(person => selectedEmployeeIds.includes(person.employee_id)) : routePerson ? [routePerson] : []).map(person => <p key={person.employee_id} className="flex items-center gap-2" aria-label={`Route color for ${person.display_name}`}>
       <span aria-hidden className="inline-block h-1 w-7 rounded-full" style={{ backgroundColor: routeColor(person.employee_id, data.latest.map(item => item.employee_id)) }}/>
       {person.display_name} · recorded route

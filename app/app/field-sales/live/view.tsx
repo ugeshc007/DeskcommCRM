@@ -19,7 +19,7 @@ function localDate(instant: string, timezone: string) {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
-export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate, embedded = false }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string; embedded?: boolean }) {
+export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate, embedded = false, onMapFullscreenChange }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string; embedded?: boolean; onMapFullscreenChange?: (fullscreen: boolean) => void }) {
   const [date, setDate] = useState(() => initialDate ?? new Date().toISOString().slice(0, 10));
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(initialEmployeeId ? [initialEmployeeId] : []);
   const employeeId = selectedEmployeeIds.length === 1 ? selectedEmployeeIds[0]! : '';
@@ -107,7 +107,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
     {query.isPending && <p role="status">Loading field locations…</p>}
     {query.error && <p role="alert" className="rounded-lg border border-destructive p-3">{query.error.message}</p>}
     {data && <>
-      <RouteMap data={data} selectedEmployeeId={employeeId} selectedEmployeeIds={selectedEmployeeIds} routeDate={date} onSelectEmployee={id => setSelectedEmployeeIds([id])}/>
+      <RouteMap data={data} selectedEmployeeId={employeeId} selectedEmployeeIds={selectedEmployeeIds} routeDate={date} onSelectEmployee={id => setSelectedEmployeeIds([id])} onFullscreenChange={onMapFullscreenChange}/>
       <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Amber pins mean a newer GPS report was too imprecise or untrusted. Officers without a recent reliable fix remain in the cards with their last known GPS time. The shaded circle shows reported uncertainty. Each officer’s colored path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{onDuty.length}</strong><p className="text-sm text-muted-foreground">On-duty officers</p></div>

@@ -75,6 +75,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [activityDate, setActivityDate] = useState('');
   const [routeSelection, setRouteSelection] = useState<{ employeeId: string; date: string } | null>(null);
   const [routeExpanded, setRouteExpanded] = useState(false);
+  const [routeMapExpanded, setRouteMapExpanded] = useState(false);
   const [editing, setEditing] = useState<Occurrence | null>(null);
   const [editScope, setEditScope] = useState<'one' | 'future'>('one');
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
@@ -372,13 +373,13 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <Field label="Visit instructions"><Textarea name="instructions" maxLength={4000} defaultValue={editing?.schedule.instructions}/></Field><Button disabled={busy}>Save assignment</Button>
       </form>}
     </DialogContent></Dialog>
-    <Dialog open={routeSelection !== null} onOpenChange={open => { if (!open) { setRouteSelection(null); setRouteExpanded(false); } }}>
-      <DialogContent className={routeExpanded
+    <Dialog open={routeSelection !== null} onOpenChange={open => { if (!open) { setRouteSelection(null); setRouteExpanded(false); setRouteMapExpanded(false); } }}>
+      <DialogContent className={routeExpanded || routeMapExpanded
         ? 'left-0 top-0 h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-none p-4 md:p-6'
         : 'max-h-[92dvh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto p-4 md:p-6'}>
         <DialogHeader className="pr-16"><DialogTitle>Route and visits</DialogTitle><DialogDescription>Review recorded travel, shop visits and activity without leaving your team.</DialogDescription></DialogHeader>
         <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => setRouteExpanded(value => !value)}>{routeExpanded ? 'Exit full screen' : 'Full screen'}</Button>
-        {routeSelection && <FieldLiveView embedded organizationId={organizationId} userId={userId} initialEmployeeId={routeSelection.employeeId} initialDate={routeSelection.date}/>}
+        {routeSelection && <FieldLiveView embedded organizationId={organizationId} userId={userId} initialEmployeeId={routeSelection.employeeId} initialDate={routeSelection.date} onMapFullscreenChange={setRouteMapExpanded}/>}
       </DialogContent>
     </Dialog>
     <AlertDialog open={endingAssignment !== null} onOpenChange={open => { if (!open) setEndingAssignment(null); }}>

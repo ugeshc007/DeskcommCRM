@@ -29,20 +29,24 @@ repository, GitHub checks and the running installation before any release claim.
   Grid/List control. The route-and-visits preview defaults its shop visits to compact List rows,
   with Grid available. Display layout does not change attendance records or GPS pins. The provider remains
   the configured self-hosted basemap; 2GIS is advice only and has not been integrated.
+- On 2026-10-16, a follow-up UI fix connected the embedded map's full-screen control to
+  the enclosing Route and visits dialog. Without this, the dialog's transformed position
+  constrained the map to a centered rectangle rather than the viewport. The browser test
+  now checks viewport-sized dialog and map bounds, and verifies return to dialog size.
 - The optional field-voice image pins Transformers 4.48.3 in its build-only Kokoro prompt stage;
   Kokoro's unbounded dependency resolved to Transformers 5.19.0 in CI, which could not import
   AlbertModel with the stage's Torch 2.5.1. This image-build correction does not replace the
   running voice sidecar during the app-only CT102 release.
 - The Android emulator CI job enables KVM access on Ubuntu before creating its API 35 AVD;
   the earlier runner lacked KVM permission and timed out booting before instrumented tests.
-- Historical operational report checked on 2026-10-14: CT102 web app was released from commit
-  `3ae49bfa9eae7bd00eca6915eaace4a78d255397` after its full GitHub test gate. This Android
-  revision has **not** been installed on a physical phone or deployed by that fact. Verify the
-  current live image and device state before claiming either.
+- Operational report checked on 2026-10-16: CT102 web app was released from commit
+  `ef19402a9e9e817019d059bd248377a89dada6e5` after its full GitHub test gate and
+  required production review. Public health reported this version (with a pre-existing
+  degraded status). This does not deploy the follow-up full-screen fix or install an
+  Android build; verify current live image and physical device state before claiming either.
 - No customer bots or messages should be published/sent as part of Field Sales work. Live web
   changes require a green full GitHub gate for the exact release commit and CT102 guarded
   deployment with backup/rollback, as the user directed.
-- On 2026-10-16, the full browser gate for `7e161e581` failed on a 5.5px sidebar overflow
-  at 1280×900 and on a map canvas intercepting the full-screen exit control. The source
-  corrections are local until a new commit and its complete gate pass; neither failure may be
-  treated as a green release or evidence of CT102 deployment.
+- The earlier browser failures on `7e161e581` (sidebar overflow and full-screen exit
+  control interception) were corrected before the `ef19402` release. A later manual
+  screenshot revealed the separate transformed-dialog full-screen constraint above.

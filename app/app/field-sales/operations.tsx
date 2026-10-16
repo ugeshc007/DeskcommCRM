@@ -29,7 +29,7 @@ export type FieldActivity = { id: string; employee_id: string; session_id: strin
   note: string; source: 'voice' | 'typed'; captured_at: string; project_name: string; shop_name: string | null };
 export type Operations = { role: string; generated_at: string; region: { country_code: string; timezone: string }; latest: Position[]; sessions: Session[]; visits: Visit[]; collections: ShopCollection[]; activities: FieldActivity[]; corrections: Correction[]; points: Point[]; quality?: RouteQualityConfig; map: { map_tile_path: string | null; map_attribution: string } | null };
 
-export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSelectEmployee, routeDate }: { data: Operations; selectedEmployeeId: string; selectedEmployeeIds?: string[]; onSelectEmployee: (employeeId: string) => void; routeDate: string }) {
+export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSelectEmployee, onFullscreenChange, routeDate }: { data: Operations; selectedEmployeeId: string; selectedEmployeeIds?: string[]; onSelectEmployee: (employeeId: string) => void; onFullscreenChange?: (fullscreen: boolean) => void; routeDate: string }) {
   const container = useRef<HTMLDivElement>(null), map = useRef<LibreMap | null>(null), markers = useRef<Marker[]>([]);
   const lastMarkerPositions = useRef(new Map<string, [number, number]>());
   const latest = useRef(data), selectEmployee = useRef(onSelectEmployee), selection = useRef(selectedEmployeeId), selections = useRef(selectedEmployeeIds), day = useRef(routeDate), fittedSelection = useRef('');
@@ -171,7 +171,7 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
     return () => { closed = true; resizeObserver?.disconnect(); markers.current.forEach(marker => marker.remove()); markers.current = []; positionCache.clear(); map.current?.remove(); map.current = null; };
   }, [data.map?.map_tile_path, data.region.country_code]);
   return <section className={fullscreen ? 'fixed inset-0 z-[60] flex flex-col gap-2 bg-background p-3' : 'space-y-2'}>
-    <div className="relative z-10 flex shrink-0 justify-end"><Button type="button" variant="outline" size="sm" onClick={() => setFullscreen(value => !value)}>{fullscreen ? 'Exit full screen map' : 'Full screen map'}</Button></div>
+    <div className="relative z-10 flex shrink-0 justify-end"><Button type="button" variant="outline" size="sm" onClick={() => { const next = !fullscreen; setFullscreen(next); onFullscreenChange?.(next); }}>{fullscreen ? 'Exit full screen map' : 'Full screen map'}</Button></div>
     {!data.map?.map_tile_path && <p className="rounded-lg border p-3 text-sm">Basemap not configured. This view plots recorded coordinates only; it does not show roads. No external map tiles are requested.</p>}
     {problem && <p role="alert">{problem}</p>}
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}

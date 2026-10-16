@@ -353,19 +353,18 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
   await routeDialog.getByRole('button', { name: 'Full screen map' }).click();
   const viewport = page.viewportSize()!;
-  const dialogBounds = await routeDialog.boundingBox();
-  const mapBounds = await page.getByLabel('Recorded employee positions and selected work route').boundingBox();
-  expect(dialogBounds).not.toBeNull();
-  expect(mapBounds).not.toBeNull();
-  expect(dialogBounds!.x).toBeLessThanOrEqual(2);
-  expect(dialogBounds!.y).toBeLessThanOrEqual(2);
-  expect(dialogBounds!.width).toBeGreaterThanOrEqual(viewport.width - 2);
-  expect(dialogBounds!.height).toBeGreaterThanOrEqual(viewport.height - 2);
-  expect(mapBounds!.width).toBeGreaterThan(viewport.width * 0.9);
-  expect(mapBounds!.height).toBeGreaterThan(viewport.height * 0.7);
+  await expect.poll(async () => {
+    const bounds = await routeDialog.boundingBox();
+    return !!bounds && bounds.x <= 2 && bounds.y <= 2
+      && bounds.width >= viewport.width - 2 && bounds.height >= viewport.height - 2;
+  }).toBe(true);
+  await expect.poll(async () => {
+    const bounds = await page.getByLabel('Recorded employee positions and selected work route').boundingBox();
+    return !!bounds && bounds.width > viewport.width * 0.9 && bounds.height > viewport.height * 0.7;
+  }).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('route-map-full-screen.png') });
   await routeDialog.getByRole('button', { name: 'Exit full screen map' }).click();
-  expect(await routeDialog.evaluate(element => Math.round(element.getBoundingClientRect().width))).toBeLessThan(viewport.width);
+  await expect.poll(async () => Math.round((await routeDialog.boundingBox())?.width ?? viewport.width)).toBeLessThan(viewport.width);
   await expect(routeDialog.getByLabel('Route color for Synthetic salesperson')).toBeVisible();
   await expect(page.getByRole('heading', { name: `Activity notes · ${day}` })).toBeVisible();
   await expect(page.getByText('Going to Synthetic showroom', { exact: true })).toBeVisible();

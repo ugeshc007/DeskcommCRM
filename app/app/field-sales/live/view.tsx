@@ -95,7 +95,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         </summary><div className="absolute left-0 top-full z-[70] mt-1 max-h-72 w-72 overflow-y-auto rounded-md border bg-background p-2 shadow-lg">
           <div className="mb-2 flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedEmployeeIds(data?.latest.map(person => person.employee_id) ?? [])}>All routes</Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setSelectedEmployeeIds([])}>Positions only</Button></div>
-          {data?.latest.map(person => <label key={person.employee_id} className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 hover:bg-muted">
+          {data?.latest.map(person => <label key={person.employee_id} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 hover:bg-muted">
             <input type="checkbox" checked={selectedEmployeeIds.includes(person.employee_id)} onChange={event => setSelectedEmployeeIds(ids => event.target.checked
               ? [...ids, person.employee_id] : ids.filter(id => id !== person.employee_id))}/>{person.display_name}
           </label>)}

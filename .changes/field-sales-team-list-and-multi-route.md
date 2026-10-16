@@ -1,6 +1,6 @@
 ---
 impacto: capacidade_nova
 secao: adicionado
-titulo: Equipe de campo ganha lista compacta e comparação de rotas
+titulo: Equipe de campo e rotas
 ---
-Equipe e presença diária passam a usar apenas linhas compactas. A visualização de rota permite escolher vários funcionários, sobrepor seus trajetos com cores distintas e ampliar o mapa ou a janela de visitas para a tela inteira. Nenhuma configuração adicional é necessária.
+Equipe e presença em listas compactas. Rotas de vários funcionários em cores distintas, com mapa e visitas em tela cheia.

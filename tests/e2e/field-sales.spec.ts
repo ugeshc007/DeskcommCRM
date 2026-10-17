@@ -318,7 +318,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   const secondEmployee = randomUUID(), secondSession = randomUUID();
   await pool.query('insert into auth.users(id,email) values($1,$2)', [secondEmployee, `${secondEmployee}@synthetic.test`]);
   await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [secondEmployee, org]);
-  await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Second salesperson')", [org, secondEmployee]);
+  await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Aardvark salesperson')", [org, secondEmployee]);
   const secondStart = new Date(start.getTime() - 180000), secondEnd = new Date(start.getTime() - 60000);
   await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,local_date,status,punched_in_at,punched_out_at,last_event_at)
     values($1,$2,$3,$4,$5::date,'off_duty',$6,$7,$7)`, [org, secondSession, secondEmployee, project, day, secondStart, secondEnd]);
@@ -327,7 +327,18 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
       values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), secondSession, sequence,
       new Date(secondStart.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
   }
+  await page.getByRole('tab', { name: 'Live view', exact: true }).click();
+  await page.getByRole('checkbox', { name: "Route history · show all employees' travel paths" }).check();
+  await expect(page.getByLabel('Route color for Synthetic salesperson')).toBeVisible();
+  await expect(page.getByLabel('Route color for Aardvark salesperson')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('all-employee-route-history.png'), fullPage: true });
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await expect(team.getByRole('article').first().getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
+  const offlineOfficer = team.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Aardvark salesperson' }) });
+  const formatPunch = (value: Date) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }).format(value);
+  await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondStart));
+  await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondEnd));
   await officerCard.getByRole('button', { name: 'View route and visits' }).click();
   await expect(page).toHaveURL(/\/app\/field-sales$/);
   const routeDialog = page.getByRole('dialog', { name: 'Route and visits', exact: true });
@@ -342,9 +353,9 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await routeDialog.getByRole('button', { name: 'All routes' }).click();
   await routeDialog.getByText('Field officers', { exact: true }).locator('..').locator('summary').click();
   await expect(routeDialog.getByRole('region', { name: 'Selected officer routes' })).toBeVisible();
-  await expect(routeDialog.getByLabel('Route color for Second salesperson')).toBeVisible();
+  await expect(routeDialog.getByLabel('Route color for Aardvark salesperson')).toBeVisible();
   const colorA = await routeDialog.getByLabel('Route color for Synthetic salesperson').locator('span').getAttribute('style');
-  const colorB = await routeDialog.getByLabel('Route color for Second salesperson').locator('span').getAttribute('style');
+  const colorB = await routeDialog.getByLabel('Route color for Aardvark salesperson').locator('span').getAttribute('style');
   expect(colorA).not.toBe(colorB);
   await routeDialog.getByRole('region', { name: 'Selected officer routes' }).getByText('Synthetic salesperson', { exact: true })
     .locator('..').getByRole('button', { name: 'View only this officer' }).click();

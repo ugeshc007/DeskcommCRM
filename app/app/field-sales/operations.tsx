@@ -187,6 +187,7 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
 
 export function FieldOperations({ organizationId, userId, date, onOpenRoute }: { organizationId: string; userId: string; date: string; onOpenRoute: (employeeId: string) => void }) {
   const [sessionId, setSessionId] = useState(''), [employeeId, setEmployeeId] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [showRouteHistory, setShowRouteHistory] = useState(false);
   const [request, setRequest] = useState<Session | null>(null), [review, setReview] = useState<Correction | null>(null);
   const [complete, setComplete] = useState<Visit | null>(null);
   const query = useQuery({ queryKey: ['field-operations', organizationId, userId, date, sessionId, employeeId], gcTime: 0,
@@ -194,6 +195,15 @@ export function FieldOperations({ organizationId, userId, date, onOpenRoute }: {
       const selection = sessionId ? `&session_id=${sessionId}` : employeeId ? `&employee_id=${employeeId}` : '';
       const response = await fetch(`/api/v1/field-sales/operations?date=${date}${selection}`, { cache: 'no-store' });
       const body = await response.json(); if (!response.ok) throw new Error(body.error?.message ?? 'Unable to load field activity.'); return body.data;
+    } });
+  const rosterIds = query.data?.latest.map(person => person.employee_id) ?? [];
+  const routeHistory = useQuery({ queryKey: ['field-operations-all-routes', organizationId, userId, date, rosterIds], gcTime: 0,
+    enabled: showRouteHistory && rosterIds.length > 0, refetchInterval: 15000,
+    queryFn: async (): Promise<Operations> => {
+      const params = new URLSearchParams({ date });
+      rosterIds.forEach(id => params.append('employee_ids', id));
+      const response = await fetch(`/api/v1/field-sales/operations?${params}`, { cache: 'no-store' });
+      const body = await response.json(); if (!response.ok) throw new Error(body.error?.message ?? 'Unable to load route history.'); return body.data;
     } });
   const data = query.data;
   const time = (value: string | null) => value && data ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: data.region.timezone }).format(new Date(value)) : '—';
@@ -219,12 +229,16 @@ export function FieldOperations({ organizationId, userId, date, onOpenRoute }: {
   }
   return <section className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Live team view · {date}</h2><p className="text-sm text-muted-foreground">Positions refresh every 15 seconds. Select a salesperson on the map to open their complete recorded route for this date.</p></div><Button variant="outline" onClick={() => void query.refetch()}>Refresh</Button></div>
-    {(error || query.error) && <p role="alert">{error || query.error?.message}</p>}
+    {(error || query.error || (showRouteHistory && routeHistory.error)) && <p role="alert">{error || query.error?.message || routeHistory.error?.message}</p>}
     {query.isPending && <p role="status">Loading authorized field activity…</p>}
     {data && <>
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-semibold">Daily attendance and visit report</h2><p className="text-sm text-muted-foreground">Includes breaks; not a payroll calculation. GPS coordinates and visit notes are excluded.</p></div><Button variant="outline" disabled={busy} onClick={() => void exportReport()}>Export daily CSV</Button></section>
+      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-medium"><input type="checkbox" checked={showRouteHistory} onChange={event => setShowRouteHistory(event.target.checked)}/>Route history · show all employees&apos; travel paths</label>
+      {showRouteHistory && routeHistory.isPending && <p role="status">Loading route history for all employees…</p>}
+      {showRouteHistory && routeHistory.data && <p className="text-xs text-muted-foreground">Recorded GPS for {date}; each employee has a distinct color. Gaps and uncertain fixes are not joined. Routes are available only within the location retention period.</p>}
       {employeeId && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4"><p><strong>{data.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Selected salesperson'}</strong> · complete recorded route for {date}</p><Button variant="outline" onClick={() => setEmployeeId('')}>Show all live positions</Button></div>}
-      <RouteMap data={data} selectedEmployeeId={employeeId} routeDate={date} onSelectEmployee={onOpenRoute}/>
+      <RouteMap data={showRouteHistory && routeHistory.data ? routeHistory.data : data} selectedEmployeeId={employeeId}
+        selectedEmployeeIds={showRouteHistory && routeHistory.data ? rosterIds : undefined} routeDate={date} onSelectEmployee={onOpenRoute}/>
       <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={onOpenRoute}/>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Attendance and route history</h2>
         <p className="text-sm text-muted-foreground">Session spans include breaks. Approved corrections are shown separately and never rewrite raw GPS or original punch records.</p>

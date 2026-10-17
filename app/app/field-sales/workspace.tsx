@@ -95,6 +95,8 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
     enabled: dialog === 'customers' && Boolean(customerProjectId), gcTime: 0 });
   const formatTime = (instant: string | null | undefined) => instant && timezone
     ? new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(instant)) : '—';
+  const formatPunchDateTime = (instant: string | null | undefined) => instant && timezone
+    ? new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: timezone }).format(new Date(instant)) : '—';
   useEffect(() => {
     if (!timezone || calendarInitialized.current) return;
     calendarInitialized.current = true;
@@ -104,6 +106,9 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   }, [timezone]);
   const days = Array.from({ length: view === 'week' ? 7 : 1 }, (_, i) => addCalendarDays(start, i));
   const people = data?.employees ?? [], projects = data?.projects ?? [];
+  const onlineEmployeeIds = new Set(teamPresence.data?.latest.filter(person => person.online).map(person => person.employee_id) ?? []);
+  const teamPeople = [...people].sort((a, b) => Number(onlineEmployeeIds.has(b.user_id)) - Number(onlineEmployeeIds.has(a.user_id))
+    || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' }) || a.user_id.localeCompare(b.user_id));
   const clashes = new Set((data?.overlaps ?? []).flat());
 
   async function save(input: unknown, closeDialog = true): Promise<boolean> {
@@ -246,7 +251,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
             {teamPresence.isPending && <p role="status">Loading team attendance…</p>}
             {teamPresence.error && <p role="alert">{teamPresence.error.message} <Button variant="outline" onClick={() => void teamPresence.refetch()}>Retry</Button></p>}
             {!people.length && <p className="rounded-xl border p-4">No field officers enrolled yet.</p>}
-            <div data-layout="list" className="divide-y rounded-lg border bg-card">{people.map(person => {
+            <div data-layout="list" className="divide-y rounded-lg border bg-card">{teamPeople.map(person => {
               const position = teamPresence.data?.latest.find(item => item.employee_id === person.user_id);
               const sessions = teamPresence.data?.sessions.filter(item => item.employee_id === person.user_id) ?? [];
               const openSession = sessions.find(item => !item.punched_out_at);
@@ -255,7 +260,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               const onDuty = person.active && Boolean(openSession && position?.status);
               return <article className="grid gap-2 p-2 lg:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] lg:items-center lg:gap-3" key={person.user_id}>
                 <div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold">{person.display_name}</h3><div className="flex flex-wrap gap-1"><span className={`rounded-full px-2 py-1 text-xs font-medium ${position?.online ? 'bg-sky-100 text-sky-900' : 'bg-muted text-muted-foreground'}`}>{position?.online ? 'Online' : 'Offline'}</span><span className={`rounded-full px-2 py-1 text-xs font-medium ${onDuty ? 'bg-emerald-100 text-emerald-900' : 'bg-muted text-muted-foreground'}`}>{!person.active ? 'Inactive' : onDuty ? position?.status === 'break' ? 'On duty · break' : 'On duty' : 'Off duty'}</span></div></div>
-                <div><dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm"><div><dt className="inline text-muted-foreground">In: </dt><dd className="inline">{formatTime(lastSession?.punched_in_at)}</dd></div><div><dt className="inline text-muted-foreground">Out: </dt><dd className="inline">{formatTime(lastSession?.punched_out_at)}</dd></div>
+                <div><dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm"><div><dt className="inline text-muted-foreground">In: </dt><dd className="inline">{formatPunchDateTime(lastSession?.punched_in_at)}</dd></div><div><dt className="inline text-muted-foreground">Out: </dt><dd className="inline">{formatPunchDateTime(lastSession?.punched_out_at)}</dd></div>
                   <div><dt className="inline text-muted-foreground">Last position: </dt><dd className="inline">{position?.latitude !== null && position?.longitude !== null && position?.captured_at ? formatTime(position.captured_at) : 'Not reported'}</dd></div>
                   <div><dt className="inline text-muted-foreground">App check-in: </dt><dd className="inline">{formatTime(position?.last_seen_at)}</dd></div></dl>
                 <p className="mt-1 text-sm">{latestShop ? `Latest shop: ${latestShop.shop_name} · ${formatTime(latestShop.captured_at)}${latestShop.amount_cents === null ? ' · visit only' : ` · received ${latestShop.currency} ${(Number(latestShop.amount_cents) / 100).toFixed(2)}`}` : 'No shop visits recorded today'}</p></div>

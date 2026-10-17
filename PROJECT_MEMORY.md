@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-10-16. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-17. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -25,8 +25,11 @@ repository, GitHub checks and the running installation before any release claim.
   15 seconds while the Projects tab is open. This describes source behavior in this worktree,
   not a deployed version. Route and live maps have a full-screen control.
 - In this worktree's Live view, the existing self-hosted map appears before the officer list.
+  A Route history checkbox on the workspace Live view requests and draws the selected day's
+  authorized officers' retained GPS paths together, with distinct colors and quality filtering.
   Team and Attendance now use compact List rows only. The Live view officer list retains its
-  Grid/List control. The route-and-visits preview defaults its shop visits to compact List rows,
+  Grid/List control. Team rows show online officers first, then names alphabetically, and
+  punch-in/out values include the organization-local calendar date and time. The route-and-visits preview defaults its shop visits to compact List rows,
   with Grid available. Display layout does not change attendance records or GPS pins. The provider remains
   the configured self-hosted basemap; 2GIS is advice only and has not been integrated.
 - On 2026-10-16, a follow-up UI fix connected the embedded map's full-screen control to

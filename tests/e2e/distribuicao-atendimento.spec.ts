@@ -51,7 +51,7 @@ async function login(page: Page, email: string): Promise<void> {
 /** O estado marcado vem do atributo que o próprio componente escreve. */
 async function marcada(page: Page, nome: string, valor: string): Promise<boolean> {
   return (
-    (await page.getByTestId(`opcao-${nome}-${valor}`).getAttribute("data-marcada")) === "sim"
+    (await page.locator(`[data-testid="opcao-${nome}-${valor}"]:visible`).getAttribute("data-marcada")) === "sim"
   );
 }
 
@@ -93,11 +93,11 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     // 3. Liga o rodízio — e só então os knobs aparecem (config de retentativa
     //    não faz sentido no modo manual, em que ninguém retenta).
     await expect(page.locator("#max_retries")).toHaveCount(0);
-    await page.getByTestId("opcao-modo-round_robin").click();
+    await page.locator('[data-testid="opcao-modo-round_robin"]:visible').click();
     await expect(page.locator("#max_retries")).toBeVisible();
 
     // 4. Restringe a visibilidade ao próprio atendente.
-    await page.getByTestId("opcao-visibilidade-own").click();
+    await page.locator('[data-testid="opcao-visibilidade-own"]:visible').click();
     expect(await marcada(page, "visibilidade", "own")).toBe(true);
 
     // 5. Salva e recarrega: o estado tem de vir do BANCO. Sem o reload isto
@@ -128,11 +128,11 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     await login(page, creds.users.manager!.email);
     await page.goto("/app/settings/atendimento");
 
-    await page.getByTestId("opcao-modo-manual").click();
-    await page.getByTestId("opcao-visibilidade-own").click();
+    await page.locator('[data-testid="opcao-modo-manual"]:visible').click();
+    await page.locator('[data-testid="opcao-visibilidade-own"]:visible').click();
     await expect(page.getByTestId("aviso-combinacao-morta")).toBeVisible();
 
-    await page.getByTestId("opcao-modo-round_robin").click();
+    await page.locator('[data-testid="opcao-modo-round_robin"]:visible').click();
     await expect(page.getByTestId("aviso-combinacao-morta")).toHaveCount(0);
   });
 

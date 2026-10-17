@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { DotsThree } from "@/lib/ui/icons";
+import { OfficerDevicesDialog } from "./OfficerDevicesDialog";
 
 interface Props {
   currentUserId: string;
@@ -58,6 +59,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
   const reativar = useReactivateMember();
 
   const [interfaceMember, setInterfaceMember] = useState<TeamMember | null>(null);
+  const [deviceMember, setDeviceMember] = useState<TeamMember | null>(null);
   const [revokeDialog, setRevokeDialog] = useState<TeamMember | null>(null);
 
   if (isLoading) {
@@ -111,13 +113,13 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                       <SelectContent>
                         {ROLES.map((r) => (
                           <SelectItem key={r} value={r}>
-                            {r}
+                            {r === "field_officer" ? "Field Officer" : r}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Badge variant="secondary">{m.role}</Badge>
+                    <Badge variant="secondary">{m.role === "field_officer" ? "Field Officer" : m.role}</Badge>
                   )}
                 </TableCell>
                 <TableCell>
@@ -168,6 +170,10 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                 {canManage ? (
                   <TableCell>
                     {m.user_id !== currentUserId ? (
+                      <div className="flex items-center gap-2">
+                      {m.role === "field_officer" && !m.revoked_at && m.accepted_at && (
+                        <Button variant="outline" size="sm" onClick={() => setDeviceMember(m)}>Android keys</Button>
+                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" aria-label={t("Ações")}>
@@ -199,6 +205,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">{t("você")}</span>
                     )}
@@ -217,6 +224,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
           onClose={() => setInterfaceMember(null)}
         />
       )}
+      {deviceMember && <OfficerDevicesDialog key={deviceMember.user_id} member={deviceMember} onClose={() => setDeviceMember(null)} />}
       <Dialog open={!!revokeDialog} onOpenChange={(o) => !o && setRevokeDialog(null)}>
         <DialogContent>
           <DialogHeader>

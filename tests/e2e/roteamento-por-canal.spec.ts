@@ -96,7 +96,7 @@ async function createUser(name: string, password: string): Promise<{ id: string;
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: name },
+    user_metadata: { full_name: name, locale: "pt-BR" },
   });
   if (error || !data.user) throw error ?? new Error("auth_user_missing");
   return { id: data.user.id, email };
@@ -312,7 +312,7 @@ test("configura responsáveis por canal e o cron distribui sem misturar números
       fullPage: true,
     });
     await notice.getByRole("link", { name: "Abrir conversa" }).click();
-    await expect(page).toHaveURL(new RegExp(`/app/inbox/${southConversation}$`));
+    await expect(page).toHaveURL(new RegExp(`/app/inbox\\?id=${southConversation}$`));
     await expect(
       page.getByText("Mensagem de Cliente Canal Sul", { exact: true }).first(),
     ).toBeVisible();

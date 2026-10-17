@@ -8,6 +8,10 @@ type Tradutor = (texto: string) => string;
  * estável também evita mostrar nomes internos como `fallback_template_id`.
  */
 const MENSAGEM_POR_CODIGO: Record<PublishValidationError["code"], string> = {
+  choice_source_invalid: 'Reconnect the reply block to its matching buttons/list message.',
+  media_missing: "Upload a file before publishing this media block.",
+  integration_connection_missing: 'Select a tested organization connection before publishing.',
+  integration_branch_missing: 'Connect both Success and Error outputs.',
   no_trigger: "Adicione um gatilho de início ao fluxo.",
   multiple_triggers: "Mantenha apenas um gatilho de início no fluxo.",
   unreachable_node: "Conecte este nó ao caminho que começa no gatilho.",

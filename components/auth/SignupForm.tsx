@@ -96,7 +96,7 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
          */
         if (res.sessao_ativa) {
           router.replace(
-            convite ? `/team/accept-invite/${convite.token}` : "/get-started",
+            res.convite_aceito ? "/app" : convite ? `/team/accept-invite/${convite.token}` : "/get-started",
           );
           return;
         }
@@ -109,6 +109,8 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
         setServerError(
           t("O cadastro de novas empresas é feito pela equipe da plataforma nesta instalação."),
         );
+      } else if (res.error === "validation_error" && convite && res.details?.invite) {
+        setServerError(t("Convite inválido ou expirado"));
       } else if (res.error === "validation_error") {
         setServerError(t("Dados inválidos. Confira os campos."));
       } else if (res.error === "conta_ja_existe") {

@@ -1,0 +1,15 @@
+services:
+  field-voice:
+    image: ${CT102_VOICE_IMAGE:?Pinned voice image digest required}
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: 1536m
+    environment:
+      INTERNAL_SECRET: ${INTERNAL_SECRET:?Internal secret required}
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s

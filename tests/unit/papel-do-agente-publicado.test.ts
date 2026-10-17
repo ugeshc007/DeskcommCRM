@@ -40,13 +40,16 @@ describe("papel do agente publicado", () => {
   it("o banco também não o aceita para pessoa (CHECK de user_organizations)", () => {
     // A defesa de verdade é esta: mesmo que o TypeScript afrouxe, a linha não
     // entra. Lê o CHECK real do baseline — não uma cópia da regra.
-    const m = baseline.match(/user_organizations_role_check[^\n]*/);
-    expect(m, "CHECK de user_organizations não encontrado no baseline").not.toBeNull();
-    expect(m![0]).not.toContain("ai_operator");
+    // O baseline preserva o CREATE original e aplica migrations idempotentes
+    // depois; o CHECK efetivo é o último ADD CONSTRAINT, não o primeiro texto.
+    const checks = [...baseline.matchAll(/user_organizations_role_check\s*\n\s*check \([^\n]+\)/g)];
+    const check = checks.at(-1)?.[0];
+    expect(check, "CHECK efetivo de user_organizations não encontrado no baseline").toBeDefined();
+    expect(check).not.toContain("ai_operator");
     // Controle positivo: se o regex parar de casar a linha certa, o teste acima
     // passaria vacuamente. Este confirma que estamos lendo o CHECK dos papéis.
     for (const humano of PAPEIS_HUMANOS) {
-      expect(m![0]).toContain(humano);
+      expect(check).toContain(humano);
     }
   });
 

@@ -99,11 +99,11 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
       await page.waitForTimeout(msUntilNextTotpWindow() + 200);
     }
     const code = generateTotp(secret);
-    const firstDigit = page.locator('input[aria-label="Dígito 1"]');
+    const firstDigit = page.locator('input[aria-label="Dígito 1"], input[aria-label="Digit 1"]');
     await firstDigit.click();
     await page.keyboard.type(code, { delay: 40 });
     try {
-      await page.waitForURL(/\/app\//, { timeout: 8_000 });
+      await page.waitForURL(/\/(?:app|admin)\//, { timeout: 8_000 });
       return;
     } catch {
       // código rejeitado — espera a próxima janela e tenta de novo
@@ -498,6 +498,6 @@ test("quem não é dono do servidor não vê o botão", async ({ page, request }
   await expect(page.getByRole("link", { name: /nova versão/i })).toHaveCount(0);
 
   await page.goto("/app/settings/atualizacao");
-  await expect(page.getByText(/404 — Página não encontrada/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /404/ })).toBeVisible();
   await page.screenshot({ path: ".superpowers/evidence/task9-4-nao-dono-404.png" });
 });

@@ -113,11 +113,14 @@ function importesDe(fonte: string): string[] {
 }
 
 /** Resolve `@/x` e `./x` para um arquivo do repo. `null` para pacote externo. */
+const resolvidos = new Map<string, string | null>();
+const fontes = new Map<string, string>();
 function resolverLocal(especificador: string, deOndeVeio: string): string | null {
   let base: string;
   if (especificador.startsWith("@/")) base = path.join(RAIZ, especificador.slice(2));
   else if (especificador.startsWith(".")) base = path.resolve(path.dirname(deOndeVeio), especificador);
   else return null;
+  if (resolvidos.has(base)) return resolvidos.get(base) ?? null;
 
   for (const tentativa of [
     base,
@@ -127,11 +130,12 @@ function resolverLocal(especificador: string, deOndeVeio: string): string | null
     path.join(base, "index.tsx"),
   ]) {
     try {
-      if (statSync(tentativa).isFile()) return tentativa;
+      if (statSync(tentativa).isFile()) { resolvidos.set(base, tentativa); return tentativa; }
     } catch {
       /* não existe: tenta a próxima extensão */
     }
   }
+  resolvidos.set(base, null);
   return null;
 }
 
@@ -149,7 +153,10 @@ function cadeiaDeImports(arquivo: string, vistos = new Set<string>()): string[] 
   const achados: string[] = [];
   let fonte: string;
   try {
-    fonte = readFileSync(arquivo, "utf8");
+    // Cache só de I/O, não de resultados transitivos: mantém a detecção de
+    // ciclos e todos os caminhos, sem reler o mesmo módulo por cada tela.
+    fonte = fontes.get(arquivo) ?? readFileSync(arquivo, "utf8");
+    fontes.set(arquivo, fonte);
   } catch {
     return [];
   }

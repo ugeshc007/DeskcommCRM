@@ -44,7 +44,7 @@ async function evidence(page: Page, info: TestInfo, name: string) {
 test.beforeAll(async () => {
   for (const role of ["agent", "other", "manager", "admin", "viewer"]) {
     const email = `avisos-${role}-${randomUUID()}@invariant.test`;
-    const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
+    const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { locale: "pt-BR" } });
     if (error || !data.user) throw error;
     users.push({ id: data.user.id, email, role });
   }

@@ -1,4 +1,7 @@
 import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
+import { evaluateExpression } from './expression';
+import { businessHoursState } from './business-hours';
+import type { ConditionCheck } from './graph-schema';
 /**
  * Node handlers for the follow-up flow engine (Task 4.1) — PURE, no DB access.
  * `engine.ts` owns the tick/DB orchestration; this file only decides "given
@@ -9,6 +12,7 @@ import type { FlowEdge, FlowNode, ReplySaveTo } from "./graph-schema";
 import { parseReplyCount } from "./parse-count";
 import { clampEspera, esperaPlanejadaDe, type EsperaAdaptativa } from "./timing-plan";
 import { fraseDeConfirmacao } from "./vocabulario";
+import { INVALID_ANSWER_BRANCH_ID, validateAnswer } from "./answer-validation";
 
 export type EnrollmentStatus =
   | "active"
@@ -56,6 +60,7 @@ export interface EnrollmentRow {
    * Ausente/`null` = enrollment de antes da feature ⇒ comportamento anterior.
    */
   timing_plan?: unknown;
+  variables?: unknown;
 }
 
 /** Minimal typed facts a `condition` node can check — loaded by the engine, never guessed. */
@@ -66,6 +71,7 @@ export interface LeadFacts {
   last_outcome: string | null;
   contact_name?: string | null;
   custom_fields?: Record<string, unknown>;
+  variables?: Record<string, unknown>;
 }
 
 /** Reference to a `followup_enrollment_events` row — only what `resolveWaitPhase` needs. */
@@ -136,7 +142,7 @@ export const MAX_ACTION_RECHECKS = 14;
  */
 export function destinoJaPreenchido(lead: LeadFacts, saveTo: ReplySaveTo): boolean {
   if (saveTo.kind === "contact_name") return Boolean(lead.contact_name?.trim());
-  const v = lead.custom_fields?.[saveTo.key];
+  const v = saveTo.kind === 'session_variable' ? lead.variables?.[saveTo.key] : lead.custom_fields?.[saveTo.key];
   if (typeof v === "string") return v.trim().length > 0;
   return v !== undefined && v !== null && v !== "";
 }
@@ -287,10 +293,13 @@ export function resolveWaitPhase(events: EnrollmentEventRef[], nodeId: string, s
 }
 
 function evaluateCheck(
-  check: { field: "lead_stage" | "tag" | "steps_taken" | "last_outcome"; op: "eq" | "neq" | "gte" | "lte" | "contains"; value: string | number },
+  check: ConditionCheck,
   lead: LeadFacts,
+  now: Date,
 ): boolean {
-  const actual: string | number | null | string[] =
+  const formula = check.field === 'formula' ? evaluateExpression(check.expression, lead.custom_fields ?? {}, lead.variables) : null;
+  if (formula && !formula.ok) return false;
+  const actual = check.field === 'business_hours' ? businessHoursState(check.schedule, now) : formula?.ok ? formula.value :
     check.field === "lead_stage" ? lead.lead_stage
     : check.field === "tag" ? lead.tags
     : check.field === "steps_taken" ? lead.steps_taken
@@ -321,8 +330,9 @@ function evaluateCheck(
 function evaluateCondition(
   config: Extract<FlowNode, { type: "condition" }>["config"],
   lead: LeadFacts,
+  now: Date,
 ): boolean {
-  const results = config.checks.map((check) => evaluateCheck(check, lead));
+  const results = config.checks.map((check) => evaluateCheck(check, lead, now));
   return config.combinator === "and" ? results.every(Boolean) : results.some(Boolean);
 }
 
@@ -349,6 +359,8 @@ export function processNode(input: {
   wokeEarly?: boolean;
   /** Last inbound `messages.body` for this contact/conversation — engine loads on `match_reply` + wokeEarly. */
   lastInboundBody?: string;
+  selectedChoiceId?: string | null;
+  attachmentMessageId?: string | null;
   /** action occupancy guard: a `turn_enqueued` event for THIS stay on the action node already
    *  exists (an entry/recheck happened before). Resolved by the engine via `resolveWaitPhase`
    *  — same prior-step-event check as `wait`. When true, the send turn is in flight: DON'T
@@ -384,6 +396,8 @@ export function processNode(input: {
     waitElapsed,
     wokeEarly,
     lastInboundBody,
+    selectedChoiceId,
+    attachmentMessageId,
     actionEnqueued,
     actionRecheckCount,
     actionCompleted,
@@ -456,12 +470,17 @@ export function processNode(input: {
     }
 
     case "condition": {
+      for (const check of node.config.checks) {
+        if (check.field !== 'formula') continue;
+        const calculated = evaluateExpression(check.expression, lead.custom_fields ?? {}, lead.variables);
+        if (!calculated.ok) return { kind: 'fail', error: `formula_${calculated.code}` };
+      }
       if (node.config.branching === "per_check") {
         // "Uma saída por regra": a PRIMEIRA regra que passa manda, e a ordem da
         // lista é a precedência — a mesma ordem que o usuário vê no formulário.
         // Duas regras verdadeiras não podem sortear caminho; `combinator` não
         // é consultado aqui, porque nesse modo a regra não vota, ela roteia.
-        const hitId = node.config.checks.find((c) => c.id !== undefined && evaluateCheck(c, lead))?.id;
+        const hitId = node.config.checks.find((c) => c.id !== undefined && evaluateCheck(c, lead, clock()))?.id;
         // Nenhuma regra passou -> o ramo obrigatório 'else', que na aresta é `always`.
         // `selectEdge` também cai nele quando o usuário deixou um ramo sem ligar:
         // sair pela saída de escape é ruim, ficar preso no nó é pior.
@@ -477,7 +496,7 @@ export function processNode(input: {
         }
         return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
       }
-      const result = evaluateCondition(node.config, lead);
+      const result = evaluateCondition(node.config, lead, clock());
       const edge = selectEdge(edges, node.id, { type: "cond_result", value: result });
       if (!edge) return { kind: "fail", error: `condition node "${node.id}" has no matching edge for result ${result}` };
       return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
@@ -533,6 +552,25 @@ export function processNode(input: {
         };
       }
       if (wokeEarly) {
+        const confirmsExisting = node.config.save_to &&
+          modoSeJaExiste(node) === "confirm" && destinoJaPreenchido(lead, node.config.save_to) &&
+          ehConfirmacao(lastInboundBody ?? "");
+        if (node.config.answer_format && !confirmsExisting &&
+          !validateAnswer(node.config.answer_format, lastInboundBody ?? "", attachmentMessageId).valid) {
+          // Nunca use o fallback válido para um erro de formato.
+          const invalid = edges.filter((e) => e.source === node.id &&
+            e.condition.type === "branch" && e.condition.branch_id === INVALID_ANSWER_BRANCH_ID)
+            .sort((a, b) => b.priority - a.priority)[0];
+          return invalid
+            ? { kind: "advance", next_node_id: invalid.target, next_eval_at: clock() }
+            : { kind: "fail", error: "invalid_answer_path_missing" };
+        }
+        if (node.config.choice_source_node_id) {
+          const hit = node.config.branches.find(b => b.pattern === selectedChoiceId);
+          const edge = selectEdge(edges, node.id, { type: 'branch', branch_id: hit?.id ?? 'else' });
+          return edge ? { kind: 'advance', next_node_id: edge.target, next_eval_at: clock() }
+            : { kind: 'fail', error: 'choice_route_missing' };
+        }
         const body = (lastInboundBody ?? "").trim().toLowerCase();
         const hit =
           node.config.save_to !== undefined
@@ -601,6 +639,8 @@ export function processNode(input: {
     }
 
     case "action": {
+      if (node.config.mode === 'integration') return { kind: 'fail', error: 'integration_requires_guarded_engine_step' };
+      if (node.config.mode === 'set_variable') return { kind: 'fail', error: 'variable_action_requires_atomic_engine_step' };
       // At-most-once send: enqueue the turn EXACTLY ONCE per occupancy. First entry
       // (no prior occupancy event) enqueues; a recheck fired while the turn is still in
       // flight — completeTurnForEnrollment (turn-bridge) hasn't advanced the enrollment

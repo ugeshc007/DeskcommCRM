@@ -25,6 +25,8 @@ export function assertSafeOutboundUrl(url: string): void {
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error("unsafe_url:scheme");
   }
+  if (parsed.username || parsed.password) throw new Error('unsafe_url:credentials');
+  if (parsed.hash) throw new Error('unsafe_url:fragment');
   if (parsed.protocol === "http:" && process.env.NODE_ENV === "production") {
     throw new Error("unsafe_url:https_required");
   }

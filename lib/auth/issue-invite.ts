@@ -16,7 +16,7 @@ import { marcaDaSaida } from "@/lib/branding/saida";
 export async function issueInvite(input: {
   interfaceSettings?: InterfaceSettings;
   email: string;
-  role: "viewer" | "agent" | "manager" | "admin";
+  role: "field_officer" | "viewer" | "agent" | "manager" | "admin";
   organizationId: string;
   orgName: string;
   inviterId: string;

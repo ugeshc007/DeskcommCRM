@@ -93,10 +93,10 @@ describe("adapter meta_cloud — endereçamento", () => {
 });
 
 describe("adapter meta_cloud — configuração", () => {
-  it("sem credencial NÃO está configurado", () => {
+  it("a pré-checagem síncrona permite tentar porque a credencial pode estar na sessão", () => {
     vi.stubEnv("META_PHONE_NUMBER_ID", "");
     vi.stubEnv("META_SYSTEM_USER_TOKEN", "");
-    expect(a().isConfigured()).toBe(false);
+    expect(a().isConfigured()).toBe(true);
   });
 
   it("com credencial está configurado", () => {
@@ -104,12 +104,12 @@ describe("adapter meta_cloud — configuração", () => {
     expect(a().isConfigured()).toBe(true);
   });
 
-  it("não configurado é NOOP no envio, nunca exceção", async () => {
-    // Mesmo contrato do outro canal: a UI mostra banner, o handler grava `queued`.
+  it("sem credencial na sessão nem no env lança o código que mantém a mensagem em fila", async () => {
     vi.stubEnv("META_PHONE_NUMBER_ID", "");
     vi.stubEnv("META_SYSTEM_USER_TOKEN", "");
-    const r = await a().send({ organizationId: ORG, sessionRef: "x", to: "5531999", kind: "text", body: "oi" });
-    expect(r).toEqual({ externalId: null });
+    await expect(
+      a().send({ organizationId: ORG, sessionRef: "x", to: "5531999", kind: "text", body: "oi" }),
+    ).rejects.toThrow(/^meta_not_configured:/);
   });
 
   it("os códigos carregam o nome do provider — por isso vivem no adapter", () => {
@@ -266,6 +266,25 @@ describe("adapter meta_cloud — mídia recebida", () => {
 });
 
 describe("credencial por sessão — o que destrava multi-tenant", () => {
+  it("com token na SESSÃO envia mesmo sem credencial global no ambiente", async () => {
+    vi.stubEnv("META_PHONE_NUMBER_ID", "");
+    vi.stubEnv("META_SYSTEM_USER_TOKEN", "");
+    sessaoNoBanco.token = "token-da-sessao";
+    const spy = stubFetch({ messages: [{ id: "wamid.SEM_ENV" }] });
+
+    const result = await a().send({
+      organizationId: ORG,
+      sessionRef: "sessao-pn",
+      to: "5531",
+      kind: "text",
+      body: "oi",
+    });
+
+    expect(result).toEqual({ externalId: "wamid.SEM_ENV" });
+    expect((spy.mock.calls[0]![1].headers as Record<string, string>).Authorization)
+      .toBe("Bearer token-da-sessao");
+  });
+
   it("com token na SESSÃO, o env deixa de valer", async () => {
     // Ordem sessão-primeiro: um env esquecido não pode silenciar o que foi
     // configurado pela tela, senão o operador não entende por que nada mudou.

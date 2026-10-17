@@ -191,7 +191,7 @@ export function InboxFilters({ value, onChange }: Props) {
                   <SelectItem value="all">{t("Todas as tags")}</SelectItem>
                   {tagVocabulary?.map((tag) => (
                     <SelectItem key={tag} value={tag}>
-                      {tag}
+                      {t(tag)}
                     </SelectItem>
                   ))}
                 </SelectContent>

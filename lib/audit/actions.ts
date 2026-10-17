@@ -77,6 +77,7 @@ export const AUDIT_ACTIONS = [
   // ser membro. O REENVIO de um convite audita como `member.invited` — é uma
   // nova emissão do mesmo convite.
   "member.invite_revoked",
+  "member.invite_archived",
   "token.created",
   "token.revoked",
   "profile.updated",
@@ -257,6 +258,7 @@ export const AUDIT_ACTIONS = [
   "ai.router_members_updated",
   "followup_flow.created",
   "followup_flow.updated",
+  "followup_flow.media_uploaded",
   "followup_flow.published",
   "followup_flow.disabled",
   "followup_flow.deleted",
@@ -496,6 +498,19 @@ export const AUDIT_ACTIONS = [
   "voice.opt_in_changed",
   "voice.session_unpaired",
   "platform_admin.subscription_updated",
+  "integration.connection_saved",
+  "integration.connection_tested",
+  "integration.connection_disconnected",
+  "integration.oauth_started",
+  "integration.event_received",
+  "ecommerce.template_installed",
+  "store.module_installed",
+  "store.configuration_updated",
+  "store.order_reserved",
+  "store.payment_prepared",
+  "store.payment_recovered",
+  "store.payment_event",
+  "auth.manual_invite_enrolled",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -22,7 +22,8 @@
  * A jornada inteira (trocar, cair no wizard, voltar) é da
  * `tests/e2e/troca-de-organizacao-tem-volta.spec.ts`, que dirige o browser.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 

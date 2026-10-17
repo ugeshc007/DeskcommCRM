@@ -10,7 +10,7 @@ const password=`Local-${randomUUID()}!`;
 async function insert(table:string,value:Record<string,unknown>) {
  const {data,error}=await db.from(table).insert(value).select("id").single(); if(error)throw error; return data.id as string;
 }
-async function login(page:Page,email:string){await page.goto("/login");await page.getByLabel(/e-?mail/i).fill(email);await page.getByLabel(/senha/i).fill(password);await page.getByRole("button",{name:/entrar/i}).click();await page.waitForURL(/\/app(\/|$)/,{timeout:60000});}
+async function login(page:Page,email:string){await page.goto("/login");await page.getByLabel(/e-?mail/i).fill(email);await page.getByLabel(/senha/i).fill(password);await page.getByRole("button",{name:/entrar/i}).click();await page.waitForURL(/\/(?:app|admin)(\/|$)/,{timeout:60000});}
 async function start(page:Page,org:string,readonly=false){
  await page.goto(`/admin/tenants/${org}`);
  await page.getByRole("button",{name:/Acompanhar/}).click();
@@ -65,7 +65,7 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
  }));
  observeAuth(page);page.context().on("page",observeAuth);
  const suffix=randomUUID().slice(0,8); const email=`support-${suffix}@invariant.test`;
- const {data:created,error}=await db.auth.admin.createUser({email,password,email_confirm:true});if(error||!created.user)throw error;
+ const {data:created,error}=await db.auth.admin.createUser({email,password,email_confirm:true,user_metadata:{locale:"pt-BR"}});if(error||!created.user)throw error;
  const actor=created.user.id;const orgs:string[]=[];let second: BrowserContext | undefined;
  let scenarioFailure: unknown;
  const receiverHits: string[] = [];
@@ -115,7 +115,8 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
   await login(page,email);await acknowledgeKnownAction(page,"/login");
   const sameTab=await page.context().newPage();await sameTab.goto("/app/inbox");
   await expect(sameTab.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
-  second=await browser.newContext();observeRequests(second);const other=await second.newPage();observeAuth(other);await login(other,email);await acknowledgeKnownAction(other,"/login");
+  second=await browser.newContext();observeRequests(second);const other=await second.newPage();observeAuth(other);await login(other,email);await acknowledgeKnownAction(other,"/login");await other.goto("/app/inbox");
+  await expect(other.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
   await start(page,orgs[1]!);
   await expect(sameTab.getByTestId("tenant-switcher")).toContainText(`Suporte B ${suffix}`);
   await expect(sameTab.locator("[data-conversation-id]").getByText(`Contato B ${suffix}`,{exact:true})).toBeVisible();
@@ -232,8 +233,12 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
      blockedBeforeSend.add(request);pendingMutations.delete(request);await route.abort("aborted");
     }else await route.continue();
    })));
-   await expect.poll(()=>pendingMutations.size,{timeout:20000,
-    message:"Mutações enviadas devem concluir antes de fechar contextos ou apagar fixtures"}).toBe(0);
+   try {
+    await expect.poll(()=>pendingMutations.size,{timeout:20000,
+     message:"Mutações enviadas devem concluir antes de fechar contextos ou apagar fixtures"}).toBe(0);
+   } catch (error) {
+    throw new Error(`Mutações ainda em voo no cleanup: ${JSON.stringify(pendingMutationDescriptions())}`, { cause: error });
+   }
    const closing = await Promise.allSettled([
     ...page.context().pages().map(ownedPage => ownedPage.close()),
     ...(second ? [second.close()] : []),

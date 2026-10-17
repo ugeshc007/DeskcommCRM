@@ -37,6 +37,17 @@
     "eventos"
   ],
   "nodes": [
+    { "id": "session-logic", "lane": "regra", "col": 5, "type": "backend", "label": "expression / session-variables / business-hours", "sublabel": "valores tipados limitados; relógio do motor; configuração no ConditionForm" },
+    { "id": "session-write", "lane": "dados", "col": 6, "type": "database", "label": "fn_followup_set_variable", "sublabel": "org + fronteira + revisão + aresta; grava e avança atomicamente" },
+    { "id": "choice-binding", "lane": "regra", "col": 5, "type": "backend", "label": "choiceForPrompt / attachmentAnswerId", "sublabel": "resposta vinculada à conversa, execução e último prompt; arquivo é referência" },
+    {
+      "id": "answer-validation",
+      "lane": "regra",
+      "col": 4,
+      "type": "backend",
+      "label": "validateAnswer · question presets",
+      "sublabel": "formato explícito; inválido nunca persiste; ramo de correção obrigatório"
+    },
     {
       "id": "fila",
       "lane": "humano",
@@ -239,6 +250,24 @@
     }
   ],
   "edges": [
+    { "id": "session-evaluate", "from": "engine", "to": "session-logic", "label": "grafo pinado + variáveis da execução + relógio" },
+    { "id": "session-result", "from": "session-logic", "to": "engine", "label": "valor tipado, rota ou falha controlada" },
+    { "id": "session-persist", "from": "engine", "to": "session-write", "label": "set variável e destino de resposta; chamada server-only" },
+    { "id": "session-event", "from": "session-write", "to": "eventos", "label": "variable_set com chave/tipo, nunca valor" },
+    { "id": "choice-check", "from": "engine", "to": "choice-binding", "label": "mensagens lidas com filtro de organização e conversa" },
+    { "id": "choice-result", "from": "choice-binding", "to": "engine", "label": "ID estável válido ou fallback/invalid_answer" },
+    {
+      "id": "question-validation-input",
+      "from": "engine",
+      "to": "answer-validation",
+      "label": "resposta recebida + configuração da versão pinada"
+    },
+    {
+      "id": "question-validation-output",
+      "from": "answer-validation",
+      "to": "engine",
+      "label": "valor válido normalizado ou ramo invalid_answer; evento de avanço visível no dossiê"
+    },
     {
       "id": "e1",
       "from": "fila",

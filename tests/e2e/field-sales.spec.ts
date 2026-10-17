@@ -332,6 +332,10 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByLabel('Route color for Synthetic salesperson')).toBeVisible();
   await expect(page.getByLabel('Route color for Aardvark salesperson')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('all-employee-route-history.png'), fullPage: true });
+  await authenticateFieldDevice(pool, 'Bearer ' + deviceToken);
+  // The roster query was loaded before this officer was inserted. Reload as a manager would
+  // after enrolling a new officer so the Team tab reads the current roster.
+  await page.reload();
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await expect(team.getByRole('article').first().getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
   const offlineOfficer = team.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Aardvark salesperson' }) });

@@ -150,6 +150,7 @@ test("o admin zera os dados da sua organização pela tela — e a vizinha não 
   // ── A zona de perigo, com a confirmação por nome ────────────────────────
   await page.goto("/app/settings/tenant");
   const zona = page.getByTestId("zona-de-perigo");
+  await expect(zona).toHaveCount(1, { timeout: 30_000 });
   await expect(zona).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("abrir-zona-de-perigo").click();
 

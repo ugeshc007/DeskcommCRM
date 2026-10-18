@@ -350,7 +350,12 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(routeDialog).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Route and visits', exact: true })).toBeVisible();
   await routeDialog.getByRole('button', { name: 'Full screen', exact: true }).click();
-  expect(await routeDialog.evaluate(element => Math.round(element.getBoundingClientRect().width))).toBe(1440);
+  // The native vertical scrollbar can reserve 16px of a 1440px test viewport.
+  // Full screen must cover the entire usable viewport, including its left edge.
+  await expect.poll(() => routeDialog.evaluate(element => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.left <= 1 && bounds.right >= document.documentElement.clientWidth - 1;
+  })).toBe(true);
   await routeDialog.getByRole('button', { name: 'Exit full screen', exact: true }).click();
   await page.getByLabel('Travel date').fill(day);
   await routeDialog.getByText('Field officers', { exact: true }).locator('..').locator('summary').click();
@@ -373,7 +378,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
   await routeDialog.getByRole('button', { name: 'Full screen map' }).click();
-  const viewport = page.viewportSize()!;
+  const viewport = await page.evaluate(() => ({ width: document.documentElement.clientWidth, height: window.innerHeight }));
   await expect.poll(async () => {
     const bounds = await routeDialog.boundingBox();
     return !!bounds && bounds.x <= 2 && bounds.y <= 2

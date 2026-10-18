@@ -18,7 +18,15 @@ async function start(page:Page,org:string,readonly=false){
  await page.getByRole("button",{name:"Confirmar e entrar"}).click();
  await page.waitForURL("**/app/inbox");
 }
-async function end(page:Page){await page.getByRole("button",{name:"Sair do acompanhamento"}).click();await page.waitForURL("**/app/inbox");await expect(page.getByRole("button",{name:"Sair do acompanhamento"})).toHaveCount(0);}
+async function end(page:Page){
+ const completed=page.waitForEvent("requestfinished",request=>request.method()==="POST"
+  && new URL(request.url()).pathname==="/api/v1/admin/impersonate/end");
+ await page.getByRole("button",{name:"Sair do acompanhamento"}).click();
+ const request=await completed;
+ expect((await request.response())?.status()).toBe(200);
+ await page.waitForURL("**/app/inbox");
+ await expect(page.getByRole("button",{name:"Sair do acompanhamento"})).toHaveCount(0);
+}
 
 test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/expiração/revogação são reais",async({page,browser})=>{
  test.setTimeout(240000);

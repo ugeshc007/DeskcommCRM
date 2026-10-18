@@ -19,13 +19,13 @@ async function start(page:Page,org:string,readonly=false){
  await page.waitForURL("**/app/inbox");
 }
 async function end(page:Page){
- const completed=page.waitForEvent("requestfinished",request=>request.method()==="POST"
+ const sent=page.waitForRequest(request=>request.method()==="POST"
   && new URL(request.url()).pathname==="/api/v1/admin/impersonate/end");
  await page.getByRole("button",{name:"Sair do acompanhamento"}).click();
- const request=await completed;
- expect((await request.response())?.status()).toBe(200);
+ const request=await sent;
  await page.waitForURL("**/app/inbox");
  await expect(page.getByRole("button",{name:"Sair do acompanhamento"})).toHaveCount(0);
+ return request;
 }
 
 test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/expiração/revogação são reais",async({page,browser})=>{
@@ -75,6 +75,19 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
  const suffix=randomUUID().slice(0,8); const email=`support-${suffix}@invariant.test`;
  const {data:created,error}=await db.auth.admin.createUser({email,password,email_confirm:true,user_metadata:{locale:"pt-BR"}});if(error||!created.user)throw error;
  const actor=created.user.id;const orgs:string[]=[];let second: BrowserContext | undefined;
+ const endAndAcknowledge=async(target:Page)=>{
+  const request=await end(target);
+  await expect.poll(async()=>{
+   const {data,error}=await db.from("platform_support_sessions").select("id")
+    .eq("actor_user_id",actor).is("ended_at",null);
+   if(error)throw error;
+   return data?.length ?? -1;
+  }).toBe(0);
+  expect((await request.response())?.status()).toBe(200);
+  // The browser may navigate before requestfinished fires. The successful
+  // response plus durable ended_at is the stronger server-side postcondition.
+  pendingMutations.delete(request);
+ };
  let scenarioFailure: unknown;
  const receiverHits: string[] = [];
  type RemoteSession = { name: string; status: string; engine: "NOWEB"; config: Record<string, unknown>; me: null };
@@ -174,7 +187,7 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
   });
   // Evita rejeição não observada se end falhar antes do await da resposta.
   void returnedToA.catch(()=>{});
-  await end(page);await returnedToA;
+  await endAndAcknowledge(page);await returnedToA;
   await expect(page.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
   await expect(sameTab.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
   await expect(sameTab.locator("[data-conversation-id]").getByText(`Contato A ${suffix}`,{exact:true})).toBeVisible();
@@ -224,7 +237,7 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
   const stale=await page.request.patch(`/api/v1/contacts/${contacts[1]}`,{data:{name:"Forbidden expired"}});expect(stale.status()).toBe(403);
   await page.reload();await page.waitForURL("**/support-ended");await expect(page.getByRole("heading",{name:"Encerre o acompanhamento para continuar"})).toBeVisible();
   const revoke=await db.from("platform_admins").update({revoked_at:new Date().toISOString()}).eq("user_id",actor);if(revoke.error)throw revoke.error;
-  await end(page);await expect(page.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
+  await endAndAcknowledge(page);await expect(page.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
   expect((await db.from("contacts").select("name").eq("id",contacts[0]).single()).data?.name).toBe(`Contato A ${suffix}`);
   expect(joins.filter(join=>join.role!=="authenticated")).toEqual([]);
   expect((await db.from("organizations").select("onboarded_at").eq("id",orgs[1]).single()).data?.onboarded_at).toBeNull();

@@ -26,6 +26,7 @@ test.beforeAll(async () => {
   await pool.query(readFileSync('supabase/migrations/20260922160000_0385_field_sales_activity_notes.sql', 'utf8'));
   await pool.query(readFileSync('supabase/migrations/20260924180000_0388_field_sales_location_quality.sql', 'utf8'));
   await pool.query(readFileSync('supabase/migrations/20260925120000_0389_field_sales_attendance_leave.sql', 'utf8'));
+  await pool.query(readFileSync('supabase/migrations/20261018035000_0694_field_sales_route_styles.sql', 'utf8'));
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: 'Synthetic field administrator' } });
   if (created.error || !created.data.user) throw new Error('Synthetic field account creation failed');
   actor = created.data.user.id;
@@ -358,9 +359,14 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await routeDialog.getByText('Field officers', { exact: true }).locator('..').locator('summary').click();
   await expect(routeDialog.getByRole('region', { name: 'Selected officer routes' })).toBeVisible();
   await expect(routeDialog.getByLabel('Route color for Aardvark salesperson')).toBeVisible();
-  const colorA = await routeDialog.getByLabel('Route color for Synthetic salesperson').locator('span').getAttribute('style');
-  const colorB = await routeDialog.getByLabel('Route color for Aardvark salesperson').locator('span').getAttribute('style');
+  const colorA = await routeDialog.getByLabel('Route color for Synthetic salesperson').locator('line').getAttribute('stroke');
+  const colorB = await routeDialog.getByLabel('Route color for Aardvark salesperson').locator('line').getAttribute('stroke');
   expect(colorA).not.toBe(colorB);
+  await routeDialog.getByLabel('Route color for Aardvark salesperson').click();
+  await expect(routeDialog.getByLabel('Route color for Aardvark salesperson')).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: testInfo.outputPath('highlighted-officer-route.png') });
+  await routeDialog.getByLabel('Route color for Aardvark salesperson').click();
+  await expect(routeDialog.getByLabel('Route color for Aardvark salesperson')).toHaveAttribute('aria-pressed', 'false');
   await routeDialog.getByRole('region', { name: 'Selected officer routes' }).getByText('Synthetic salesperson', { exact: true })
     .locator('..').getByRole('button', { name: 'View only this officer' }).click();
   await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();

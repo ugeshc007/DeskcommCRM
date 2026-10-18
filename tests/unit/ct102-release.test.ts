@@ -11,6 +11,7 @@ describe('CT102 release safety', () => {
     expect(deploy).toContain('20260921210000_0383_field_sales_device_presence.sql');
     expect(deploy).toContain('20260922113000_0384_field_sales_project_customers.sql');
     expect(deploy).toContain('20260924180000_0388_field_sales_location_quality.sql');
+    expect(deploy).toContain('20261018035000_0694_field_sales_route_styles.sql');
     expect(deploy).toContain('psql "$(url_do_schema)" -1 -q -v ON_ERROR_STOP=1');
     expect(deploy).not.toContain('baseline.sql');
     expect(deploy.indexOf('BACKUP_DIR="$backup_dir"')).toBeLessThan(deploy.indexOf('psql "$(url_do_schema)"'));
@@ -23,6 +24,7 @@ describe('CT102 release safety', () => {
     expect(workflow).toContain('20260921210000_0383_field_sales_device_presence.sql');
     expect(workflow).toContain('20260922113000_0384_field_sales_project_customers.sql');
     expect(workflow).toContain('20260924180000_0388_field_sales_location_quality.sql');
+    expect(workflow).toContain('20261018035000_0694_field_sales_route_styles.sql');
     expect(workflow).toContain('Pin the running voice sidecar for app-only release');
     expect(workflow).toContain('reuse-existing');
     expect(workflow).toContain('field-voice.override.yml');

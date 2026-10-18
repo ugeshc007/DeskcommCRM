@@ -117,7 +117,7 @@ export async function manageCorrection(pool: Pick<pg.Pool, 'connect'>, org: stri
 }
 
 async function visibleEmployees(db: FieldDb, org: string, actor: string, role: FieldRole) {
-  return (await db.query(`select user_id,display_name,active from public.field_sales_employees where organization_id=$1
+  return (await db.query(`select user_id,display_name,active,route_style_index from public.field_sales_employees where organization_id=$1
     and ($3 in ('admin','manager') or user_id=$2) order by display_name for share`, [org, actor, role])).rows;
 }
 export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, date: string,
@@ -141,7 +141,7 @@ export async function readFieldOperations(pool: Pick<pg.Pool, 'connect'>, org: s
     const quality = { positionAccuracyM: qualityRow?.position_accuracy_m ?? DEFAULT_ROUTE_QUALITY.positionAccuracyM,
       routeAccuracyM: qualityRow?.route_accuracy_m ?? DEFAULT_ROUTE_QUALITY.routeAccuracyM,
       plausibleSpeedMps: qualityRow?.plausible_speed_m_s ?? DEFAULT_ROUTE_QUALITY.plausibleSpeedMps };
-    const latest = (await db.query(`select e.user_id as employee_id,e.display_name,s.id as session_id,s.status,l.latitude,l.longitude,l.accuracy_m,l.captured_at,l.received_at,l.mock_location,l.quality_flags,l.speed_m_s,
+    const latest = (await db.query(`select e.user_id as employee_id,e.display_name,e.route_style_index,s.id as session_id,s.status,l.latitude,l.longitude,l.accuracy_m,l.captured_at,l.received_at,l.mock_location,l.quality_flags,l.speed_m_s,
       raw.captured_at as last_reported_at,raw.accuracy_m as last_reported_accuracy_m,
       presence.last_seen_at,coalesce(presence.last_seen_at>=now()-interval '2 minutes',false) as online
       from public.field_sales_employees e left join public.field_sales_sessions s on s.organization_id=e.organization_id and s.employee_id=e.user_id and s.punched_out_at is null

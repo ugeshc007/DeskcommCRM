@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RouteMap, type Operations, type ShopCollection } from '../operations';
 import { displayRoute } from '@/lib/field-sales/route-quality';
-import { routeColor } from '@/lib/field-sales/route-colors';
+import { RouteSwatch } from '../route-swatch';
 import { OfficerCards } from '../officer-cards';
 import { OfficerLayoutToggle, type OfficerLayout } from '../officer-layout-toggle';
 
@@ -121,7 +121,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         <div className="mt-2 divide-y">{data.latest.filter(person => selectedEmployeeIds.includes(person.employee_id)).map(person => {
           const route = displayRoute(data.points.filter(point => point.employee_id === person.employee_id), data.quality);
           return <div key={person.employee_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-            <span className="flex items-center gap-2"><span aria-hidden className="inline-block h-1 w-7 rounded-full" style={{ backgroundColor: routeColor(person.employee_id, data.latest.map(item => item.employee_id)) }}/>{person.display_name}</span>
+            <span className="flex items-center gap-2"><RouteSwatch styleIndex={person.route_style_index}/>{person.display_name}</span>
             <span className="text-muted-foreground">{route.plotted.length} quality-checked points · {(route.distance_m / 1000).toFixed(2)} km</span>
             <Button type="button" size="sm" variant="outline" onClick={() => setSelectedEmployeeIds([person.employee_id])}>View only this officer</Button>
           </div>;

@@ -38,6 +38,7 @@ test.beforeAll(async () => {
   );
   await pool.query('select fn_provision_field_sales_flexible_shifts()');
   await pool.query('select fn_provision_field_sales_pairing()');
+  await pool.query('select fn_provision_field_sales_route_styles()');
   await pool.query(
     "insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Synthetic salesperson')",
     [org, adminId],

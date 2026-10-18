@@ -3,9 +3,9 @@ import { render, screen, within } from '@testing-library/react';
 import { ProjectStaff } from './project-staff';
 
 const employees = [
-  { user_id: 'officer-a', display_name: 'Aby', active: true },
-  { user_id: 'officer-b', display_name: 'Jojo', active: true },
-  { user_id: 'officer-c', display_name: 'Former officer', active: false },
+  { user_id: 'officer-a', display_name: 'Aby', active: true, route_style_index: 0 },
+  { user_id: 'officer-b', display_name: 'Jojo', active: true, route_style_index: 1 },
+  { user_id: 'officer-c', display_name: 'Former officer', active: false, route_style_index: 2 },
 ];
 
 describe('project staffing', () => {

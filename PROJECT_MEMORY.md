@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-10-17. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-18. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -24,6 +24,13 @@ repository, GitHub checks and the running installation before any release claim.
   assignments and officers with an open session on that project; attendance refreshes every
   15 seconds while the Projects tab is open. This describes source behavior in this worktree,
   not a deployed version. Route and live maps have a full-screen control.
+- In this worktree, `field_sales_employees.route_style_index` is allocated once per officer
+  and organization under a transaction-scoped lock. Existing officers are backfilled by the
+  optional 0694 migration. Live positions and retained GPS history render the same stable
+  color/pattern without rewriting location records; the route legend can emphasize one
+  officer while dimming others. The CT102 app-only deploy adapter includes this migration
+  after its database backup. This is source behavior until the exact release passes CI and
+  the guarded deployment is independently verified.
 - In this worktree's Live view, the existing self-hosted map appears before the officer list.
   A Route history checkbox on the workspace Live view requests and draws the selected day's
   authorized officers' retained GPS paths together, with distinct colors and quality filtering.
@@ -42,11 +49,11 @@ repository, GitHub checks and the running installation before any release claim.
   running voice sidecar during the app-only CT102 release.
 - The Android emulator CI job enables KVM access on Ubuntu before creating its API 35 AVD;
   the earlier runner lacked KVM permission and timed out booting before instrumented tests.
-- Operational report checked on 2026-10-16: CT102 web app was released from commit
-  `ef19402a9e9e817019d059bd248377a89dada6e5` after its full GitHub test gate and
+- Operational report checked on 2026-10-17: CT102 web app was released from commit
+  `9d5b3f6a9438eeb612b6065ef1a011e6fd109da3` after its full GitHub test gate and
   required production review. Public health reported this version (with a pre-existing
-  degraded status). This does not deploy the follow-up full-screen fix or install an
-  Android build; verify current live image and physical device state before claiming either.
+  degraded status). This does not include the route-style migration described above or
+  install an Android build; verify current live image and physical device state before claiming either.
 - No customer bots or messages should be published/sent as part of Field Sales work. Live web
   changes require a green full GitHub gate for the exact release commit and CT102 guarded
   deployment with backup/rollback, as the user directed.

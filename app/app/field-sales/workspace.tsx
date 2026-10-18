@@ -20,7 +20,7 @@ import { ProjectStaff } from './project-staff';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
 
-type Employee = { user_id: string; display_name: string; active: boolean };
+type Employee = { user_id: string; display_name: string; active: boolean; route_style_index: number };
 type Project = { id: string; name: string; site_name: string; active: boolean };
 type Occurrence = { occurrence_key: string; employee_id: string; date: string; starts_at: string; ends_at: string;
   employee_name: string; project_name: string; site_name: string; revision: number; schedule: FieldSchedule; timezone: string; untimed: boolean };

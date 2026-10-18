@@ -2,7 +2,7 @@
 
 import { routeColor } from '@/lib/field-sales/route-colors';
 
-type Employee = { user_id: string; display_name: string; active: boolean };
+type Employee = { user_id: string; display_name: string; active: boolean; route_style_index: number };
 type Assignment = { employee_id: string; project_id: string; schedule: { start_date: string; end_date: string | null } };
 type Session = { employee_id: string; project_id: string | null; punched_out_at: string | null };
 
@@ -17,7 +17,7 @@ export function ProjectStaff({ projectId, employees, assignments, sessions, date
     && assignment.project_id === projectId && assignment.schedule.start_date <= date
     && (!assignment.schedule.end_date || assignment.schedule.end_date >= date)));
   const name = (person: Employee) => <li key={person.user_id} className="flex items-center gap-2">
-    <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: routeColor(person.user_id, employees.map(item => item.user_id)) }}/>
+    <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: routeColor(person.route_style_index) }}/>
     <span>{person.display_name}</span>
   </li>;
   return <div className="mt-3 space-y-3 border-t pt-3 text-sm">

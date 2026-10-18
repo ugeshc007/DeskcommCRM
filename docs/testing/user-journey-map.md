@@ -2121,3 +2121,15 @@ Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos apr
   its own exit button. This revision reduces only inter-group/outer nav spacing and layers the
   map control above its canvas. The existing browser assertions remain in force; this fix is
   pending a fresh full gate and is not evidence of deployment.
+
+### Field Sales stable route identities — 2026-10-18 (local development)
+
+- [P1] `field-sales.spec.ts`: historical multi-officer paths show a distinct persisted route
+  color and patterned legend for each officer; clicking a legend entry highlights that path
+  without changing the stored GPS or selecting another officer.
+- `tests/invariants/field-sales.test.ts`: new enrollment uses a unique index within an
+  organization, while renaming or adding colleagues does not change an existing officer's
+  index. The selected officer's historical response returns the same index.
+- The optional 0694 migration backfills existing employees and remains safe on repeat and
+  fresh opt-in installation. The CT102 adapter backs up before applying it; production
+  behavior requires the exact-commit CI gate and guarded release.

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { OfficerCards } from './officer-cards';
 import type { Operations } from './operations';
 
-const officer: Operations['latest'][number] = { employee_id: 'officer-a', display_name: 'Synthetic officer', status: 'working',
+const officer: Operations['latest'][number] = { employee_id: 'officer-a', display_name: 'Synthetic officer', route_style_index: 0, status: 'working',
   latitude: null, longitude: null, captured_at: null, accuracy_m: null, mock_location: null, last_reported_at: null, last_reported_accuracy_m: null, online: true, last_seen_at: '2026-09-22T18:00:00Z' };
 
 describe('duty cards when GPS is missing', () => {

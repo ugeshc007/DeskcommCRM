@@ -31,6 +31,7 @@ beforeAll(async () => {
   await pool.query('select fn_provision_field_sales_activity_notes()');
   await pool.query('select fn_provision_field_sales_location_quality()');
   await pool.query('select fn_provision_field_sales_attendance_leave()');
+  await pool.query('select fn_provision_field_sales_route_styles()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_operations()');
   await pool.query('select fn_provision_field_sales_lifecycle()');
@@ -63,6 +64,38 @@ async function fixture(startAt?: string) {
 }
 
 describe('optional field-sales foundation', () => {
+  it('keeps route identities unique per organization and stable across roster edits and historical reads', async () => {
+    const f = await fixture(), other = await fixture(), teammate = randomUUID();
+    const original = (await pool.query('select route_style_index from field_sales_employees where organization_id=$1 and user_id=$2',
+      [f.org, f.actor])).rows[0].route_style_index as number;
+    await pool.query('insert into auth.users(id,email) values($1,$2)', [teammate, `${teammate}@synthetic.test`]);
+    await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [teammate, f.org]);
+    await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Aardvark')", [f.org, teammate]);
+    const concurrent = Array.from({ length: 4 }, () => randomUUID());
+    for (const id of concurrent) {
+      await pool.query('insert into auth.users(id,email) values($1,$2)', [id, `${id}@synthetic.test`]);
+      await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [id, f.org]);
+    }
+    await Promise.all(concurrent.map(id => pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'New officer')", [f.org, id])));
+    await pool.query("update field_sales_employees set display_name='Renamed officer' where organization_id=$1 and user_id=$2", [f.org, f.actor]);
+    const people = (await pool.query('select user_id,route_style_index from field_sales_employees where organization_id=$1', [f.org])).rows;
+    expect(new Set(people.map(person => person.route_style_index)).size).toBe(people.length);
+    expect(people.find(person => person.user_id === f.actor)?.route_style_index).toBe(original);
+    expect((await pool.query('select route_style_index from field_sales_employees where organization_id=$1 and user_id=$2',
+      [other.org, other.actor])).rows[0].route_style_index).toBe(0);
+    const history = await readFieldOperations(pool, f.org, f.manager, f.localDate, null, f.actor);
+    expect(history.latest.find(person => person.employee_id === f.actor)?.route_style_index).toBe(original);
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      await db.query('alter table field_sales_employees alter column route_style_index drop not null');
+      await db.query('update field_sales_employees set route_style_index=null where organization_id=$1 and user_id=$2', [f.org, f.actor]);
+      await db.query('select fn_provision_field_sales_route_styles()');
+      expect((await db.query('select route_style_index from field_sales_employees where organization_id=$1 and user_id=$2',
+        [f.org, f.actor])).rows[0].route_style_index).toEqual(expect.any(Number));
+    } finally { await db.query('rollback'); db.release(); }
+  });
+
   it('keeps confirmed activity idempotent, within a work session, and isolated by organization', async () => {
     const f = await fixture(), other = await fixture();
     await recordAttendance(pool, f.org, f.actor, f.command);

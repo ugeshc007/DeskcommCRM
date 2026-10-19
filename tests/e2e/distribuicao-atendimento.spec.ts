@@ -94,7 +94,7 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     //    não faz sentido no modo manual, em que ninguém retenta).
     await expect(page.locator("#max_retries")).toHaveCount(0);
     await page.locator('[data-testid="opcao-modo-round_robin"]:visible').click();
-    await expect(page.locator("#max_retries")).toBeVisible();
+    await expect(page.locator("#max_retries:visible")).toBeVisible();
 
     // 4. Restringe a visibilidade ao próprio atendente.
     await page.locator('[data-testid="opcao-visibilidade-own"]:visible').click();
@@ -108,7 +108,9 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     await page.reload();
     expect(await marcada(page, "modo", "round_robin")).toBe(true);
     expect(await marcada(page, "visibilidade", "own")).toBe(true);
-    await expect(page.locator("#max_retries")).toBeVisible();
+    // During a route reload, Next may retain a hidden copy of the previous
+    // tree briefly. Assert the control the operator can actually see.
+    await expect(page.locator("#max_retries:visible")).toBeVisible();
 
     // 6. E a API concorda com a tela — se divergissem, uma das duas estaria
     //    mentindo e o operador não teria como saber qual.

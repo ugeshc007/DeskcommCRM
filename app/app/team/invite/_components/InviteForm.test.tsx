@@ -14,6 +14,14 @@ vi.mock("@/hooks/team/useInviteMembers", () => ({
 vi.mock("@/components/team/InterfaceEditor", () => ({
   InterfaceEditor: () => <div>Interface settings</div>,
 }));
+vi.mock("@/components/ui/select", () => ({
+  Select: ({ value, onValueChange, children }: { value: string; onValueChange: (value: string) => void; children: React.ReactNode }) =>
+    <select aria-label="Role" value={value} onChange={(event) => onValueChange(event.target.value)}>{children}</select>,
+  SelectTrigger: () => null,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => <option value={value}>{children}</option>,
+}));
 vi.mock("sonner", () => ({ toast: notify }));
 
 import { InviteForm } from "./InviteForm";
@@ -64,5 +72,18 @@ describe("manual team invitation without email", () => {
       "Não foi possível copiar. Selecione o link abaixo e copie manualmente.",
     ));
     expect(screen.getByText(setupUrl)).toHaveClass("select-all");
+  });
+
+  it("warns when a manager invite was not emailed", async () => {
+    const user = userEvent.setup();
+    render(<InviteForm />);
+    await user.type(screen.getByLabelText("Emails"), "manager@example.test");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Role" }), "manager");
+    await user.click(screen.getByRole("button", { name: "Enviar convites" }));
+
+    expect(await screen.findByText(/Quem tiver o link pode criar uma conta de gerente ou administrador/)).toBeInTheDocument();
+    expect(invite).toHaveBeenCalledWith({
+      invitations: [{ email: "manager@example.test", role: "manager", interface_settings: { preset: "completa" } }],
+    });
   });
 });

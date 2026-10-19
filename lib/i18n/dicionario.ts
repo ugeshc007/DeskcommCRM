@@ -6104,12 +6104,12 @@ const DICIONARIO_BASE: Traducoes = {
   "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.": {
     es: "¿Sin servicio de correo? Crea la invitación y comparte su enlace privado. Cada persona establece su propia contraseña al abrirlo.",
   },
-  "Convites manuais de staff (viewer/agent) dispensam email. Manager/admin ainda exigem confirmação por email.": {
-    es: "Las invitaciones manuales de personal (viewer/agent) no requieren correo. Manager/admin aún requieren confirmación por correo.",
-  },
   "Convites criados": { es: "Invitaciones creadas" },
   "Email não enviado. Compartilhe este link somente com a pessoa convidada.": {
     es: "Correo no enviado. Comparte este enlace solo con la persona invitada.",
+  },
+  "Email não enviado. Confirme a identidade da pessoa antes de entregar o link em particular. Quem tiver o link pode criar uma conta de gerente ou administrador nas próximas 24 horas.": {
+    es: "Correo no enviado. Confirma la identidad de la persona antes de entregarle el enlace en privado. Quien tenga el enlace puede crear una cuenta de gerente o administrador durante las próximas 24 horas.",
   },
   "Copiar link de acesso": { es: "Copiar enlace de acceso" },
   "Link de acesso copiado.": { es: "Enlace de acceso copiado." },
@@ -8735,8 +8735,8 @@ const DICIONARIO_BASE: Traducoes = {
   "Inherited from CRM organization settings": {
     es: "Heredado de la configuración de la organización en el CRM",
   },
-  "Field Officers e staff viewer/agent podem aceitar convites manuais. Manager/admin ainda exigem confirmação por email.": {
-    es: "Los oficiales de campo y el personal viewer/agent pueden aceptar invitaciones manuales. Manager/admin todavía requieren confirmación por correo electrónico.",
+  "Convites manuais valem por 24 horas para todos os papéis. Para gerente ou administrador, confirme a identidade da pessoa antes de entregar o link em particular.": {
+    es: "Las invitaciones manuales son válidas durante 24 horas para todos los roles. Para gerente o administrador, confirma la identidad de la persona antes de entregarle el enlace en privado.",
   },
   "Remove from list": { es: "Quitar de la lista" },
   "Remove revoked invitation?": { es: "¿Quitar la invitación revocada?" },

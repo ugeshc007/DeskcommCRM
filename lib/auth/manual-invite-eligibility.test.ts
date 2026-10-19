@@ -33,12 +33,13 @@ describe("manual staff enrollment eligibility", () => {
     expect(manualInviteEligible(row, payload, now + 3600_000)).toBe(false);
     expect(manualInviteEligible({ ...row, expires_at: new Date(now + 7200_000).toISOString() }, payload, now)).toBe(false);
   });
-  it("rejects cross-organization, changed role, and elevated roles", () => {
+  it("rejects cross-organization and changed roles, but accepts matching elevated roles", () => {
     expect(manualInviteEligible({ ...row, organization_id: otherOrg }, payload, now)).toBe(false);
     expect(manualInviteEligible({ ...row, role: "manager" }, payload, now)).toBe(false);
-    expect(manualInviteEligible({ ...row, role: "manager" }, { ...payload, role: "manager" }, now)).toBe(false);
+    expect(manualInviteEligible({ ...row, role: "manager" }, { ...payload, role: "manager" }, now)).toBe(true);
+    expect(manualInviteEligible({ ...row, role: "admin" }, { ...payload, role: "admin" }, now)).toBe(true);
   });
-  it("permits a matching Field Officer invite without granting manager enrollment", () => {
+  it("permits a matching Field Officer invite", () => {
     expect(manualInviteEligible({ ...row, role: "field_officer" }, { ...payload, role: "field_officer" }, now)).toBe(true);
   });
 });

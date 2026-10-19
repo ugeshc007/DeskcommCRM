@@ -11,10 +11,10 @@ export interface ManualInviteRow {
   interface_settings: unknown;
 }
 
-/** The persisted row, not the signed URL alone, authorizes email-less enrollment. */
+/** The admin-delivered link is usable for any human role only while its persisted row matches. */
 export function manualInviteEligible(row: ManualInviteRow, payload: InvitePayload, now = Date.now()): boolean {
   return (
-    (payload.role === "viewer" || payload.role === "agent" || payload.role === "field_officer") &&
+    (["field_officer", "viewer", "agent", "manager", "admin"] as string[]).includes(payload.role) &&
     row.organization_id === payload.organization_id &&
     row.accepted_at === null && row.revoked_at === null &&
     Date.parse(row.expires_at) > now &&

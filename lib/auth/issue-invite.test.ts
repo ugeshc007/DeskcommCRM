@@ -6,7 +6,7 @@ vi.mock("@/lib/audit", () => ({ audit: h.audit }));
 vi.mock("@/lib/branding/saida", () => ({ marcaDaSaida: async () => ({ nome: "Local", cor: "#000000" }) }));
 vi.mock("@/lib/email/templates/invite", () => ({ buildInviteEmail: () => ({ subject: "Convite", html: "Convite", text: "Convite" }) }));
 import { issueInvite } from "./issue-invite";
-import { verifyInviteToken } from "./invite-token";
+import { INVITE_TTL_SECONDS, verifyInviteToken } from "./invite-token";
 const input = { email: "guest@example.test", role: "admin" as const,
   organizationId: "a2180000-0000-4000-8000-000000000001", orgName: "Org",
   inviterId: "a2180000-0000-4000-8000-000000000002", inviterName: "Admin", requestId: "test" };
@@ -32,3 +32,14 @@ it("replay usa identidade/prazo estáveis e não reenvia", async () => {
   expect(h.send).not.toHaveBeenCalled();
   expect(h.audit).not.toHaveBeenCalled();
 });
+it.each(["field_officer", "viewer", "agent", "manager", "admin"] as const)(
+  "issues every %s invitation for the same 24-hour window",
+  async (role) => {
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const result = await issueInvite({ ...input, role, issuedAt, dispatch: false });
+    const token = result.accept_url.split("/").at(-1)!;
+    const payload = verifyInviteToken(token);
+    expect(payload).toMatchObject({ role, iat: issuedAt, exp: issuedAt + INVITE_TTL_SECONDS });
+    expect(result.expires_at).toBe(new Date((issuedAt + INVITE_TTL_SECONDS) * 1000).toISOString());
+  },
+);

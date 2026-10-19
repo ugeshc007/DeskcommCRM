@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-10-18. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-19. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -57,6 +57,12 @@ repository, GitHub checks and the running installation before any release claim.
 - No customer bots or messages should be published/sent as part of Field Sales work. Live web
   changes require a green full GitHub gate for the exact release commit and CT102 guarded
   deployment with backup/rollback, as the user directed.
+- In this worktree, manual team invitations have the same 24-hour signed-token lifetime for
+  field officers, viewers, agents, managers and admins. When invitation email is not delivered,
+  a tenant admin verifies the recipient offline and shares the private link; a persisted,
+  pending row with matching organization, email, role, interface, and expiry is required before
+  the no-email account is created. The inviting UI warns that possession of a manager/admin link
+  can claim that role. This is source behavior, not a live deployment claim.
 - The earlier browser failures on `7e161e581` (sidebar overflow and full-screen exit
   control interception) were corrected before the `ef19402` release. A later manual
   screenshot revealed the separate transformed-dialog full-screen constraint above.

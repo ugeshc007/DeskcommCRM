@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       const query = {
         select: () => query,
         eq: () => query,
-        maybeSingle: async () => ({ data: inviteRow, error: null }),
+        maybeSingle: async () => ({ data: { ...inviteRow, role: rowRole }, error: null }),
       };
       return query;
     },
@@ -45,11 +45,13 @@ const inviteRow = {
   email_dispatched: false,
   interface_settings: payload.interface_settings,
 };
+let rowRole: string = payload.role;
 
 describe("manual staff invitation for an existing account", () => {
   beforeEach(() => {
     createUser.mockReset();
     signInWithPassword.mockReset();
+    rowRole = payload.role;
   });
 
   it.each(["email_exists", "user_already_exists"])(
@@ -87,5 +89,35 @@ describe("manual staff invitation for an existing account", () => {
     });
 
     expect(result).toEqual({ kind: "failed" });
+  });
+
+  it.each(["manager", "admin"])("rejects a tampered %s role before account creation", async (role) => {
+    const result = await enrollFromManualInvite({
+      payload: { ...payload, role },
+      fullName: "New User",
+      password: "example-password",
+      requestId: null,
+    });
+
+    expect(result).toEqual({ kind: "invalid" });
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it.each(["manager", "admin"])("lets a matching unsent %s link reach account creation", async (role) => {
+    rowRole = role;
+    createUser.mockResolvedValue({
+      data: { user: null },
+      error: { code: "user_already_exists", message: "Duplicate email" },
+    });
+    const result = await enrollFromManualInvite({
+      payload: { ...payload, role },
+      fullName: "New User",
+      password: "example-password",
+      requestId: null,
+    });
+
+    expect(result).toEqual({ kind: "already_exists" });
+    expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ email: payload.email, email_confirm: true }));
+    expect(signInWithPassword).not.toHaveBeenCalled();
   });
 });

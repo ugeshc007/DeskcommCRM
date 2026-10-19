@@ -25,6 +25,7 @@ import { ROLES, type Role } from "@/lib/schemas/team";
 import { descreverMotivoDaFalha } from "./motivo-da-falha";
 
 interface ResultState {
+  role: Role;
   sent: Array<{ email: string; accept_url: string; email_dispatched: boolean; expires_at: string }>;
   failed: Array<{ email: string; reason: string }>;
 }
@@ -64,7 +65,7 @@ export function InviteForm() {
       const res = await invite.mutateAsync({
         invitations: unique.map((email) => ({ email, role, interface_settings: settings })),
       });
-      setResult(res.data);
+      setResult({ ...res.data, role });
       const ok = res.data.sent.length;
       const ko = res.data.failed.length;
       toast.success(
@@ -82,7 +83,7 @@ export function InviteForm() {
         <p className="rounded-md border bg-muted/40 p-3 text-sm">
           {t("Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.")}
           <span className="mt-1 block text-xs text-muted-foreground">
-            {t("Field Officers e staff viewer/agent podem aceitar convites manuais. Manager/admin ainda exigem confirmação por email.")}
+            {t("Convites manuais valem por 24 horas para todos os papéis. Para gerente ou administrador, confirme a identidade da pessoa antes de entregar o link em particular.")}
           </span>
         </p>
         <div className="space-y-2">
@@ -143,7 +144,9 @@ export function InviteForm() {
                       <div className="text-xs text-muted-foreground">
                         {s.email_dispatched
                           ? t("Email enviado.")
-                          : t("Email não enviado. Compartilhe este link somente com a pessoa convidada.")}
+                          : result.role === "manager" || result.role === "admin"
+                            ? t("Email não enviado. Confirme a identidade da pessoa antes de entregar o link em particular. Quem tiver o link pode criar uma conta de gerente ou administrador nas próximas 24 horas.")
+                            : t("Email não enviado. Compartilhe este link somente com a pessoa convidada.")}
                       </div>
                       <div className="mt-2 space-y-2">
                         <code className="block select-all text-xs break-all">{s.accept_url}</code>

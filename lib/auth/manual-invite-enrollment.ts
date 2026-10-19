@@ -17,8 +17,9 @@ type ManualResult =
 /**
  * Enrollment without a mail gateway is deliberately narrower than ordinary signup.
  * A privately delivered, signed invitation is the proof of possession here; it
- * is NOT proof that the recipient controls the email address. Only a persisted,
- * pending, unsent viewer/agent invitation can use this path. Existing users must
+ * is NOT proof that the recipient controls the email address. An admin must
+ * verify identity offline and privately deliver the link for any role. Only a
+ * persisted, pending, unsent invitation can use this path. Existing users must
  * sign in and accept instead, so an invitation can never reset their password.
  */
 export async function enrollFromManualInvite(input: {

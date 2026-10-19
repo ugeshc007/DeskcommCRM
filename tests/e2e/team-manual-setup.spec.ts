@@ -8,6 +8,7 @@ const org = randomUUID();
 const password = `${randomUUID()}Aa9!`;
 const adminEmail = `manual-admin-${org}@synthetic.test`;
 const staffEmail = `manual-staff-${org}@synthetic.test`;
+const managerEmail = `manual-manager-${org}@synthetic.test`;
 let adminId = '';
 let pool: pg.Pool;
 let auth: ReturnType<typeof createClient>;
@@ -48,9 +49,11 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (pool) {
     const staff = await pool.query('select id from auth.users where email=$1', [staffEmail]);
+    const manager = await pool.query('select id from auth.users where email=$1', [managerEmail]);
     await pool.query('delete from field_sales_devices where organization_id=$1', [org]);
     await pool.query('delete from organizations where id=$1', [org]);
     if (staff.rows[0]) await auth.auth.admin.deleteUser(staff.rows[0].id);
+    if (manager.rows[0]) await auth.auth.admin.deleteUser(manager.rows[0].id);
     await pool.end();
   }
   if (adminId) await auth.auth.admin.deleteUser(adminId);
@@ -109,6 +112,30 @@ test('admin copies a private invite, employee sets a password without email, and
   expect(acceptedInvite.rows[0].accepted_by).toBeTruthy();
   expect(acceptedInvite.rows[0].revoked_at).toBeNull();
   await staffContext.close();
+
+  // The administrator verifies the recipient offline and privately shares the
+  // 24-hour link. A manager must no longer be misreported as "expired" merely
+  // because this self-hosted installation has no email gateway.
+  await page.getByRole('combobox', { name: 'Role' }).click();
+  await page.getByRole('option', { name: 'manager' }).click();
+  await page.getByRole('textbox', { name: 'Emails' }).fill(managerEmail);
+  await page.getByRole('button', { name: 'Send invitations' }).click();
+  await expect(page.getByText(/Anyone with the link can create a manager or admin account/)).toBeVisible();
+  const managerLink = await page.locator('li').filter({ hasText: managerEmail }).locator('code').innerText();
+  const managerContext = await browser.newContext();
+  const managerPage = await managerContext.newPage();
+  await managerPage.goto(`${baseURL}${new URL(managerLink).pathname}`);
+  await managerPage.getByRole('link', { name: "I don't have an account yet" }).click();
+  await managerPage.getByRole('textbox', { name: /Your name|Seu nome/ }).fill('Synthetic Manager');
+  await managerPage.getByLabel(/^(Password|Senha)$/).fill(password);
+  await managerPage.getByLabel(/Confirm password|Confirmar senha/).fill(password);
+  await managerPage.getByRole('button', { name: /Create account|Criar conta/i }).click();
+  await managerPage.waitForURL(/\/app(?:\/|$)/);
+  expect((await pool.query(
+    "select role from user_organizations where organization_id=$1 and user_id=(select id from auth.users where email=$2)",
+    [org, managerEmail],
+  )).rows).toEqual([{ role: 'manager' }]);
+  await managerContext.close();
 
   const revokedEmail = `revoked-${org}@synthetic.test`;
   await page.getByRole('textbox', { name: 'Emails' }).fill(revokedEmail);

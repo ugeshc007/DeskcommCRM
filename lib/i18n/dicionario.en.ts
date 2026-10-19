@@ -4869,11 +4869,11 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "Resend not configured — copyable link below (DEV).",
   "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.":
     "No email gateway? Create the invitation and share its private link. Each person sets their own password when opening the link.",
-  "Convites manuais de staff (viewer/agent) dispensam email. Manager/admin ainda exigem confirmação por email.":
-    "Manual staff invitations (viewer/agent) need no email. Manager/admin still require email confirmation.",
   "Convites criados": "Invitations created",
   "Email não enviado. Compartilhe este link somente com a pessoa convidada.":
     "Email not sent. Share this link only with the invited person.",
+  "Email não enviado. Confirme a identidade da pessoa antes de entregar o link em particular. Quem tiver o link pode criar uma conta de gerente ou administrador nas próximas 24 horas.":
+    "Email not sent. Verify the person's identity before sharing the link privately. Anyone with the link can create a manager or admin account within the next 24 hours.",
   "Copiar link de acesso": "Copy setup link",
   "Link de acesso copiado.": "Setup link copied.",
   "Não foi possível copiar. Selecione o link abaixo e copie manualmente.":
@@ -7011,8 +7011,8 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Schedule project visits and coordinate on-duty field teams.":
     "Schedule project visits and coordinate on-duty field teams.",
   "Inherited from CRM organization settings": "Inherited from CRM organization settings",
-  "Field Officers e staff viewer/agent podem aceitar convites manuais. Manager/admin ainda exigem confirmação por email.":
-    "Field Officers and viewer/agent staff may accept manual invitations. Manager/admin still require email confirmation.",
+  "Convites manuais valem por 24 horas para todos os papéis. Para gerente ou administrador, confirme a identidade da pessoa antes de entregar o link em particular.":
+    "Manual invitations are valid for 24 hours for every role. For manager or admin, verify the person's identity before sharing the link privately.",
   "Remove from list": "Remove from list",
   "Remove revoked invitation?": "Remove revoked invitation?",
   "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.":

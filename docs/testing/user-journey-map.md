@@ -2001,9 +2001,12 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 ### Field Sales simplified mobile and Live view — 2026-09-20
 
 - [P0] No-email staff setup: the team invitation screen exposes a private, copyable link and
-  explains that the recipient sets their own password. A pending, persisted, undelivered viewer/agent
+  explains that the recipient sets their own password. A pending, persisted, undelivered human-role
   invitation now completes account creation and membership without a mail gateway; the login page's
   Create account link retains the invitation. Revoked/expired/used invitations must not create accounts.
+  For manager/admin, the inviting administrator must verify the recipient offline and privately
+  deliver the link; possession of that link is the manual verification for its 24-hour lifetime.
+  A manager no-email signup is covered by `team-manual-setup.spec.ts` and role/expiry unit tests.
   The Field Sales device dialog exposes a
   one-time copy action for the Android key. Component tests cover both copy actions without
   putting credentials in toast messages. `team-manual-setup.spec.ts` passed against a local

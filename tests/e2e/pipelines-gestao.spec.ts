@@ -177,39 +177,42 @@ test("quem não pode gerenciar vê a lista sem os controles de escrita", async (
 test("retail Event ID form assigns the logged-in person's store and blocks a second open phone", async ({ page }, testInfo) => {
   await login(page, creds.users.manager!.email);
   await page.goto("/app/retail-leads");
-  await expect(page.getByRole("heading", { name: "Retail leads" })).toBeVisible();
-  await page.getByLabel("Team member").selectOption(creds.users.manager!.id);
-  await page.getByLabel("Store name").fill("Synthetic showroom");
-  await page.getByRole("button", { name: "Save store" }).click();
-  await expect(page.getByText("Store assignment saved.")).toBeVisible();
-  await expect(page.getByText("Store: Synthetic showroom")).toBeVisible();
+  // Next may retain an offscreen route tree during navigation. Scope the
+  // operator journey to the active main landmark, not a stale duplicate form.
+  const retail = page.getByRole("main");
+  await expect(retail.getByRole("heading", { name: "Retail leads" })).toBeVisible();
+  await retail.getByLabel("Team member").selectOption(creds.users.manager!.id);
+  await retail.getByLabel("Store name").fill("Synthetic showroom");
+  await retail.getByRole("button", { name: "Save store" }).click();
+  await expect(retail.getByText("Store assignment saved.")).toBeVisible();
+  await expect(retail.getByText("Store: Synthetic showroom")).toBeVisible();
 
   const unique = String(Date.now()).slice(-8);
   const phone = `+9715${unique}`;
   const fillLead = async () => {
-    await page.getByLabel("Customer name *").fill(`Synthetic retail ${unique}`);
-    await page.getByLabel("Primary phone *").fill(phone);
-    await page.getByLabel("Email").fill(`retail-${unique}@synthetic.test`);
-    await page.getByLabel("Lead source *").fill("Store visit");
-    await page.getByLabel("Looking products *").fill("Synthetic product");
-    await page.getByRole("button", { name: "Add", exact: true }).click();
-    await page.getByLabel(/Budget/).fill("2500.00");
-    await page.getByLabel("Expected purchase date *").fill(new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10));
-    await page.getByLabel("Next follow-up *").fill(new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 16));
+    await retail.getByLabel("Customer name *").fill(`Synthetic retail ${unique}`);
+    await retail.getByLabel("Primary phone *").fill(phone);
+    await retail.getByLabel("Email").fill(`retail-${unique}@synthetic.test`);
+    await retail.getByLabel("Lead source *").fill("Store visit");
+    await retail.getByLabel("Looking products *").fill("Synthetic product");
+    await retail.getByRole("button", { name: "Add", exact: true }).click();
+    await retail.getByLabel(/Budget/).fill("2500.00");
+    await retail.getByLabel("Expected purchase date *").fill(new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10));
+    await retail.getByLabel("Next follow-up *").fill(new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 16));
   };
   await fillLead();
-  await page.getByRole("button", { name: "Create lead" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Created Event ID:" })).toContainText(/[0-9a-f-]{36}/);
-  await expect(page.getByRole("row").filter({ hasText: phone })).toContainText("Synthetic showroom");
-  await expect(page.getByRole("row").filter({ hasText: phone })).toContainText("Created");
-  await page.getByLabel("Customer phone").fill(phone);
-  await page.getByRole("button", { name: "Search Event IDs" }).click();
-  await expect(page.getByText("1 Event ID found.")).toBeVisible();
+  await retail.getByRole("button", { name: "Create lead" }).click();
+  await expect(retail.getByRole("status").filter({ hasText: "Created Event ID:" })).toContainText(/[0-9a-f-]{36}/);
+  await expect(retail.getByRole("row").filter({ hasText: phone })).toContainText("Synthetic showroom");
+  await expect(retail.getByRole("row").filter({ hasText: phone })).toContainText("Created");
+  await retail.getByLabel("Customer phone").fill(phone);
+  await retail.getByRole("button", { name: "Search Event IDs" }).click();
+  await expect(retail.getByText("1 Event ID found.")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("retail-lead-created.png"), fullPage: true });
   await fillLead();
-  await page.getByRole("button", { name: "Create lead" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "already has an open Event ID" })).toBeVisible();
-  const row = page.getByRole("row").filter({ hasText: phone });
+  await retail.getByRole("button", { name: "Create lead" }).click();
+  await expect(retail.getByRole("alert").filter({ hasText: "already has an open Event ID" })).toBeVisible();
+  const row = retail.getByRole("row").filter({ hasText: phone });
   const previousDue = await row.locator("td").nth(4).innerText();
   await row.getByText("Mark follow-up done").click();
   await row.getByLabel("Next follow-up").fill(new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 16));

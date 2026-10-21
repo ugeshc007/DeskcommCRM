@@ -314,7 +314,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(attendance.locator('[data-layout="list"]')).toBeVisible();
   await expect(attendance.getByRole('button', { name: 'Grid' })).toHaveCount(0);
   await expect(attendance.getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
-  await expect(attendance.getByText('Working time', { exact: true })).toBeVisible();
+  await expect(attendance.locator('[data-layout="list"]').getByText('Working time', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-attendance-desktop.png'), fullPage: true });
   const monthly = page.getByRole('region', { name: 'Monthly field officer attendance' });
   await expect(monthly).toBeVisible();

@@ -11,7 +11,7 @@ type AttendanceRow = { employee_id: string; display_name: string; status: 'prese
   working_minutes: number; break_minutes: number; travel_distance_m: number | null; gps_points: number; reliable_route_points: number };
 type AttendanceDay = { date: string; timezone: string; role: string; rows: AttendanceRow[] };
 type AttendanceMonth = { month: string; timezone: string; employee: { id: string; name: string };
-  rows: (AttendanceRow & { date: string })[] };
+  rows: (AttendanceRow & { date: string; project_names: string[] })[] };
 const statusLabel: Record<AttendanceRow['status'], string> = {
   present: 'Present', leave: 'Leave', absent: 'Absent', pending: 'Awaiting day end', inactive: 'Inactive',
 };
@@ -133,10 +133,10 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       {!effectiveMonthEmployeeId && <p className="text-sm text-muted-foreground">Select an employee to see the month and download the Excel file.</p>}
       {monthQuery.isPending && effectiveMonthEmployeeId && <p role="status">Loading monthly attendance…</p>}
       {monthQuery.error && <p role="alert">{monthQuery.error.message} <Button variant="outline" onClick={() => void monthQuery.refetch()}>Retry</Button></p>}
-      {monthQuery.data && <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[42rem] text-left text-sm">
-        <thead className="bg-muted/50"><tr><th className="p-2">Date</th><th className="p-2">Status</th><th className="p-2">First check-in</th><th className="p-2">Last check-out</th><th className="p-2">Working time</th><th className="p-2">Breaks</th></tr></thead>
+      {monthQuery.data && <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[50rem] text-left text-sm">
+        <thead className="bg-muted/50"><tr><th className="p-2">Date</th><th className="p-2">Project</th><th className="p-2">Status</th><th className="p-2">First check-in</th><th className="p-2">Last check-out</th><th className="p-2">Working time</th><th className="p-2">Breaks</th></tr></thead>
         <tbody className="divide-y">{monthQuery.data.rows.map(day => <tr key={day.date}>
-          <td className="p-2">{day.date}</td><td className="p-2">{statusLabel[day.status]}</td>
+          <td className="p-2">{day.date}</td><td className="p-2">{day.project_names.join(', ') || '—'}</td><td className="p-2">{statusLabel[day.status]}</td>
           <td className="p-2">{day.first_in_at ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: monthQuery.data.timezone }).format(new Date(day.first_in_at)) : '—'}</td>
           <td className="p-2">{day.open ? 'Still on duty' : day.last_out_at ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: monthQuery.data.timezone }).format(new Date(day.last_out_at)) : '—'}</td>
           <td className="p-2">{duration(day.working_minutes)}</td><td className="p-2">{duration(day.break_minutes)}</td>

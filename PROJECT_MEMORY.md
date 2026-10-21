@@ -66,12 +66,16 @@ repository, GitHub checks and the running installation before any release claim.
 - In this worktree, Attendance also has a per-officer monthly list and Excel export. It uses the
   existing daily attendance calculation for every organization-local date, includes full local
   check-in/check-out timestamps and no-punch days, and does not include GPS or leave notes.
+  The 2026-10-21 follow-up adds the officer name and the recorded punch-session project name(s)
+  to each Excel row, and shows the projects in the monthly UI. Unassigned or no-punch days
+  do not infer a project from a schedule; multiple recorded projects appear once each.
   A shift crossing midnight counts in full on its local check-in date, while showing the
   actual next-day checkout timestamp; prior calendar-day splitting made a noon-to-00:30
   shift appear as only 30 minutes on the checkout date.
   Field officers are limited to self, while managers/admins can select enrolled staff. The
-  export records an audit event. This is source behavior until the exact commit passes the
-  required test gate and CT102 deployment is independently verified.
+  export records an audit event. The original monthly report and overnight fix were verified
+  live at version `fddf824` on 2026-10-21. The project-column follow-up is source behavior
+  until its own exact commit passes the required gate and deployment is independently verified.
 - The earlier browser failures on `7e161e581` (sidebar overflow and full-screen exit
   control interception) were corrected before the `ef19402` release. A later manual
   screenshot revealed the separate transformed-dialog full-screen constraint above.

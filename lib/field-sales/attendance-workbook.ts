@@ -29,22 +29,25 @@ export function attendanceWorkbook(month: Month): Uint8Array {
     row(2, [textCell('A2', 'Employee'), textCell('B2', month.employee.name)]),
     row(3, [textCell('A3', 'Month'), textCell('B3', month.month)]),
     row(4, [textCell('A4', 'Time zone'), textCell('B4', month.timezone)]),
-    row(6, ['Date', 'Status', 'First check-in (local)', 'Last check-out (local)', 'Working hours', 'Break hours']
-      .map((heading, index) => textCell(`${'ABCDEF'[index]}6`, heading))),
+    row(6, ['Date', 'Field officer', 'Project', 'Punch in (local)', 'Punch out (local)', 'Working hours', 'Status', 'Break hours']
+      .map((heading, index) => textCell(`${'ABCDEFGH'[index]}6`, heading))),
     ...month.rows.map((day, index) => row(index + 7, [
       textCell(`A${index + 7}`, day.date),
-      textCell(`B${index + 7}`, day.status),
-      textCell(`C${index + 7}`, localStamp(day.first_in_at, month.timezone)),
-      textCell(`D${index + 7}`, day.open ? 'Still on duty' : localStamp(day.last_out_at, month.timezone)),
-      numberCell(`E${index + 7}`, day.working_minutes / 60),
-      numberCell(`F${index + 7}`, day.break_minutes / 60),
+      textCell(`B${index + 7}`, month.employee.name),
+      textCell(`C${index + 7}`, day.project_names.join(', ')),
+      textCell(`D${index + 7}`, localStamp(day.first_in_at, month.timezone)),
+      textCell(`E${index + 7}`, day.open ? 'Still on duty' : localStamp(day.last_out_at, month.timezone)),
+      numberCell(`F${index + 7}`, day.working_minutes / 60),
+      textCell(`G${index + 7}`, day.status),
+      numberCell(`H${index + 7}`, day.break_minutes / 60),
     ])),
   ];
   const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
     <cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="2" width="18" customWidth="1"/>
-    <col min="3" max="4" width="25" customWidth="1"/><col min="5" max="6" width="17" customWidth="1"/></cols>
-    <sheetData>${rows.join('')}</sheetData><autoFilter ref="A6:F${month.rows.length + 6}"/></worksheet>`;
+    <col min="3" max="3" width="28" customWidth="1"/><col min="4" max="5" width="25" customWidth="1"/>
+    <col min="6" max="8" width="17" customWidth="1"/></cols>
+    <sheetData>${rows.join('')}</sheetData><autoFilter ref="A6:H${month.rows.length + 6}"/></worksheet>`;
   const files = {
     '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8"?>
       <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">

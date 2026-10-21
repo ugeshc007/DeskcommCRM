@@ -2,9 +2,9 @@
 
 Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migration 0320 and the matching app image; verify the installed schema and health version before claiming it is available. Evidence, not phase names, determines completion.
 
-## Monthly attendance export — development until released
+## Monthly attendance export — project column follow-up in development
 
-- Attendance includes a compact monthly report for one selected officer and a downloadable `.xlsx` workbook. Both show every organization-local calendar date of the selected month, including no-punch days, with the daily status, first recorded punch-in, last recorded punch-out, working hours and break hours. Punch timestamps include their full local date so an overnight session is not mistaken for a same-day punch.
+- Attendance includes a compact monthly report for one selected officer and a downloadable `.xlsx` workbook. Both show every organization-local calendar date of the selected month, including no-punch days, with the recorded project name(s), daily status, first recorded punch-in, last recorded punch-out, working hours and break hours. The workbook also repeats the officer name in each row. A project is shown only when recorded on a punch session for that local check-in date; multiple projects are listed together, and missing projects stay blank. Punch timestamps include their full local date so an overnight session is not mistaken for a same-day punch.
 - The full duration and breaks of an overnight shift belong to its organization-local check-in date. A noon-to-00:30 shift therefore shows 12h 30m on the check-in date, with the next-day checkout timestamp preserved. A past recorded workday remains Present even if the officer is now inactive. Open sessions are explicitly marked as still on duty; future dates remain pending.
 - A field officer may read/export only their own month. Managers and admins may choose an enrolled officer in their organization. Export is audited; no GPS coordinates, routes, leave notes or customer data appear in the workbook. The report is not a payroll calculation.
 

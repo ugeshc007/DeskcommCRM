@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
+import { strFromU8, unzipSync } from 'fflate';
 import pg from 'pg';
 import sharp from 'sharp';
 import { authenticateFieldDevice, deviceTokenHash } from '@/lib/field-sales/devices';
@@ -320,10 +321,16 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(monthly).toBeVisible();
   await expect(monthly.locator('tbody tr')).toHaveCount(new Date(Number(day.slice(0, 4)), Number(day.slice(5, 7)), 0).getDate());
   await expect(monthly.locator('tbody').getByText(day, { exact: true })).toBeVisible();
+  await expect(monthly.locator('tbody tr').filter({ hasText: day }).getByText('Synthetic showroom')).toBeVisible();
   const [attendanceDownload] = await Promise.all([
     page.waitForEvent('download'), monthly.getByRole('button', { name: 'Export employee Excel' }).click(),
   ]);
   expect(attendanceDownload.suggestedFilename()).toBe(`field-attendance-${day.slice(0, 7)}.xlsx`);
+  const attendanceSheet = strFromU8(unzipSync(readFileSync(await attendanceDownload.path()))['xl/worksheets/sheet1.xml']!);
+  expect(attendanceSheet).toContain('<t>Field officer</t>');
+  expect(attendanceSheet).toContain('<t>Project</t>');
+  expect(attendanceSheet).toContain('<t>Synthetic salesperson</t>');
+  expect(attendanceSheet).toContain('<t>Synthetic showroom</t>');
   await page.screenshot({ path: testInfo.outputPath('field-attendance-monthly-desktop.png'), fullPage: true });
   const secondEmployee = randomUUID(), secondSession = randomUUID();
   await pool.query('insert into auth.users(id,email) values($1,$2)', [secondEmployee, `${secondEmployee}@synthetic.test`]);

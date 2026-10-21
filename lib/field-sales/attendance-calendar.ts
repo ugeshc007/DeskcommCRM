@@ -2,7 +2,7 @@ import type pg from 'pg';
 import { z } from 'zod';
 import { fieldAudit, fieldTransaction, requireFieldEmployee } from './authority';
 import { localDateSchema, organizationRegion } from './contracts';
-import { addCalendarDays, wallTimeToUtc } from './schedule';
+import { addCalendarDays, localParts, wallTimeToUtc } from './schedule';
 import { dailyAttendance } from './attendance-report';
 import { DEFAULT_ROUTE_QUALITY } from './route-quality';
 
@@ -75,8 +75,10 @@ export async function readAttendanceMonth(pool: Pick<pg.Pool, 'connect'>, org: s
     const start = wallTimeToUtc(firstDate, '00:00', region.data.timezone);
     const end = wallTimeToUtc(nextMonth, '00:00', region.data.timezone);
     const sessions = (await db.query(`select s.id,s.employee_id,s.punched_in_at,s.punched_out_at,
+      p.name as project_name,
       c.proposed_in as corrected_in,c.proposed_out as corrected_out
       from public.field_sales_sessions s
+      left join public.field_sales_projects p on p.organization_id=s.organization_id and p.id=s.project_id
       left join lateral(select proposed_in,proposed_out from public.field_sales_corrections c
         where c.organization_id=s.organization_id and c.session_id=s.id and c.status='approved'
         order by reviewed_at desc,id desc limit 1)c on true
@@ -95,8 +97,11 @@ export async function readAttendanceMonth(pool: Pick<pg.Pool, 'connect'>, org: s
     const rows = [];
     for (let date = firstDate; date < nextMonth; date = addCalendarDays(date, 1)) {
       const leave = leaves.filter(item => item.local_date === date);
+      const projectNames = [...new Set(sessions.filter(session =>
+        localParts(new Date(session.corrected_in ?? session.punched_in_at).getTime(), region.data.timezone).slice(0, 10) === date
+        && session.project_name).map(session => session.project_name as string))].sort((a, b) => a.localeCompare(b));
       rows.push({ date, ...dailyAttendance(date, region.data.timezone, observedAt, [person], sessions, events,
-        leave, [], DEFAULT_ROUTE_QUALITY)[0]! });
+        leave, [], DEFAULT_ROUTE_QUALITY)[0]!, project_names: projectNames });
     }
     return { month, timezone: region.data.timezone, generated_at: observedAt.toISOString(), role,
       employee: { id: person.user_id, name: person.display_name }, rows };

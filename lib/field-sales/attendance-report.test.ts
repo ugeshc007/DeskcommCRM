@@ -14,17 +14,25 @@ describe('daily attendance from punches', () => {
     expect(report('2026-09-25', '2026-09-25T20:00:00Z').status).toBe('absent');
     expect(report('2026-09-25', '2026-09-25T20:00:00Z', [], [], [{ employee_id: 'officer', note: 'Approved' }]).status).toBe('leave');
   });
-  it('splits an overnight shift and subtracts its recorded break in each local day', () => {
+  it('attributes an overnight shift and its break to the local check-in date', () => {
     const session = { id: 'shift', employee_id: 'officer', punched_in_at: '2026-09-24T18:00:00Z',
       punched_out_at: '2026-09-24T22:00:00Z', corrected_in: null, corrected_out: null };
     const events = [{ session_id: 'shift', action: 'break_start', captured_at: '2026-09-24T19:30:00Z' },
       { session_id: 'shift', action: 'break_end', captured_at: '2026-09-24T20:30:00Z' }];
     const first = report('2026-09-24', '2026-09-25T00:00:00Z', [session], events);
     const second = report('2026-09-25', '2026-09-25T00:00:00Z', [session], events);
-    expect(first.working_minutes).toBe(90);
-    expect(second.working_minutes).toBe(90);
+    expect(first.working_minutes).toBe(180);
+    expect(second.working_minutes).toBe(0);
     expect(first.status).toBe('present');
-    expect(second.status).toBe('present');
+    expect(second.status).toBe('pending');
+    expect(first.first_in_at).toBe('2026-09-24T18:00:00.000Z');
+    expect(first.last_out_at).toBe('2026-09-24T22:00:00.000Z');
+  });
+  it('counts noon to 00:30 next morning as 12h 30m on the check-in date', () => {
+    const session = { id: 'noon-shift', employee_id: 'officer', punched_in_at: '2026-10-20T08:00:00Z',
+      punched_out_at: '2026-10-20T20:30:00Z', corrected_in: null, corrected_out: null };
+    expect(report('2026-10-20', '2026-10-21T01:00:00Z', [session]).working_minutes).toBe(750);
+    expect(report('2026-10-21', '2026-10-21T01:00:00Z', [session]).working_minutes).toBe(0);
   });
   it('reports GPS unavailable rather than zero when no measured route exists', () => {
     expect(report('2026-09-24', '2026-09-25T00:00:00Z').travel_distance_m).toBeNull();

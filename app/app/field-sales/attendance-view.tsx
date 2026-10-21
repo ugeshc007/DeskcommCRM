@@ -83,7 +83,7 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
   }
   return <section className="space-y-4" aria-label="Daily field officer attendance">
     <div><h2 className="text-lg font-semibold">Daily attendance</h2>
-      <p className="text-sm text-muted-foreground">Punch records determine attendance and working time. Each organization calendar day ends at midnight in {query.data?.timezone ?? 'the organization time zone'}. Unpunched past days are Absent unless approved leave is recorded.</p></div>
+      <p className="text-sm text-muted-foreground">Punch records determine attendance and working time. Overnight shifts count in full on their check-in date in {query.data?.timezone ?? 'the organization time zone'}; check-out still shows its actual date. Unpunched past days are Absent unless approved leave is recorded.</p></div>
     <div className="flex flex-wrap items-end gap-3">
       <label className="grid gap-1 text-sm font-medium">Date<Input type="date" value={date} onChange={event => { if (event.target.value) setDate(event.target.value); }}/></label>
       <Button variant="outline" aria-label="Previous attendance day" onClick={() => setDate(addCalendarDays(date, -1))}>Previous</Button>
@@ -118,7 +118,7 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
     {query.data && !rows.length && <p>No employees in this attendance view.</p>}
     <section className="space-y-3 border-t pt-5" aria-label="Monthly field officer attendance">
       <div><h2 className="text-lg font-semibold">Monthly attendance</h2>
-        <p className="text-sm text-muted-foreground">One row for every day, including days without a punch. Check-in and check-out show the full local date and time in {query.data?.timezone ?? 'the organization time zone'}.</p></div>
+        <p className="text-sm text-muted-foreground">One row for every check-in date, including days without a punch. Overnight hours stay with the check-in date; check-out shows its full local date and time in {query.data?.timezone ?? 'the organization time zone'}.</p></div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1 text-sm font-medium">Month<Input type="month" value={month} onChange={event => { if (event.target.value) setMonth(event.target.value); }}/></label>
         <label className="grid gap-1 text-sm font-medium">Employee<select className="h-10 rounded-md border bg-background px-3" value={effectiveMonthEmployeeId} onChange={event => setMonthEmployeeId(event.target.value)}>

@@ -1,4 +1,4 @@
-import { addCalendarDays, wallTimeToUtc } from './schedule';
+import { addCalendarDays, localParts, wallTimeToUtc } from './schedule';
 import { localDateSchema } from './contracts';
 import { displayRoute, reliablePosition, type RecordedPoint, type RouteQualityConfig } from './route-quality';
 
@@ -11,14 +11,10 @@ export type AttendanceLeave = { employee_id: string; note: string };
 export type AttendancePoint = Omit<RecordedPoint, 'captured_at'> & { employee_id: string; captured_at: Instant };
 
 const epoch = (value: Instant) => new Date(value).getTime();
-function overlap(start: number, end: number, dayStart: number, dayEnd: number) {
-  return Math.max(0, Math.min(end, dayEnd) - Math.max(start, dayStart));
-}
 export function dailyAttendance(date: string, timezone: string, observedAt: Instant, people: AttendancePerson[],
   sessions: AttendanceSession[], events: AttendanceEvent[], leaves: AttendanceLeave[], points: AttendancePoint[],
   quality: RouteQualityConfig) {
   localDateSchema.parse(date);
-  const dayStart = Date.parse(wallTimeToUtc(date, '00:00', timezone));
   const dayEnd = Date.parse(wallTimeToUtc(addCalendarDays(date, 1), '00:00', timezone));
   const now = epoch(observedAt);
   const eventsBySession = new Map<string, AttendanceEvent[]>();
@@ -28,14 +24,17 @@ export function dailyAttendance(date: string, timezone: string, observedAt: Inst
     eventsBySession.set(event.session_id, group);
   }
   return people.map(person => {
-    const ownSessions = sessions.filter(session => session.employee_id === person.user_id);
+    // Attendance belongs to the local date of punch-in. A shift ending after
+    // midnight must not appear as only its final minutes on the checkout date.
+    const ownSessions = sessions.filter(session => session.employee_id === person.user_id
+      && localParts(epoch(session.corrected_in ?? session.punched_in_at), timezone).slice(0, 10) === date);
     let workedMs = 0, breakMs = 0, firstIn = Infinity, lastOut = -Infinity, open = false;
     for (const session of ownSessions) {
       const start = epoch(session.corrected_in ?? session.punched_in_at);
-      const end = session.corrected_out ? epoch(session.corrected_out) : session.punched_out_at ? epoch(session.punched_out_at) : now;
-      const clipped = overlap(start, end, dayStart, Math.min(dayEnd, now));
-      if (!clipped) continue;
-      workedMs += clipped;
+      const end = Math.min(session.corrected_out ? epoch(session.corrected_out)
+        : session.punched_out_at ? epoch(session.punched_out_at) : now, now);
+      if (end <= start || start > now) continue;
+      workedMs += end - start;
       firstIn = Math.min(firstIn, start);
       if (session.punched_out_at) lastOut = Math.max(lastOut, end);
       else open = true;
@@ -44,11 +43,11 @@ export function dailyAttendance(date: string, timezone: string, observedAt: Inst
       for (const event of ordered) {
         if (event.action === 'break_start') breakStart = epoch(event.captured_at);
         if ((event.action === 'break_end' || event.action === 'punch_out') && breakStart !== null) {
-          breakMs += overlap(Math.max(start, breakStart), Math.min(end, epoch(event.captured_at)), dayStart, Math.min(dayEnd, now));
+          breakMs += Math.max(0, Math.min(end, epoch(event.captured_at)) - Math.max(start, breakStart));
           breakStart = null;
         }
       }
-      if (breakStart !== null) breakMs += overlap(Math.max(start, breakStart), end, dayStart, Math.min(dayEnd, now));
+      if (breakStart !== null) breakMs += Math.max(0, end - Math.max(start, breakStart));
     }
     const ownPoints = points.filter(point => point.employee_id === person.user_id).map(point => ({
       ...point, captured_at: new Date(point.captured_at).toISOString(),

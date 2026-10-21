@@ -23,14 +23,14 @@ function fakePool(role: 'manager' | 'field_officer', name = 'Officer') {
 }
 
 describe('employee monthly attendance', () => {
-  it('includes each local day, splitting an overnight session, and produces a safe Excel workbook', async () => {
+  it('includes each local day, attributes an overnight shift to check-in day, and produces a safe Excel workbook', async () => {
     const { pool, query } = fakePool('manager', '=Officer <East>');
     const month = await readAttendanceMonth(pool as never, org, manager, '2026-09', officer);
     expect(month.rows).toHaveLength(30);
     expect(month.rows[0]?.date).toBe('2026-09-01');
     expect(month.rows[29]?.date).toBe('2026-09-30');
-    expect(month.rows.find(day => day.date === '2026-09-24')).toMatchObject({ status: 'present', working_minutes: 120 });
-    expect(month.rows.find(day => day.date === '2026-09-25')).toMatchObject({ status: 'present', working_minutes: 120 });
+    expect(month.rows.find(day => day.date === '2026-09-24')).toMatchObject({ status: 'present', working_minutes: 240 });
+    expect(month.rows.find(day => day.date === '2026-09-25')).toMatchObject({ status: 'absent', working_minutes: 0 });
     const sessionsQuery = query.mock.calls.find(([sql]) => sql.includes('from public.field_sales_sessions'))!;
     expect(sessionsQuery[1]).toEqual([org, officer, '2026-08-31T20:00:00.000Z', '2026-09-30T20:00:00.000Z']);
     const archive = unzipSync(attendanceWorkbook(month));

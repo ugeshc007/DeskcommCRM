@@ -5,7 +5,7 @@ Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migr
 ## Monthly attendance export — development until released
 
 - Attendance includes a compact monthly report for one selected officer and a downloadable `.xlsx` workbook. Both show every organization-local calendar date of the selected month, including no-punch days, with the daily status, first recorded punch-in, last recorded punch-out, working hours and break hours. Punch timestamps include their full local date so an overnight session is not mistaken for a same-day punch.
-- The same daily attendance calculation splits overnight work and breaks at local midnight. A past recorded workday remains Present even if the officer is now inactive. Open sessions are explicitly marked as still on duty; future dates remain pending.
+- The full duration and breaks of an overnight shift belong to its organization-local check-in date. A noon-to-00:30 shift therefore shows 12h 30m on the check-in date, with the next-day checkout timestamp preserved. A past recorded workday remains Present even if the officer is now inactive. Open sessions are explicitly marked as still on duty; future dates remain pending.
 - A field officer may read/export only their own month. Managers and admins may choose an enrolled officer in their organization. Export is audited; no GPS coordinates, routes, leave notes or customer data appear in the workbook. The report is not a payroll calculation.
 
 ## GPS uncertainty display
@@ -309,8 +309,8 @@ Navigation will expose Field Sales under CRM; failures must have a visible actio
 
 ### Daily attendance (confirmed 2026-09-25)
 
-- Attendance is derived from the authenticated Android punch-in and punch-out records, in the organization's time zone. A session crossing midnight contributes time to each local calendar date it overlaps. Recorded breaks are excluded from working minutes; an open session shows elapsed working time so far.
-- A recorded punch on a date means **Present**. With no punch, an approved manager/admin leave day means **Leave**. With neither, an unpunched date is **Absent** only after the local calendar day ends; the current or a future date remains pending. The owner confirmed that every calendar day is in scope, with no separate weekly schedule or minimum-hours threshold.
+- Attendance is derived from the authenticated Android punch-in and punch-out records, in the organization's time zone. A session crossing midnight contributes its full duration to the local check-in date, while retaining the actual checkout date and time. Recorded breaks are excluded from working minutes; an open session shows elapsed working time so far.
+- A session started on a date means **Present**. With no check-in, an approved manager/admin leave day means **Leave**. With neither, an unpunched date is **Absent** only after the local calendar day ends; the current or a future date remains pending. The owner confirmed that every calendar day is in scope, with no separate weekly schedule or minimum-hours threshold.
 - The Team card reports live duty and connectivity separately. **Off duty** never by itself means Absent.
 - Managers/admins may approve or remove leave in the CRM calendar. An existing work session prevents leave approval. The audit log records each change without storing the leave note in audit metadata.
 - Daily travel is an estimate from sampled, quality-filtered GPS using the route display's uncertainty/jump/drift rules. Missing or insufficient GPS is shown as unavailable, never zero distance. Raw GPS is retained separately under the organization's existing retention policy.

@@ -66,6 +66,9 @@ repository, GitHub checks and the running installation before any release claim.
 - In this worktree, Attendance also has a per-officer monthly list and Excel export. It uses the
   existing daily attendance calculation for every organization-local date, includes full local
   check-in/check-out timestamps and no-punch days, and does not include GPS or leave notes.
+  A shift crossing midnight counts in full on its local check-in date, while showing the
+  actual next-day checkout timestamp; prior calendar-day splitting made a noon-to-00:30
+  shift appear as only 30 minutes on the checkout date.
   Field officers are limited to self, while managers/admins can select enrolled staff. The
   export records an audit event. This is source behavior until the exact commit passes the
   required test gate and CT102 deployment is independently verified.

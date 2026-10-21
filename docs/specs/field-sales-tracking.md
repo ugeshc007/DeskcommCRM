@@ -2,6 +2,12 @@
 
 Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migration 0320 and the matching app image; verify the installed schema and health version before claiming it is available. Evidence, not phase names, determines completion.
 
+## Monthly attendance export — development until released
+
+- Attendance includes a compact monthly report for one selected officer and a downloadable `.xlsx` workbook. Both show every organization-local calendar date of the selected month, including no-punch days, with the daily status, first recorded punch-in, last recorded punch-out, working hours and break hours. Punch timestamps include their full local date so an overnight session is not mistaken for a same-day punch.
+- The same daily attendance calculation splits overnight work and breaks at local midnight. A past recorded workday remains Present even if the officer is now inactive. Open sessions are explicitly marked as still on duty; future dates remain pending.
+- A field officer may read/export only their own month. Managers and admins may choose an enrolled officer in their organization. Export is audited; no GPS coordinates, routes, leave notes or customer data appear in the workbook. The report is not a payroll calculation.
+
 ## GPS uncertainty display
 
 Indoor GPS and network fixes cannot prove which building contains a phone. The manager map

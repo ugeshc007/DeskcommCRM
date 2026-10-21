@@ -4,7 +4,5 @@ secao: adicionado
 titulo: Lista como padrão nos painéis da equipe de campo
 ---
 
-As visualizações ao vivo, Equipe e Presença agora abrem em linhas compactas de lista e permitem voltar à grade.
-Na prévia de rota e visitas, as visitas de lojas também abrem em lista compacta, com opção de grade.
-Os detalhes e ações por agente continuam disponíveis sem alterar registros de trabalho ou GPS.
-Nenhuma configuração da VPS é necessária.
+Equipe e Presença usam listas compactas; a vista ao vivo tem grade ou lista.
+Visitas na prévia abrem em lista, com grade opcional. Sem mudar dados ou GPS.

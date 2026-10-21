@@ -21,6 +21,12 @@ export function dailyAttendance(date: string, timezone: string, observedAt: Inst
   const dayStart = Date.parse(wallTimeToUtc(date, '00:00', timezone));
   const dayEnd = Date.parse(wallTimeToUtc(addCalendarDays(date, 1), '00:00', timezone));
   const now = epoch(observedAt);
+  const eventsBySession = new Map<string, AttendanceEvent[]>();
+  for (const event of events) {
+    const group = eventsBySession.get(event.session_id) ?? [];
+    group.push(event);
+    eventsBySession.set(event.session_id, group);
+  }
   return people.map(person => {
     const ownSessions = sessions.filter(session => session.employee_id === person.user_id);
     let workedMs = 0, breakMs = 0, firstIn = Infinity, lastOut = -Infinity, open = false;
@@ -33,7 +39,7 @@ export function dailyAttendance(date: string, timezone: string, observedAt: Inst
       firstIn = Math.min(firstIn, start);
       if (session.punched_out_at) lastOut = Math.max(lastOut, end);
       else open = true;
-      const ordered = events.filter(event => event.session_id === session.id).sort((a, b) => epoch(a.captured_at) - epoch(b.captured_at));
+      const ordered = (eventsBySession.get(session.id) ?? []).toSorted((a, b) => epoch(a.captured_at) - epoch(b.captured_at));
       let breakStart: number | null = null;
       for (const event of ordered) {
         if (event.action === 'break_start') breakStart = epoch(event.captured_at);
@@ -50,7 +56,7 @@ export function dailyAttendance(date: string, timezone: string, observedAt: Inst
     const route = displayRoute(ownPoints, quality);
     const reliablePoints = ownPoints.filter(point => point.accuracy_m <= quality.routeAccuracyM && reliablePosition(point, quality)).length;
     const leave = leaves.find(item => item.employee_id === person.user_id);
-    const status = !person.active ? 'inactive' : workedMs > 0 ? 'present' : leave ? 'leave'
+    const status = workedMs > 0 ? 'present' : leave ? 'leave' : !person.active ? 'inactive'
       : now >= dayEnd ? 'absent' : 'pending';
     return { employee_id: person.user_id, display_name: person.display_name, status,
       leave_conflict: Boolean(leave && workedMs > 0),

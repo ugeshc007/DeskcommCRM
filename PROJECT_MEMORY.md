@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-10-19. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-21. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -63,6 +63,12 @@ repository, GitHub checks and the running installation before any release claim.
   pending row with matching organization, email, role, interface, and expiry is required before
   the no-email account is created. The inviting UI warns that possession of a manager/admin link
   can claim that role. This is source behavior, not a live deployment claim.
+- In this worktree, Attendance also has a per-officer monthly list and Excel export. It uses the
+  existing daily attendance calculation for every organization-local date, includes full local
+  check-in/check-out timestamps and no-punch days, and does not include GPS or leave notes.
+  Field officers are limited to self, while managers/admins can select enrolled staff. The
+  export records an audit event. This is source behavior until the exact commit passes the
+  required test gate and CT102 deployment is independently verified.
 - The earlier browser failures on `7e161e581` (sidebar overflow and full-screen exit
   control interception) were corrected before the `ef19402` release. A later manual
   screenshot revealed the separate transformed-dialog full-screen constraint above.

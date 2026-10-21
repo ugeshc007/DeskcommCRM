@@ -316,6 +316,15 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(attendance.getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
   await expect(attendance.getByText('Working time', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-attendance-desktop.png'), fullPage: true });
+  const monthly = page.getByRole('region', { name: 'Monthly field officer attendance' });
+  await expect(monthly).toBeVisible();
+  await expect(monthly.locator('tbody tr')).toHaveCount(new Date(Number(day.slice(0, 4)), Number(day.slice(5, 7)), 0).getDate());
+  await expect(monthly.locator('tbody').getByText(day, { exact: true })).toBeVisible();
+  const [attendanceDownload] = await Promise.all([
+    page.waitForEvent('download'), monthly.getByRole('button', { name: 'Export employee Excel' }).click(),
+  ]);
+  expect(attendanceDownload.suggestedFilename()).toBe(`field-attendance-${day.slice(0, 7)}.xlsx`);
+  await page.screenshot({ path: testInfo.outputPath('field-attendance-monthly-desktop.png'), fullPage: true });
   const secondEmployee = randomUUID(), secondSession = randomUUID();
   await pool.query('insert into auth.users(id,email) values($1,$2)', [secondEmployee, `${secondEmployee}@synthetic.test`]);
   await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [secondEmployee, org]);

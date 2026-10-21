@@ -3,7 +3,7 @@ import { fail } from '@/lib/api/wrappers';
 const noStore = { 'Cache-Control': 'private, no-store' };
 export function fieldError(error: unknown) {
   const code = error instanceof Error ? error.message : '';
-  if (error instanceof z.ZodError || error instanceof SyntaxError || code === 'invalid_request')
+  if (error instanceof z.ZodError || error instanceof SyntaxError || code === 'invalid_request' || code === 'field_invalid_month')
     return fail('validation_failed', 'Review the required fields, dates and recurring weekdays.', 422, { headers: noStore });
   if (code === 'field_forbidden') return fail('forbidden', 'You do not have access to this field team or operation.', 403, { headers: noStore });
   const messages: Record<string, string> = {

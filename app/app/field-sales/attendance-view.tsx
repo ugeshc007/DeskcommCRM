@@ -10,6 +10,8 @@ type AttendanceRow = { employee_id: string; display_name: string; status: 'prese
   leave_note: string | null; first_in_at: string | null; last_out_at: string | null; open: boolean;
   working_minutes: number; break_minutes: number; travel_distance_m: number | null; gps_points: number; reliable_route_points: number };
 type AttendanceDay = { date: string; timezone: string; role: string; rows: AttendanceRow[] };
+type AttendanceMonth = { month: string; timezone: string; employee: { id: string; name: string };
+  rows: (AttendanceRow & { date: string })[] };
 const statusLabel: Record<AttendanceRow['status'], string> = {
   present: 'Present', leave: 'Leave', absent: 'Absent', pending: 'Awaiting day end', inactive: 'Inactive',
 };
@@ -24,6 +26,10 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
   const [busyId, setBusyId] = useState<string | null>(null);
   const [problem, setProblem] = useState('');
   const [note, setNote] = useState('');
+  const [month, setMonth] = useState(initialDate.slice(0, 7));
+  const [monthEmployeeId, setMonthEmployeeId] = useState(selectedEmployeeId === 'all' ? '' : selectedEmployeeId);
+  const [exporting, setExporting] = useState(false);
+  const [monthProblem, setMonthProblem] = useState('');
   const query = useQuery({ queryKey: ['field-attendance', organizationId, userId, date],
     queryFn: async () => {
       const response = await fetch(`/api/v1/field-sales/attendance?date=${encodeURIComponent(date)}`, { cache: 'no-store' });
@@ -33,6 +39,16 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
     }, refetchInterval: date === initialDate ? 30000 : false, gcTime: 0 });
   const rows = query.data?.rows.filter(row => selectedEmployeeId === 'all' || row.employee_id === selectedEmployeeId) ?? [];
   const manager = query.data?.role === 'manager' || query.data?.role === 'admin';
+  const effectiveMonthEmployeeId = monthEmployeeId || (query.data?.rows.length === 1 ? query.data.rows[0]!.employee_id : '');
+  const monthQuery = useQuery({ queryKey: ['field-attendance-month', organizationId, userId, month, effectiveMonthEmployeeId],
+    enabled: Boolean(effectiveMonthEmployeeId), gcTime: 0, refetchInterval: month === initialDate.slice(0, 7) ? 30000 : false,
+    queryFn: async () => {
+      const params = new URLSearchParams({ month, employee_id: effectiveMonthEmployeeId });
+      const response = await fetch(`/api/v1/field-sales/attendance/month?${params}`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message ?? 'Monthly attendance could not be loaded.');
+      return payload.data as AttendanceMonth;
+    } });
   const time = (instant: string | null) => instant && query.data
     ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: query.data.timezone }).format(new Date(instant)) : '—';
   async function leave(row: AttendanceRow, operation: 'approve_leave' | 'revoke_leave') {
@@ -43,9 +59,27 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message ?? 'Leave could not be updated.');
       await cache.invalidateQueries({ queryKey: ['field-attendance', organizationId, userId] });
+      await cache.invalidateQueries({ queryKey: ['field-attendance-month', organizationId, userId] });
       setNote('');
     } catch (error) { setProblem(error instanceof Error ? error.message : 'Leave could not be updated.'); }
     finally { setBusyId(null); }
+  }
+  async function exportMonth() {
+    if (!effectiveMonthEmployeeId) return;
+    setExporting(true); setMonthProblem('');
+    try {
+      const params = new URLSearchParams({ month, employee_id: effectiveMonthEmployeeId, format: 'xlsx' });
+      const response = await fetch(`/api/v1/field-sales/attendance/month?${params}`, { cache: 'no-store' });
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload.error?.message ?? 'Excel export could not be downloaded.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a'); link.href = url; link.download = `field-attendance-${month}.xlsx`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { setMonthProblem(error instanceof Error ? error.message : 'Excel export could not be downloaded.'); }
+    finally { setExporting(false); }
   }
   return <section className="space-y-4" aria-label="Daily field officer attendance">
     <div><h2 className="text-lg font-semibold">Daily attendance</h2>
@@ -55,7 +89,7 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       <Button variant="outline" aria-label="Previous attendance day" onClick={() => setDate(addCalendarDays(date, -1))}>Previous</Button>
       <Button variant="outline" aria-label="Next attendance day" onClick={() => setDate(addCalendarDays(date, 1))}>Next</Button>
       <Button variant="outline" onClick={() => setDate(initialDate)}>Today</Button>
-      <label className="grid gap-1 text-sm font-medium">Employee<select className="h-10 rounded-md border bg-background px-3" value={selectedEmployeeId} onChange={event => onSelectEmployee(event.target.value)}>
+      <label className="grid gap-1 text-sm font-medium">Employee<select className="h-10 rounded-md border bg-background px-3" value={selectedEmployeeId} onChange={event => { onSelectEmployee(event.target.value); setMonthEmployeeId(event.target.value === 'all' ? '' : event.target.value); }}>
         <option value="all">All employees</option>{query.data?.rows.map(row => <option key={row.employee_id} value={row.employee_id}>{row.display_name}</option>)}
       </select></label>
     </div>
@@ -82,5 +116,32 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       </div>}
     </article>)}</div>
     {query.data && !rows.length && <p>No employees in this attendance view.</p>}
+    <section className="space-y-3 border-t pt-5" aria-label="Monthly field officer attendance">
+      <div><h2 className="text-lg font-semibold">Monthly attendance</h2>
+        <p className="text-sm text-muted-foreground">One row for every day, including days without a punch. Check-in and check-out show the full local date and time in {query.data?.timezone ?? 'the organization time zone'}.</p></div>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="grid gap-1 text-sm font-medium">Month<Input type="month" value={month} onChange={event => { if (event.target.value) setMonth(event.target.value); }}/></label>
+        <label className="grid gap-1 text-sm font-medium">Employee<select className="h-10 rounded-md border bg-background px-3" value={effectiveMonthEmployeeId} onChange={event => setMonthEmployeeId(event.target.value)}>
+          {manager && <option value="">Select an employee</option>}
+          {query.data?.rows.map(row => <option key={row.employee_id} value={row.employee_id}>{row.display_name}</option>)}
+        </select></label>
+        <Button variant="outline" disabled={!effectiveMonthEmployeeId || exporting} onClick={() => void exportMonth()}>
+          {exporting ? 'Preparing Excel…' : 'Export employee Excel'}
+        </Button>
+      </div>
+      {monthProblem && <p role="alert">{monthProblem}</p>}
+      {!effectiveMonthEmployeeId && <p className="text-sm text-muted-foreground">Select an employee to see the month and download the Excel file.</p>}
+      {monthQuery.isPending && effectiveMonthEmployeeId && <p role="status">Loading monthly attendance…</p>}
+      {monthQuery.error && <p role="alert">{monthQuery.error.message} <Button variant="outline" onClick={() => void monthQuery.refetch()}>Retry</Button></p>}
+      {monthQuery.data && <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[42rem] text-left text-sm">
+        <thead className="bg-muted/50"><tr><th className="p-2">Date</th><th className="p-2">Status</th><th className="p-2">First check-in</th><th className="p-2">Last check-out</th><th className="p-2">Working time</th><th className="p-2">Breaks</th></tr></thead>
+        <tbody className="divide-y">{monthQuery.data.rows.map(day => <tr key={day.date}>
+          <td className="p-2">{day.date}</td><td className="p-2">{statusLabel[day.status]}</td>
+          <td className="p-2">{day.first_in_at ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: monthQuery.data.timezone }).format(new Date(day.first_in_at)) : '—'}</td>
+          <td className="p-2">{day.open ? 'Still on duty' : day.last_out_at ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: monthQuery.data.timezone }).format(new Date(day.last_out_at)) : '—'}</td>
+          <td className="p-2">{duration(day.working_minutes)}</td><td className="p-2">{duration(day.break_minutes)}</td>
+        </tr>)}</tbody>
+      </table></div>}
+    </section>
   </section>;
 }

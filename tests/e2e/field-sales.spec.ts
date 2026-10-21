@@ -354,6 +354,19 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   // after enrolling a new officer so the Team tab reads the current roster.
   await page.reload();
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
+  const [teamDownload] = await Promise.all([
+    page.waitForEvent('download'), monthly.getByRole('button', { name: 'Export all employees Excel' }).click(),
+  ]);
+  expect(teamDownload.suggestedFilename()).toBe(`field-attendance-all-${day.slice(0, 7)}.xlsx`);
+  const teamArchive = unzipSync(readFileSync(await teamDownload.path()));
+  const workbookManifest = strFromU8(teamArchive['xl/workbook.xml']!);
+  expect(workbookManifest).toContain('name="Aardvark salesperson"');
+  expect(workbookManifest).toContain('name="Synthetic salesperson"');
+  expect(strFromU8(teamArchive['xl/worksheets/sheet1.xml']!)).toContain('<t>Aardvark salesperson</t>');
+  expect(strFromU8(teamArchive['xl/worksheets/sheet2.xml']!)).toContain('<t>Synthetic salesperson</t>');
+  await page.screenshot({ path: testInfo.outputPath('field-attendance-team-export.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await expect(team.getByRole('article').first().getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
   const offlineOfficer = team.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Aardvark salesperson' }) });
   const formatPunch = (value: Date) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric',

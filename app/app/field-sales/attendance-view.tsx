@@ -64,18 +64,20 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
     } catch (error) { setProblem(error instanceof Error ? error.message : 'Leave could not be updated.'); }
     finally { setBusyId(null); }
   }
-  async function exportMonth() {
-    if (!effectiveMonthEmployeeId) return;
+  async function exportMonth(allEmployees = false) {
+    if (!allEmployees && !effectiveMonthEmployeeId) return;
     setExporting(true); setMonthProblem('');
     try {
-      const params = new URLSearchParams({ month, employee_id: effectiveMonthEmployeeId, format: 'xlsx' });
+      const params = new URLSearchParams({ month, format: 'xlsx' });
+      if (allEmployees) params.set('scope', 'all'); else params.set('employee_id', effectiveMonthEmployeeId);
       const response = await fetch(`/api/v1/field-sales/attendance/month?${params}`, { cache: 'no-store' });
       if (!response.ok) {
         const payload = await response.json();
         throw new Error(payload.error?.message ?? 'Excel export could not be downloaded.');
       }
       const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a'); link.href = url; link.download = `field-attendance-${month}.xlsx`;
+      const link = document.createElement('a'); link.href = url;
+      link.download = `field-attendance-${allEmployees ? 'all-' : ''}${month}.xlsx`;
       document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) { setMonthProblem(error instanceof Error ? error.message : 'Excel export could not be downloaded.'); }
@@ -92,6 +94,7 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       <label className="grid gap-1 text-sm font-medium">Employee<select className="h-10 rounded-md border bg-background px-3" value={selectedEmployeeId} onChange={event => { onSelectEmployee(event.target.value); setMonthEmployeeId(event.target.value === 'all' ? '' : event.target.value); }}>
         <option value="all">All employees</option>{query.data?.rows.map(row => <option key={row.employee_id} value={row.employee_id}>{row.display_name}</option>)}
       </select></label>
+      <a className="rounded-md border px-3 py-2 text-sm hover:bg-muted" href="#field-monthly-attendance">Monthly Excel exports ↓</a>
     </div>
     {query.isPending && <p role="status">Loading attendance…</p>}
     {query.error && <p role="alert">{query.error.message} <Button variant="outline" onClick={() => void query.refetch()}>Retry</Button></p>}
@@ -116,7 +119,7 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       </div>}
     </article>)}</div>
     {query.data && !rows.length && <p>No employees in this attendance view.</p>}
-    <section className="space-y-3 border-t pt-5" aria-label="Monthly field officer attendance">
+    <section id="field-monthly-attendance" className="space-y-3 border-t pt-5" aria-label="Monthly field officer attendance">
       <div><h2 className="text-lg font-semibold">Monthly attendance</h2>
         <p className="text-sm text-muted-foreground">One row for every check-in date, including days without a punch. Overnight hours stay with the check-in date; check-out shows its full local date and time in {query.data?.timezone ?? 'the organization time zone'}.</p></div>
       <div className="flex flex-wrap items-end gap-3">
@@ -128,6 +131,9 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
         <Button variant="outline" disabled={!effectiveMonthEmployeeId || exporting} onClick={() => void exportMonth()}>
           {exporting ? 'Preparing Excel…' : 'Export employee Excel'}
         </Button>
+        {manager && <Button variant="outline" disabled={exporting} onClick={() => void exportMonth(true)}>
+          {exporting ? 'Preparing Excel…' : 'Export all employees Excel'}
+        </Button>}
       </div>
       {monthProblem && <p role="alert">{monthProblem}</p>}
       {!effectiveMonthEmployeeId && <p className="text-sm text-muted-foreground">Select an employee to see the month and download the Excel file.</p>}

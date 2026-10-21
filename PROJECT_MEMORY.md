@@ -69,6 +69,9 @@ repository, GitHub checks and the running installation before any release claim.
   The 2026-10-21 follow-up adds the officer name and the recorded punch-session project name(s)
   to each Excel row, and shows the projects in the monthly UI. Unassigned or no-punch days
   do not infer a project from a schedule; multiple recorded projects appear once each.
+  A further source-only follow-up lets managers/admins export one monthly workbook with an
+  Excel-safe worksheet for each enrolled officer (up to 200), while field officers retain
+  self-only export. The daily view links directly to the monthly export controls.
   A shift crossing midnight counts in full on its local check-in date, while showing the
   actual next-day checkout timestamp; prior calendar-day splitting made a noon-to-00:30
   shift appear as only 30 minutes on the checkout date.

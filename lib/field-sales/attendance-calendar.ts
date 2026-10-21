@@ -58,14 +58,31 @@ export async function readAttendanceDay(pool: Pick<pg.Pool, 'connect'>, org: str
 /** One bounded, tenant-scoped read for every local date in an employee's month. */
 export async function readAttendanceMonth(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string,
   month: string, employeeId: string) {
+  z.uuid().parse(employeeId);
+  const reports = await readAttendanceMonths(pool, org, actor, month, employeeId);
+  return reports[0]!;
+}
+
+/** Manager-only, bounded export of the whole enrolled team in one tenant-scoped read. */
+export async function readAttendanceTeamMonth(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, month: string) {
+  return readAttendanceMonths(pool, org, actor, month);
+}
+
+async function readAttendanceMonths(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string,
+  month: string, employeeId?: string) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || Number(month.slice(0, 4)) < 1 || Number(month.slice(0, 4)) > 9998)
     throw new Error('field_invalid_month');
-  z.uuid().parse(employeeId);
   return fieldTransaction(pool, org, actor, async (db, role) => {
-    if (role !== 'manager' && role !== 'admin' && actor !== employeeId) throw new Error('field_forbidden');
-    const person = (await db.query(`select user_id,display_name,active from public.field_sales_employees
-      where organization_id=$1 and user_id=$2`, [org, employeeId])).rows[0];
-    if (!person) throw new Error('field_forbidden');
+    const manager = role === 'manager' || role === 'admin';
+    if (employeeId ? !manager && actor !== employeeId : !manager) throw new Error('field_forbidden');
+    const sessionLimit = employeeId ? 1000 : 10000;
+    const eventLimit = employeeId ? 10000 : 50000;
+    const people = (await db.query(`select user_id,display_name,active from public.field_sales_employees
+      where organization_id=$1 ${employeeId ? 'and user_id=$2' : ''}
+      order by display_name,user_id limit ${employeeId ? '2' : '201'}`, employeeId ? [org, employeeId] : [org])).rows;
+    if (people.length > 200) throw new Error('field_operations_too_large');
+    if (!people.length && employeeId) throw new Error('field_forbidden');
+    const ids = people.map(person => person.user_id);
     const region = organizationRegion((await db.query('select timezone,onboarding_state from public.organizations where id=$1', [org])).rows[0]);
     if (!region.success) throw new Error('field_region_required');
     const firstDate = `${month}-01`;
@@ -82,29 +99,35 @@ export async function readAttendanceMonth(pool: Pick<pg.Pool, 'connect'>, org: s
       left join lateral(select proposed_in,proposed_out from public.field_sales_corrections c
         where c.organization_id=s.organization_id and c.session_id=s.id and c.status='approved'
         order by reviewed_at desc,id desc limit 1)c on true
-      where s.organization_id=$1 and s.employee_id=$2
+      where s.organization_id=$1 and s.employee_id=any($2::uuid[])
         and coalesce(c.proposed_in,s.punched_in_at)<$4 and coalesce(c.proposed_out,s.punched_out_at,now())>$3
-      order by s.punched_in_at,s.id limit 1001`, [org, employeeId, start, end])).rows;
-    if (sessions.length > 1000) throw new Error('field_operations_too_large');
+      order by s.punched_in_at,s.id limit ${sessionLimit + 1}`, [org, ids, start, end])).rows;
+    if (sessions.length > sessionLimit) throw new Error('field_operations_too_large');
     const events = (await db.query(`select session_id,action,captured_at from public.field_sales_attendance_events
-      where organization_id=$1 and session_id=any($2::uuid[]) order by captured_at,sequence limit 10001`,
+      where organization_id=$1 and session_id=any($2::uuid[]) order by captured_at,sequence limit ${eventLimit + 1}`,
     [org, sessions.map(session => session.id)])).rows;
-    if (events.length > 10000) throw new Error('field_operations_too_large');
+    if (events.length > eventLimit) throw new Error('field_operations_too_large');
     const leaves = (await db.query(`select employee_id,local_date::text as local_date,note from public.field_sales_leave_days
-      where organization_id=$1 and employee_id=$2 and local_date >= $3::date and local_date < $4::date`,
-    [org, employeeId, firstDate, nextMonth])).rows;
+      where organization_id=$1 and employee_id=any($2::uuid[]) and local_date >= $3::date and local_date < $4::date`,
+    [org, ids, firstDate, nextMonth])).rows;
     const observedAt = new Date();
-    const rows = [];
-    for (let date = firstDate; date < nextMonth; date = addCalendarDays(date, 1)) {
-      const leave = leaves.filter(item => item.local_date === date);
-      const projectNames = [...new Set(sessions.filter(session =>
+    return people.map(person => {
+      const personSessions = sessions.filter(session => session.employee_id === person.user_id);
+      const personLeaves = leaves.filter(item => item.employee_id === person.user_id);
+      const personSessionIds = new Set(personSessions.map(session => session.id));
+      const personEvents = events.filter(event => personSessionIds.has(event.session_id));
+      const rows = [];
+      for (let date = firstDate; date < nextMonth; date = addCalendarDays(date, 1)) {
+        const leave = personLeaves.filter(item => item.local_date === date);
+        const projectNames = [...new Set(personSessions.filter(session =>
         localParts(new Date(session.corrected_in ?? session.punched_in_at).getTime(), region.data.timezone).slice(0, 10) === date
         && session.project_name).map(session => session.project_name as string))].sort((a, b) => a.localeCompare(b));
-      rows.push({ date, ...dailyAttendance(date, region.data.timezone, observedAt, [person], sessions, events,
+        rows.push({ date, ...dailyAttendance(date, region.data.timezone, observedAt, [person], personSessions, personEvents,
         leave, [], DEFAULT_ROUTE_QUALITY)[0]!, project_names: projectNames });
-    }
-    return { month, timezone: region.data.timezone, generated_at: observedAt.toISOString(), role,
-      employee: { id: person.user_id, name: person.display_name }, rows };
+      }
+      return { month, timezone: region.data.timezone, generated_at: observedAt.toISOString(), role,
+        employee: { id: person.user_id, name: person.display_name }, rows };
+    });
   });
 }
 

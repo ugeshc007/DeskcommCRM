@@ -2136,3 +2136,13 @@ Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos apr
 - The optional 0694 migration backfills existing employees and remains safe on repeat and
   fresh opt-in installation. The CT102 adapter backs up before applying it; production
   behavior requires the exact-commit CI gate and guarded release.
+
+### Field Sales team monthly Excel — 2026-10-21 (local development)
+
+- [P1] `field-sales.spec.ts`: a manager reaches monthly exports from Attendance and downloads
+  one workbook for all enrolled officers. The test opens the downloaded file and checks that
+  two officers appear on separate worksheets with their own attendance rows. The individual
+  officer download remains available.
+- `attendance-month.test.ts`: a field officer cannot request the team workbook; the bounded
+  tenant-scoped query, overnight hours, project attribution and Excel-safe duplicate sheet
+  names are verified. The full browser gate is still required before CT102 deployment.

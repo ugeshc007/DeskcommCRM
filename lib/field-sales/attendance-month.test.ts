@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { strFromU8, unzipSync } from 'fflate';
-import { readAttendanceMonth } from './attendance-calendar';
-import { attendanceWorkbook } from './attendance-workbook';
+import { readAttendanceMonth, readAttendanceTeamMonth } from './attendance-calendar';
+import { attendanceWorkbook, attendanceTeamWorkbook } from './attendance-workbook';
 
 const org = '11111111-1111-4111-8111-111111111111';
 const officer = '22222222-2222-4222-8222-222222222222';
@@ -35,7 +35,7 @@ describe('employee monthly attendance', () => {
     expect(month.rows.find(day => day.date === '2026-09-25')).toMatchObject({ status: 'absent', working_minutes: 0 });
     expect(month.rows.find(day => day.date === '2026-09-25')?.project_names).toEqual([]);
     const sessionsQuery = query.mock.calls.find(([sql]) => sql.includes('from public.field_sales_sessions'))!;
-    expect(sessionsQuery[1]).toEqual([org, officer, '2026-08-31T20:00:00.000Z', '2026-09-30T20:00:00.000Z']);
+    expect(sessionsQuery[1]).toEqual([org, [officer], '2026-08-31T20:00:00.000Z', '2026-09-30T20:00:00.000Z']);
     expect(sessionsQuery[0]).toContain('p.organization_id=s.organization_id and p.id=s.project_id');
     const archive = unzipSync(attendanceWorkbook(month));
     const sheet = strFromU8(archive['xl/worksheets/sheet1.xml']!);
@@ -84,5 +84,48 @@ describe('employee monthly attendance', () => {
     await expect(readAttendanceMonth(pool as never, org, manager, '2026-13', officer)).rejects.toThrow();
     await expect(readAttendanceMonth(pool as never, org, manager, '2026-09', 'not-an-id')).rejects.toThrow();
     expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('team monthly attendance workbook', () => {
+  const second = '44444444-4444-4444-8444-444444444444';
+  it('exports every authorized officer to a different sheet with their own dates and projects', async () => {
+    const { pool, query } = fakePool('manager');
+    query.mockImplementation(async (sql: string) => {
+      if (sql.includes('from public.user_organizations')) return { rows: [{ role: 'manager' }], rowCount: 1 };
+      if (sql.includes('from public.field_sales_employees')) return { rows: [
+        { user_id: officer, display_name: 'A/B? Officer', active: true },
+        { user_id: second, display_name: 'A/B? Officer', active: true },
+      ] };
+      if (sql.includes('from public.organizations')) return { rows: [{ timezone: 'Asia/Dubai', onboarding_state: { welcome: { country_code: 'AE' } } }] };
+      if (sql.includes('from public.field_sales_sessions')) return { rows: [
+        { id: 'first', employee_id: officer, punched_in_at: '2026-09-24T18:00:00Z', punched_out_at: '2026-09-24T22:00:00Z', corrected_in: null, corrected_out: null, project_name: 'Cherry' },
+        { id: 'second', employee_id: second, punched_in_at: '2026-09-25T18:00:00Z', punched_out_at: '2026-09-25T20:00:00Z', corrected_in: null, corrected_out: null, project_name: 'PEPPER' },
+      ] };
+      if (sql.includes('from public.field_sales_attendance_events') || sql.includes('from public.field_sales_leave_days')) return { rows: [] };
+      if (sql === 'begin' || sql === 'commit' || sql === 'rollback' || sql.startsWith('set local')) return { rows: [] };
+      throw new Error(`Unexpected query: ${sql}`);
+    });
+    const reports = await readAttendanceTeamMonth(pool as never, org, manager, '2026-09');
+    expect(reports).toHaveLength(2);
+    expect(reports[0]?.rows.find(day => day.date === '2026-09-24')).toMatchObject({ working_minutes: 240, project_names: ['Cherry'] });
+    expect(reports[1]?.rows.find(day => day.date === '2026-09-25')).toMatchObject({ working_minutes: 120, project_names: ['PEPPER'] });
+    expect(reports[1]?.rows.find(day => day.date === '2026-09-24')?.working_minutes).toBe(0);
+    const archive = unzipSync(attendanceTeamWorkbook(reports));
+    const manifest = strFromU8(archive['xl/workbook.xml']!);
+    expect(manifest).toContain('name="A B  Officer"');
+    expect(manifest).toContain('name="A B  Officer (2)"');
+    expect(strFromU8(archive['xl/worksheets/sheet1.xml']!)).toContain('<t>Cherry</t>');
+    expect(strFromU8(archive['xl/worksheets/sheet2.xml']!)).toContain('<t>PEPPER</t>');
+    expect(strFromU8(archive['xl/worksheets/sheet2.xml']!)).not.toContain('<t>Cherry</t>');
+    const sessionsQuery = query.mock.calls.find(([sql]) => sql.includes('from public.field_sales_sessions'))!;
+    expect(sessionsQuery[0]).toContain('s.organization_id=$1 and s.employee_id=any($2::uuid[])');
+    expect(sessionsQuery[1]).toEqual([org, [officer, second], '2026-08-31T20:00:00.000Z', '2026-09-30T20:00:00.000Z']);
+  });
+
+  it('rejects team export for a field officer before reading employee data', async () => {
+    const { pool, query } = fakePool('field_officer');
+    await expect(readAttendanceTeamMonth(pool as never, org, officer, '2026-09')).rejects.toThrow('field_forbidden');
+    expect(query.mock.calls.some(([sql]) => sql.includes('from public.field_sales_employees'))).toBe(false);
   });
 });

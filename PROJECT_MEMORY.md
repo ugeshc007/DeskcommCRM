@@ -62,7 +62,10 @@ repository, GitHub checks and the running installation before any release claim.
   after checking there is no open shift and revokes device pairings; it leaves CRM membership,
   attendance, routes and visits in place and can be reversed by re-enrollment/new pairing.
   These actions use the Field Sales management
-  transaction and audit log. This paragraph is not a deployment claim.
+  transaction and audit log. The first full E2E gate exposed a test race: an open
+  confirmation dialog hides Team rows from role queries. The test now waits for the
+  server-backed success and dialog close before checking both the row and stored
+  `active` state. This paragraph is not a deployment claim.
 - In this worktree, manual team invitations have the same 24-hour signed-token lifetime for
   field officers, viewers, agents, managers and admins. When invitation email is not delivered,
   a tenant admin verifies the recipient offline and shares the private link; a persisted,

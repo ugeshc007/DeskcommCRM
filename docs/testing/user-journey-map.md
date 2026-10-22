@@ -2139,7 +2139,7 @@ Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos apr
 
 ### Field Sales Team roster maintenance — 2026-10-22 (local development)
 
-- [P1] `field-sales.spec.ts`: tenant admin edits an officer's Field Sales display name in the compact Team list and removes that officer after confirmation. The active list hides them while a recorded shift remains. The browser test captures before/after screenshots as CI artifacts.
+- [P1] `field-sales.spec.ts`: tenant admin edits an officer's Field Sales display name in the compact Team list and removes that officer after confirmation. The test waits for server-backed success and dialog close before checking the active list and stored inactive state; recorded shifts remain. It captures before/after screenshots as CI artifacts.
 - [P1] `tests/invariants/field-sales.test.ts`: role and tenant isolation, stale-name rejection, removal refused during an open shift, audit entries, preserved session, and loss of active Field Sales access.
 
 ### Field Sales team monthly Excel — 2026-10-21 (local development)

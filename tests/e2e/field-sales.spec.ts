@@ -76,6 +76,10 @@ test('admin edits and removes a Field Sales officer from the compact Team list w
   const confirmation = page.getByRole('alertdialog', { name: 'Remove this field officer?' });
   await expect(confirmation.getByText(/attendance, routes and visits remain saved/)).toBeVisible();
   await confirmation.getByRole('button', { name: 'Remove from Field Sales' }).click();
+  // The alert dialog hides the page behind it from role queries. Wait for the
+  // server mutation to finish before asserting that the Team row is gone.
+  await expect(confirmation).not.toBeVisible();
+  await expect(page.getByText('Updated roster officer removed from Field Sales. Their history is preserved.')).toBeVisible();
   await expect(list.getByRole('article').filter({ hasText: 'Updated roster officer' })).toHaveCount(0);
   expect((await pool.query('select active from field_sales_employees where organization_id=$1 and user_id=$2', [org, teammate])).rows[0].active).toBe(false);
   expect((await pool.query('select count(*)::int n from field_sales_sessions where organization_id=$1 and id=$2', [org, session])).rows[0].n).toBe(1);

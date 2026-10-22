@@ -2137,6 +2137,11 @@ Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos apr
   fresh opt-in installation. The CT102 adapter backs up before applying it; production
   behavior requires the exact-commit CI gate and guarded release.
 
+### Field Sales Team roster maintenance — 2026-10-22 (local development)
+
+- [P1] `field-sales.spec.ts`: tenant admin edits an officer's Field Sales display name in the compact Team list and removes that officer after confirmation. The active list hides them while a recorded shift remains. Screenshots: `field-team-edited-name.png` and `field-team-removed-officer.png`.
+- [P1] `tests/invariants/field-sales.test.ts`: role and tenant isolation, stale-name rejection, removal refused during an open shift, audit entries, preserved session, and loss of active Field Sales access.
+
 ### Field Sales team monthly Excel — 2026-10-21 (local development)
 
 - [P1] `field-sales.spec.ts`: a manager reaches monthly exports from Attendance and downloads

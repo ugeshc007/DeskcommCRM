@@ -1,11 +1,21 @@
 import type pg from 'pg';
 import { z } from 'zod';
-import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldScope } from './authority';
+import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldScope, type FieldDb } from './authority';
 import { localDateSchema, organizationRegion, projectSchema, scheduleSchema, type FieldSchedule } from './contracts';
 import { addCalendarDays, expandSchedule, localParts, overlappingAssignments, type ScheduleOccurrence } from './schedule';
 import { planReschedule } from './reschedule';
 
 const version = { id: z.uuid(), revision: z.number().int().nonnegative() };
+async function assertNoOpenShift(db: FieldDb, org: string, employee: string) {
+  const open = await db.query(`select id from public.field_sales_sessions
+    where organization_id=$1 and employee_id=$2 and punched_out_at is null limit 1`, [org, employee]);
+  if (open.rowCount) throw new Error('field_employee_on_duty');
+}
+async function revokeEmployeeDevices(db: FieldDb, org: string, employee: string) {
+  await db.query(`update public.field_sales_devices set revoked_at=coalesce(revoked_at,now()),
+    pairing_code_hash=null,pairing_expires_at=null
+    where organization_id=$1 and employee_id=$2 and revoked_at is null`, [org, employee]);
+}
 export const fieldManagementSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('map_config'), tile_path: z.string().regex(/^\/field-map-tiles\/(?:[a-z0-9/_-]*\{z\}\/\{x\}\/\{y\}\.(?:png|jpg|webp)|[a-z0-9][a-z0-9_-]{0,79}\.pmtiles)$/).max(300).nullable(), attribution: z.string().trim().max(500) }),
   z.strictObject({ operation: z.literal('settings'), revision: z.number().int().nonnegative(), enabled: z.boolean(),
@@ -16,6 +26,8 @@ export const fieldManagementSchema = z.discriminatedUnion('operation', [
     route_accuracy_m: z.number().int().min(5).max(200).optional(),
     plausible_speed_m_s: z.number().int().min(1).max(100).optional() }),
   z.strictObject({ operation: z.literal('employee'), user_id: z.uuid(), display_name: z.string().trim().min(1).max(160), active: z.boolean() }),
+  z.strictObject({ operation: z.literal('rename_employee'), user_id: z.uuid(), expected_name: z.string().trim().min(1).max(160), display_name: z.string().trim().min(1).max(160) }),
+  z.strictObject({ operation: z.literal('remove_employee'), user_id: z.uuid(), expected_name: z.string().trim().min(1).max(160) }),
   z.strictObject({ operation: z.literal('project'), ...version, project: projectSchema }),
   z.strictObject({ operation: z.literal('schedule'), ...version, schedule: scheduleSchema }),
   z.strictObject({ operation: z.literal('cancel_occurrence'), ...version, date: localDateSchema }),
@@ -63,9 +75,32 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
       const member = await db.query(`select user_id from public.user_organizations where organization_id=$1
         and user_id=$2 and accepted_at is not null and revoked_at is null and role in ('field_officer','agent','manager','admin') for share`, [org, input.user_id]);
       if (!member.rowCount) throw new Error('field_employee_unavailable');
+      if (!input.active) {
+        const enrolled = await db.query(`select user_id from public.field_sales_employees
+          where organization_id=$1 and user_id=$2 and active for update`, [org, input.user_id]);
+        if (!enrolled.rowCount) throw new Error('field_employee_unavailable');
+        await assertNoOpenShift(db, org, input.user_id);
+      }
       await db.query(`insert into public.field_sales_employees(organization_id,user_id,display_name,active) values($1,$2,$3,$4)
         on conflict(organization_id,user_id) do update set display_name=excluded.display_name,active=excluded.active`,
       [org, input.user_id, input.display_name, input.active]);
+      if (!input.active) await revokeEmployeeDevices(db, org, input.user_id);
+      result = { id: input.user_id };
+    } else if (input.operation === 'rename_employee' || input.operation === 'remove_employee') {
+      if (role !== 'admin') throw new Error('field_forbidden');
+      const employee = (await db.query(`select display_name,active from public.field_sales_employees
+        where organization_id=$1 and user_id=$2 for update`, [org, input.user_id])).rows[0];
+      if (!employee?.active) throw new Error('field_employee_unavailable');
+      if (employee.display_name !== input.expected_name) throw new Error('field_revision_conflict');
+      if (input.operation === 'remove_employee') {
+        await assertNoOpenShift(db, org, input.user_id);
+        await db.query(`update public.field_sales_employees set active=false
+          where organization_id=$1 and user_id=$2`, [org, input.user_id]);
+        await revokeEmployeeDevices(db, org, input.user_id);
+      } else {
+        await db.query(`update public.field_sales_employees set display_name=$3
+          where organization_id=$1 and user_id=$2`, [org, input.user_id, input.display_name]);
+      }
       result = { id: input.user_id };
     } else if (input.operation === 'project') {
       if (role !== 'admin') throw new Error('field_forbidden');

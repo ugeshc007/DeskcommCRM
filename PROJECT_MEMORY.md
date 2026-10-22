@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-10-21. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-22. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -57,6 +57,12 @@ repository, GitHub checks and the running installation before any release claim.
 - No customer bots or messages should be published/sent as part of Field Sales work. Live web
   changes require a green full GitHub gate for the exact release commit and CT102 guarded
   deployment with backup/rollback, as the user directed.
+- The 2026-10-22 source-only Team maintenance change adds admin-only display-name editing and
+  removal from the active Field Sales roster. Removal sets `field_sales_employees.active=false`
+  after checking there is no open shift and revokes device pairings; it leaves CRM membership,
+  attendance, routes and visits in place and can be reversed by re-enrollment/new pairing.
+  These actions use the Field Sales management
+  transaction and audit log. This paragraph is not a deployment claim.
 - In this worktree, manual team invitations have the same 24-hour signed-token lifetime for
   field officers, viewers, agents, managers and admins. When invitation email is not delivered,
   a tenant admin verifies the recipient offline and shares the private link; a persisted,
@@ -69,7 +75,7 @@ repository, GitHub checks and the running installation before any release claim.
   The 2026-10-21 follow-up adds the officer name and the recorded punch-session project name(s)
   to each Excel row, and shows the projects in the monthly UI. Unassigned or no-punch days
   do not infer a project from a schedule; multiple recorded projects appear once each.
-  A further source-only follow-up lets managers/admins export one monthly workbook with an
+  The released `b5fd983` follow-up lets managers/admins export one monthly workbook with an
   Excel-safe worksheet for each enrolled officer (up to 200), while field officers retain
   self-only export. The daily view links directly to the monthly export controls.
   A shift crossing midnight counts in full on its local check-in date, while showing the
@@ -77,8 +83,9 @@ repository, GitHub checks and the running installation before any release claim.
   shift appear as only 30 minutes on the checkout date.
   Field officers are limited to self, while managers/admins can select enrolled staff. The
   export records an audit event. The original monthly report and overnight fix were verified
-  live at version `fddf824` on 2026-10-21. The project-column follow-up is source behavior
-  until its own exact commit passes the required gate and deployment is independently verified.
+  live at version `fddf824` on 2026-10-21. The team workbook follow-up passed the exact-commit
+  gate and CT102 run 39660330113; the public health endpoint subsequently reported `b5fd983`.
+  This is dated evidence, not a guarantee about the current live image.
 - The earlier browser failures on `7e161e581` (sidebar overflow and full-screen exit
   control interception) were corrected before the `ef19402` release. A later manual
   screenshot revealed the separate transformed-dialog full-screen constraint above.

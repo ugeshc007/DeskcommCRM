@@ -51,6 +51,41 @@ test.afterAll(async () => {
   }
 });
 
+test('admin edits and removes a Field Sales officer from the compact Team list without deleting history', async ({ page }, testInfo) => {
+  const teammate = randomUUID(), session = randomUUID();
+  await pool.query('insert into auth.users(id,email) values($1,$2)', [teammate, `${teammate}@synthetic.test`]);
+  await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'field_officer',now())", [teammate, org]);
+  await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Roster test officer')", [org, teammate]);
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,local_date,status,punched_in_at,punched_out_at,last_event_at)
+    values($1,$2,$3,current_date,'off_duty',now()-interval '2 hours',now()-interval '1 hour',now()-interval '1 hour')`, [org, session, teammate]);
+  await page.goto('/login');
+  await page.locator('#email').fill(email);
+  await page.locator('#password').fill(password);
+  await page.getByRole('button', { name: /entrar|sign in/i }).click();
+  await page.waitForURL(/\/app(?:\/|$)/);
+  await page.goto('/app/field-sales');
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  const list = page.locator('[data-layout="list"]');
+  const row = list.getByRole('article').filter({ hasText: 'Roster test officer' });
+  await row.getByRole('button', { name: 'Edit name' }).click();
+  await page.getByRole('dialog', { name: 'Edit field officer name' }).getByLabel('Field Sales display name').fill('Updated roster officer');
+  await page.getByRole('dialog', { name: 'Edit field officer name' }).getByRole('button', { name: 'Save name' }).click();
+  await expect(list.getByRole('article').filter({ hasText: 'Updated roster officer' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('field-team-edited-name.png'), fullPage: true });
+  await list.getByRole('article').filter({ hasText: 'Updated roster officer' }).getByRole('button', { name: 'Remove' }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Remove this field officer?' });
+  await expect(confirmation.getByText(/attendance, routes and visits remain saved/)).toBeVisible();
+  await confirmation.getByRole('button', { name: 'Remove from Field Sales' }).click();
+  await expect(list.getByRole('article').filter({ hasText: 'Updated roster officer' })).toHaveCount(0);
+  expect((await pool.query('select active from field_sales_employees where organization_id=$1 and user_id=$2', [org, teammate])).rows[0].active).toBe(false);
+  expect((await pool.query('select count(*)::int n from field_sales_sessions where organization_id=$1 and id=$2', [org, session])).rows[0].n).toBe(1);
+  await page.screenshot({ path: testInfo.outputPath('field-team-removed-officer.png'), fullPage: true });
+  await pool.query('delete from field_sales_sessions where organization_id=$1 and id=$2', [org, session]);
+  await pool.query('delete from field_sales_employees where organization_id=$1 and user_id=$2', [org, teammate]);
+  await pool.query('delete from user_organizations where organization_id=$1 and user_id=$2', [org, teammate]);
+  await pool.query('delete from auth.users where id=$1', [teammate]);
+});
+
 test('organization region and shop template are usable in the manager UI', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   await page.goto('/login');

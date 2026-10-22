@@ -54,20 +54,21 @@ test.describe("moeda da organização", () => {
   test.afterEach(async ({ page }) => {
     // Devolve o padrão para não vazar estado a outros specs do mesmo banco.
     await page.goto("/app/settings/tenant");
-    const moeda = page.locator("#currency");
-    if (await moeda.isVisible().catch(() => false)) {
-      await moeda.click();
-      await page.getByRole("option", { name: /^USD/ }).click();
-      await page.getByRole("button", { name: /salvar/i }).click();
-      await expect(page.getByText(/organiza..o atualizada/i)).toBeVisible({ timeout: 10_000 });
-    }
+    const moeda = page.locator("#currency:visible");
+    await expect(moeda).toHaveCount(1);
+    await moeda.click();
+    await page.getByRole("option", { name: /^USD/ }).click();
+    await page.getByRole("button", { name: /salvar/i }).click();
+    await expect(page.getByText(/organiza..o atualizada/i)).toBeVisible({ timeout: 10_000 });
   });
 
   test("mudar para peso mexicano persiste depois de recarregar", async ({ page }) => {
     await loginAdmin(page);
     await page.goto("/app/settings/tenant");
 
-    const moeda = page.locator("#currency");
+    // Next may briefly retain the hidden prior route during navigation.
+    const moeda = page.locator("#currency:visible");
+    await expect(moeda).toHaveCount(1);
     await expect(moeda).toBeVisible();
     // Estado inicial do baseline local; não é o comportamento sob teste.
     await expect(moeda).toContainText("USD");
@@ -86,7 +87,8 @@ test.describe("moeda da organização", () => {
     // a BRL — foi exatamente o defeito que o seletor de idioma do perfil teve
     // meses antes desta feature.
     await page.reload();
-    await expect(page.locator("#currency")).toContainText("MXN");
+    await expect(page.locator("#currency:visible")).toHaveCount(1);
+    await expect(page.locator("#currency:visible")).toContainText("MXN");
 
     await page.screenshot({ path: path.join(EVIDENCE, "moeda-03-mxn-apos-reload.png") });
   });
@@ -96,7 +98,9 @@ test.describe("moeda da organização", () => {
 
     // Precondição: a organização precisa estar em MXN para este produto herdar.
     await page.goto("/app/settings/tenant");
-    await page.locator("#currency").click();
+    const moeda = page.locator("#currency:visible");
+    await expect(moeda).toHaveCount(1);
+    await moeda.click();
     await page.getByRole("option", { name: /^MXN/ }).click();
     await page.getByRole("button", { name: /salvar/i }).click();
     await expect(page.getByText(/organiza..o atualizada/i)).toBeVisible({ timeout: 10_000 });

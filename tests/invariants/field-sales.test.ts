@@ -64,6 +64,34 @@ async function fixture(startAt?: string) {
 }
 
 describe('optional field-sales foundation', () => {
+  it('lets only a tenant admin rename or remove an off-duty officer without erasing history', async () => {
+    const f = await fixture(), other = await fixture();
+    const rename = { operation: 'rename_employee', user_id: f.actor, expected_name: 'Synthetic employee', display_name: 'Renamed officer' };
+    await expect(manageFieldSales(pool, f.org, f.manager, rename)).rejects.toThrow('field_forbidden');
+    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [f.org, f.manager]);
+    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [other.org, other.manager]);
+    await expect(manageFieldSales(pool, f.org, f.actor, rename)).rejects.toThrow('field_forbidden');
+    await expect(manageFieldSales(pool, other.org, other.manager, rename)).rejects.toThrow('field_employee_unavailable');
+    await manageFieldSales(pool, f.org, f.manager, rename);
+    await expect(manageFieldSales(pool, f.org, f.manager, rename)).rejects.toThrow('field_revision_conflict');
+    await recordAttendance(pool, f.org, f.actor, f.command);
+    const remove = { operation: 'remove_employee', user_id: f.actor, expected_name: 'Renamed officer' };
+    await expect(manageFieldSales(pool, f.org, f.manager, remove)).rejects.toThrow('field_employee_on_duty');
+    await expect(manageFieldSales(pool, f.org, f.manager, { operation: 'employee', user_id: f.actor, display_name: 'Renamed officer', active: false }))
+      .rejects.toThrow('field_employee_on_duty');
+    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 1, captured_at: new Date().toISOString() });
+    const device = randomUUID(), tokenHash = deviceTokenHash(`test-${device}`);
+    await pool.query(`insert into field_sales_devices(organization_id,id,employee_id,label,token_hash,expires_at)
+      values($1,$2,$3,'synthetic device',$4,now()+interval '1 day')`, [f.org, device, f.actor, tokenHash]);
+    await manageFieldSales(pool, f.org, f.manager, remove);
+    expect((await pool.query('select display_name,active from field_sales_employees where organization_id=$1 and user_id=$2', [f.org, f.actor])).rows[0])
+      .toMatchObject({ display_name: 'Renamed officer', active: false });
+    expect((await pool.query('select count(*)::int n from field_sales_sessions where organization_id=$1 and employee_id=$2', [f.org, f.actor])).rows[0].n).toBe(1);
+    expect((await pool.query('select revoked_at is not null as revoked from field_sales_devices where organization_id=$1 and id=$2', [f.org, device])).rows[0].revoked).toBe(true);
+    await expect(recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), session_id: randomUUID() })).rejects.toThrow('field_employee_unavailable');
+    expect((await pool.query('select active from field_sales_employees where organization_id=$1 and user_id=$2', [other.org, other.actor])).rows[0].active).toBe(true);
+    expect((await pool.query("select count(*)::int n from api_audit_log where organization_id=$1 and action in ('field_sales.rename_employee','field_sales.remove_employee')", [f.org])).rows[0].n).toBe(2);
+  });
   it('keeps route identities unique per organization and stable across roster edits and historical reads', async () => {
     const f = await fixture(), other = await fixture(), teammate = randomUUID();
     const original = (await pool.query('select route_style_index from field_sales_employees where organization_id=$1 and user_id=$2',

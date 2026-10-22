@@ -62,7 +62,9 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [start, setStart] = useState(() => mondayOfWeek(new Date().toISOString().slice(0, 10)));
   const calendarInitialized = useRef(false);
   const [view, setView] = useState<'day' | 'week'>('week');
-  const [dialog, setDialog] = useState<'project' | 'schedule' | 'employee' | 'manage' | 'customers' | null>(null);
+  const [dialog, setDialog] = useState<'project' | 'schedule' | 'employee' | 'rename' | 'manage' | 'customers' | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [removingEmployee, setRemovingEmployee] = useState<Employee | null>(null);
   const [customerProjectId, setCustomerProjectId] = useState<string | null>(null);
   const [managedEmployeeId, setManagedEmployeeId] = useState<string | null>(null);
   const [managedProjectId, setManagedProjectId] = useState<string | null>(null);
@@ -107,7 +109,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const days = Array.from({ length: view === 'week' ? 7 : 1 }, (_, i) => addCalendarDays(start, i));
   const people = data?.employees ?? [], projects = data?.projects ?? [];
   const onlineEmployeeIds = new Set(teamPresence.data?.latest.filter(person => person.online).map(person => person.employee_id) ?? []);
-  const teamPeople = [...people].sort((a, b) => Number(onlineEmployeeIds.has(b.user_id)) - Number(onlineEmployeeIds.has(a.user_id))
+  const teamPeople = people.filter(person => person.active).sort((a, b) => Number(onlineEmployeeIds.has(b.user_id)) - Number(onlineEmployeeIds.has(a.user_id))
     || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' }) || a.user_id.localeCompare(b.user_id));
   const clashes = new Set((data?.overlaps ?? []).flat());
 
@@ -250,7 +252,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
             <div><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
             {teamPresence.isPending && <p role="status">Loading team attendance…</p>}
             {teamPresence.error && <p role="alert">{teamPresence.error.message} <Button variant="outline" onClick={() => void teamPresence.refetch()}>Retry</Button></p>}
-            {!people.length && <p className="rounded-xl border p-4">No field officers enrolled yet.</p>}
+            {!teamPeople.length && <p className="rounded-xl border p-4">No active field officers enrolled yet.</p>}
             <div data-layout="list" className="divide-y rounded-lg border bg-card">{teamPeople.map(person => {
               const position = teamPresence.data?.latest.find(item => item.employee_id === person.user_id);
               const sessions = teamPresence.data?.sessions.filter(item => item.employee_id === person.user_id) ?? [];
@@ -268,6 +270,8 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
                   {manager && <Button variant="outline" onClick={() => setRouteSelection({ employeeId: person.user_id, date: teamDate })}>View route and visits</Button>}
                   {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
                   <Button variant="outline" onClick={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</Button>
+                  {administrator && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setEditingEmployee(person); setDialog('rename'); }}>Edit name</Button>}
+                  {administrator && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setRemovingEmployee(person); }}>Remove</Button>}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>
                 </div>
@@ -298,7 +302,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         </form></TabsContent>}
       </Tabs>
     </>}
-    <Dialog open={dialog !== null} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent className="max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>{dialog === 'project' ? 'New project' : dialog === 'employee' ? 'Enroll salesperson' : dialog === 'manage' ? `Projects for ${people.find(p => p.user_id === managedEmployeeId)?.display_name ?? 'field officer'}` : dialog === 'customers' ? `Shops · ${projects.find(p => p.id === customerProjectId)?.name ?? 'project'}` : 'Assign project'}</DialogTitle></DialogHeader>
+    <Dialog open={dialog !== null} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent className="max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>{dialog === 'project' ? 'New project' : dialog === 'employee' ? 'Enroll salesperson' : dialog === 'rename' ? 'Edit field officer name' : dialog === 'manage' ? `Projects for ${people.find(p => p.user_id === managedEmployeeId)?.display_name ?? 'field officer'}` : dialog === 'customers' ? `Shops · ${projects.find(p => p.id === customerProjectId)?.name ?? 'project'}` : 'Assign project'}</DialogTitle></DialogHeader>
       {error && <p role="alert">{error}</p>}
       {dialog === 'customers' && customerProjectId && <div className="space-y-4">
         <p className="text-sm text-muted-foreground">The optional due balance uses your CRM currency. A negative balance is advance credit. A new CSV import replaces balances for matching shop codes; past collection records remain unchanged.</p>
@@ -366,6 +370,13 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         <Field label="CRM team member"><select name="user" required className={selectClass}><option value="">Choose a member</option>{(members.data ?? []).map(m => <option key={m.user_id} value={m.user_id}>{m.full_name ?? 'Unnamed team member'} ({m.role})</option>)}</select></Field>
         <Field label="Salesperson display name"><Input name="name" required maxLength={160}/></Field><Button disabled={busy}>Enroll salesperson</Button>
       </form>}
+      {dialog === 'rename' && editingEmployee && <form className="space-y-4" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget);
+        void save({ operation: 'rename_employee', user_id: editingEmployee.user_id, expected_name: editingEmployee.display_name, display_name: String(form.get('name')) })
+          .then(saved => { if (saved) toast.success('Field officer name updated.'); }); }}>
+        <p className="text-sm text-muted-foreground">This changes the name shown in Field Sales; it does not change the CRM account name or recorded attendance.</p>
+        <Field label="Field Sales display name"><Input name="name" required maxLength={160} defaultValue={editingEmployee.display_name}/></Field>
+        <Button disabled={busy}>Save name</Button>
+      </form>}
       {dialog === 'schedule' && <form className="space-y-4" onSubmit={submitSchedule}>
         <p className="text-sm text-muted-foreground">Times use {editing?.timezone ?? timezone}. Choose weekdays for a weekly assignment. Leave the date blank to start today and both times blank for an any-time visit.</p>
         {editing && <Field label="Apply changes to"><select className={selectClass} value={editScope} onChange={event => setEditScope(event.target.value as 'one' | 'future')}><option value="one">Only this visit</option><option value="future">This visit and all following visits</option></select></Field>}
@@ -398,6 +409,17 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
           void save({ operation: 'end_schedule', id: endingAssignment.id, revision: endingAssignment.revision, effective_date: teamDate }, false)
             .then(saved => { if (saved) { setEndingAssignment(null); toast.success(`${name} assignment ended.`); } });
         }}>End assignment</AlertDialogAction></AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog open={removingEmployee !== null} onOpenChange={open => { if (!open) setRemovingEmployee(null); }}>
+      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove this field officer?</AlertDialogTitle>
+        <AlertDialogDescription>{removingEmployee?.display_name} will leave the active Field Sales team and their device pairing will be revoked. Their CRM account, attendance, routes and visits remain saved. An officer who is punched in must punch out first. Re-enrollment requires a new device pairing.</AlertDialogDescription>
+      </AlertDialogHeader>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<AlertDialogFooter><AlertDialogCancel disabled={busy}>Keep officer</AlertDialogCancel>
+        <AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); if (!removingEmployee) return;
+          const person = removingEmployee;
+          void save({ operation: 'remove_employee', user_id: person.user_id, expected_name: person.display_name }, false)
+            .then(saved => { if (saved) { setRemovingEmployee(null); toast.success(`${person.display_name} removed from Field Sales. Their history is preserved.`); } });
+        }}>Remove from Field Sales</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   </main>;

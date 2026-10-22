@@ -21,6 +21,7 @@ export function fieldError(error: unknown) {
     field_region_required: 'Configure country and time zone in the CRM organization settings first.',
     field_policy_required: 'Save the employee notice and retention settings under Tracking policy before configuring the map.',
     field_employee_unavailable: 'Choose an active enrolled employee in this organization.',
+    field_employee_on_duty: 'This officer is punched in. Ask them to punch out before removing them from Field Sales.',
     field_leave_has_work: 'This officer has a recorded work session on that date. Review the punch before approving leave.',
     field_customer_unavailable: 'The selected customer is not available in this organization.',
     field_customers_too_large: 'This project has too many active shops for one request. Archive older shops or split the project.',

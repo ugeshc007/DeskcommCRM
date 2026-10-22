@@ -87,7 +87,7 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
       if (!input.active) await revokeEmployeeDevices(db, org, input.user_id);
       result = { id: input.user_id };
     } else if (input.operation === 'rename_employee' || input.operation === 'remove_employee') {
-      if (role !== 'admin') throw new Error('field_forbidden');
+      if (input.operation === 'remove_employee' && role !== 'admin') throw new Error('field_forbidden');
       const employee = (await db.query(`select display_name,active from public.field_sales_employees
         where organization_id=$1 and user_id=$2 for update`, [org, input.user_id])).rows[0];
       if (!employee?.active) throw new Error('field_employee_unavailable');

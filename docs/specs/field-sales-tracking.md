@@ -11,7 +11,7 @@ Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migr
 
 ## Field Sales team maintenance
 
-- Organization admins can edit an active officer's Field Sales display name from the Team list. This does not rename the underlying CRM account or rewrite attendance records.
+- Organization managers and admins can edit an active officer's Field Sales display name from the Team list. This does not rename the underlying CRM account or rewrite attendance records. Managers cannot remove or enroll officers; those actions remain admin-only.
 - The Team list's Remove action deactivates the Field Sales enrollment and revokes its device pairings; it does not delete the CRM account, recorded shifts, routes, visits, or project history. It is refused while the officer has an open punch-in, so they can punch out normally first. Admins may re-enroll the member later with a new device pairing.
 - Both actions require current organization-admin authorization, lock the organization-scoped employee row, detect stale names, and write an audit event. Inactive employees disappear from the active Team list but remain available to historical reporting.
 

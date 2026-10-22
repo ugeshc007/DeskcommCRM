@@ -90,6 +90,33 @@ test('admin edits and removes a Field Sales officer from the compact Team list w
   await pool.query('delete from auth.users where id=$1', [teammate]);
 });
 
+test('manager can edit a Field Sales name but cannot remove or enroll an officer', async ({ page }, testInfo) => {
+  await pool.query("update user_organizations set role='manager' where organization_id=$1 and user_id=$2", [org, actor]);
+  try {
+    await page.goto('/login');
+    await page.locator('#email').fill(email);
+    await page.locator('#password').fill(password);
+    await page.getByRole('button', { name: /entrar|sign in/i }).click();
+    await page.waitForURL(/\/app(?:\/|$)/);
+    await page.goto('/app/field-sales');
+    await page.getByRole('tab', { name: 'Team', exact: true }).click();
+    const row = page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Synthetic salesperson' });
+    await expect(row.getByRole('button', { name: 'Edit name' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Remove' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Enroll salesperson' })).toHaveCount(0);
+    await row.getByRole('button', { name: 'Edit name' }).click();
+    await page.getByRole('dialog', { name: 'Edit field officer name' }).getByLabel('Field Sales display name').fill('Manager-renamed salesperson');
+    await page.getByRole('dialog', { name: 'Edit field officer name' }).getByRole('button', { name: 'Save name' }).click();
+    await expect(page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Manager-renamed salesperson' })).toBeVisible();
+    expect((await pool.query('select display_name,active from field_sales_employees where organization_id=$1 and user_id=$2', [org, employee])).rows[0])
+      .toMatchObject({ display_name: 'Manager-renamed salesperson', active: true });
+    await page.screenshot({ path: testInfo.outputPath('field-team-manager-edit-name.png'), fullPage: true });
+  } finally {
+    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [org, actor]);
+    await pool.query("update field_sales_employees set display_name='Synthetic salesperson' where organization_id=$1 and user_id=$2", [org, employee]);
+  }
+});
+
 test('organization region and shop template are usable in the manager UI', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   await page.goto('/login');

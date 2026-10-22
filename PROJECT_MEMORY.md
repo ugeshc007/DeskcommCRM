@@ -57,8 +57,8 @@ repository, GitHub checks and the running installation before any release claim.
 - No customer bots or messages should be published/sent as part of Field Sales work. Live web
   changes require a green full GitHub gate for the exact release commit and CT102 guarded
   deployment with backup/rollback, as the user directed.
-- The 2026-10-22 source-only Team maintenance change adds admin-only display-name editing and
-  removal from the active Field Sales roster. Removal sets `field_sales_employees.active=false`
+- The 2026-10-22 source-only Team maintenance change permits managers and admins to edit a
+  Field Sales display name; removal from the active roster remains admin-only. Removal sets `field_sales_employees.active=false`
   after checking there is no open shift and revokes device pairings; it leaves CRM membership,
   attendance, routes and visits in place and can be reversed by re-enrollment/new pairing.
   These actions use the Field Sales management

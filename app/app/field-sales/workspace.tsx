@@ -270,7 +270,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
                   {manager && <Button variant="outline" onClick={() => setRouteSelection({ employeeId: person.user_id, date: teamDate })}>View route and visits</Button>}
                   {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
                   <Button variant="outline" onClick={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</Button>
-                  {administrator && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setEditingEmployee(person); setDialog('rename'); }}>Edit name</Button>}
+                  {manager && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setEditingEmployee(person); setDialog('rename'); }}>Edit name</Button>}
                   {administrator && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setRemovingEmployee(person); }}>Remove</Button>}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>

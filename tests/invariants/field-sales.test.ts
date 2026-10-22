@@ -64,18 +64,20 @@ async function fixture(startAt?: string) {
 }
 
 describe('optional field-sales foundation', () => {
-  it('lets only a tenant admin rename or remove an off-duty officer without erasing history', async () => {
+  it('lets a tenant manager rename but only an admin remove an off-duty officer without erasing history', async () => {
     const f = await fixture(), other = await fixture();
     const rename = { operation: 'rename_employee', user_id: f.actor, expected_name: 'Synthetic employee', display_name: 'Renamed officer' };
-    await expect(manageFieldSales(pool, f.org, f.manager, rename)).rejects.toThrow('field_forbidden');
-    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [f.org, f.manager]);
+    const remove = { operation: 'remove_employee', user_id: f.actor, expected_name: 'Renamed officer' };
     await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [other.org, other.manager]);
     await expect(manageFieldSales(pool, f.org, f.actor, rename)).rejects.toThrow('field_forbidden');
     await expect(manageFieldSales(pool, other.org, other.manager, rename)).rejects.toThrow('field_employee_unavailable');
     await manageFieldSales(pool, f.org, f.manager, rename);
+    await expect(manageFieldSales(pool, f.org, f.manager, remove)).rejects.toThrow('field_forbidden');
+    await expect(manageFieldSales(pool, f.org, f.manager, { operation: 'employee', user_id: f.actor, display_name: 'Renamed officer', active: false }))
+      .rejects.toThrow('field_forbidden');
     await expect(manageFieldSales(pool, f.org, f.manager, rename)).rejects.toThrow('field_revision_conflict');
+    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [f.org, f.manager]);
     await recordAttendance(pool, f.org, f.actor, f.command);
-    const remove = { operation: 'remove_employee', user_id: f.actor, expected_name: 'Renamed officer' };
     await expect(manageFieldSales(pool, f.org, f.manager, remove)).rejects.toThrow('field_employee_on_duty');
     await expect(manageFieldSales(pool, f.org, f.manager, { operation: 'employee', user_id: f.actor, display_name: 'Renamed officer', active: false }))
       .rejects.toThrow('field_employee_on_duty');

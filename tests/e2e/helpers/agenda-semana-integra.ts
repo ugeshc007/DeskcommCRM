@@ -64,14 +64,17 @@ const DIAS_POR_SEMANA = 7;
  * busca quando o recorte muda, e medir no meio da troca lê a semana velha.
  */
 export async function irParaASemanaSeguinte(page: Page): Promise<string[]> {
-  const colunas = page.locator('[data-testid^="coluna-dia-"]');
+  // During route transitions Next can retain a hidden previous Agenda tree.
+  const agenda = page.locator('[data-testid="tela-agenda"]:visible');
+  await expect(agenda).toHaveCount(1, { timeout: 25_000 });
+  const colunas = agenda.locator('[data-testid^="coluna-dia-"]');
   await expect(
     colunas.first(),
     "a grade não desenhou dia nenhum — a tela da agenda não chegou a montar",
   ).toBeAttached({ timeout: 25_000 });
   const antes = await diasDesenhados(page);
 
-  await page.getByTestId("periodo-seguinte").click();
+  await agenda.getByTestId("periodo-seguinte").click();
 
   await expect
     .poll(async () => (await diasDesenhados(page))[0] ?? "", {
@@ -113,7 +116,7 @@ export async function irParaASemanaDoCompromisso(page: Page, instanteISO: string
   }, instanteISO);
 
   await expect(
-    page.locator('[data-testid^="coluna-dia-"]').first(),
+    page.locator('[data-testid="tela-agenda"]:visible [data-testid^="coluna-dia-"]').first(),
     "a grade não desenhou dia nenhum — a tela da agenda não chegou a montar",
   ).toBeAttached({ timeout: 25_000 });
 
@@ -137,7 +140,7 @@ export async function irParaASemanaDoCompromisso(page: Page, instanteISO: string
 export async function diasDesenhados(page: Page): Promise<string[]> {
   return (
     await page
-      .locator('[data-testid^="coluna-dia-"]')
+      .locator('[data-testid="tela-agenda"]:visible [data-testid^="coluna-dia-"]')
       .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")!.replace("coluna-dia-", "")))
   ).sort();
 }

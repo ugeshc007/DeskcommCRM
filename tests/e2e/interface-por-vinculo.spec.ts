@@ -50,6 +50,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
         email,
         password,
         email_confirm: true,
+      user_metadata: { locale: "pt-BR" },
       });
       if (error || !data.user) throw error;
       users.push(data.user.id);
@@ -151,7 +152,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     const link = await page.locator("code").innerText();
     expect(link).toContain("/team/accept-invite/");
     await login(guest, emails[3]!);
-    await guest.goto(link);
+    await guest.goto(new URL(link).pathname);
     await guest.getByRole("button", { name: /aceitar/i }).click();
     await guest.waitForURL("**/app/tasks");
     await expect(nav(guest).getByRole("link", { name: "Inbox", exact: true })).toHaveCount(0);
@@ -172,7 +173,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     });
     await page.goto("/app/team");
     await customize(page, emails[3]!, "Produtos");
-    await guest.goto(link);
+    await guest.goto(new URL(link).pathname);
     await guest.getByRole("button", { name: /aceitar/i }).click();
     await guest.waitForURL("**/app/products");
     // A coluna também descreve a seleção para quem só pode consultar a equipe.

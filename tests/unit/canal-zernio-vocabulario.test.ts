@@ -123,7 +123,7 @@ describe("o envelope carrega a thread do provider", () => {
     expect(convSelect, "falta a coluna no select da conversa").toContain(
       "provider_conversation_id",
     );
-    // QUATRO desde que o cartão de contato passou a sair pelo canal: texto,
+    // CINCO: resolução de destinatário, texto,
     // mídia, modelo e contato. O número é conferido, e não `>= 1`, justamente
     // para obrigar quem acrescenta um call site novo a DECIDIR se ele também
     // carrega a thread — foi assim que este caso pegou a rama de modelo, que a
@@ -136,8 +136,8 @@ describe("o envelope carrega a thread do provider", () => {
     const passagens = [...fonte.matchAll(/providerConversationId:\s*c\.provider_conversation_id/g)];
     expect(
       passagens.length,
-      "todos os call sites (texto, mídia, modelo e contato) precisam passar",
-    ).toBe(4);
+      "resolução e todos os envios (texto, mídia, modelo e contato) precisam passar",
+    ).toBe(5);
   });
 });
 

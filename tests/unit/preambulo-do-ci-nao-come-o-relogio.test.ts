@@ -48,6 +48,10 @@ const ACTION = join(process.cwd(), ".github/actions/preparar-node/action.yml");
  * quem o sobe tem de dizer por que o trabalho real (não o preâmbulo) cresceu.
  */
 const TETOS: Record<string, { minutos: number; razao: string }> = {
+  "ci.yml::focused": {
+    minutos: 10,
+    razao: "feedback de PR limitado aos testes relacionados; verify continua o gate integral independente",
+  },
   "ci.yml::verify": {
     minutos: 15,
     razao: "trabalho real medido: p90 594s, máximo 609s em 51 verdes — folga de ~4m45",

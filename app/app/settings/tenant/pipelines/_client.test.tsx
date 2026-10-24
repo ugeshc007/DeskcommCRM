@@ -14,7 +14,8 @@
  * e mostra as opções para TODO tipo de lista fechada — não só para `select`.
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 
 import { customFieldSchema } from "@/lib/schemas/settings";
 

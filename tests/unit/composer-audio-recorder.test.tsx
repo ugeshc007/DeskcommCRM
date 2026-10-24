@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const uploadMock = vi.fn(async (_args: { conversationId: string; file: File | Blob; filename?: string }) => ({

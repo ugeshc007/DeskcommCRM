@@ -8,6 +8,7 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useTeamInvites, type TeamInvite } from "@/hooks/team/useTeamInvites";
 import { useResendInvite } from "@/hooks/team/useResendInvite";
 import { useRevokeInvite } from "@/hooks/team/useRevokeInvite";
+import { useArchiveInvite } from "@/hooks/team/useArchiveInvite";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,8 +55,10 @@ export function TeamInvitesClient({ canManage }: Props) {
   const { data, isLoading, isError } = useTeamInvites();
   const resend = useResendInvite();
   const revoke = useRevokeInvite();
+  const archive = useArchiveInvite();
 
   const [revokeDialog, setRevokeDialog] = useState<TeamInvite | null>(null);
+  const [archiveDialog, setArchiveDialog] = useState<TeamInvite | null>(null);
 
   const STATUS_LABEL: Record<StatusConvite, string> = {
     aceito: t("Aceito"),
@@ -165,7 +168,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                     </TableCell>
                     {canManage ? (
                       <TableCell>
-                        {emAberto ? (
+                        {emAberto || inv.status === "revogado" ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" aria-label={t("Ações")}>
@@ -173,7 +176,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem
+                              {emAberto && <DropdownMenuItem
                                 disabled={resend.isPending}
                                 onClick={async () => {
                                   try {
@@ -186,19 +189,20 @@ export function TeamInvitesClient({ canManage }: Props) {
                               >
                                 <ArrowsClockwise size={16} />
                                 {t("Reenviar")}
-                              </DropdownMenuItem>
-                              {inv.accept_url ? (
+                              </DropdownMenuItem>}
+                              {emAberto && inv.accept_url ? (
                                 <DropdownMenuItem onClick={() => copyLink(inv.accept_url!)}>
                                   <Copy size={16} />
                                   {t("Copiar link")}
                                 </DropdownMenuItem>
                               ) : null}
-                              <DropdownMenuItem
+                              {emAberto && <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
                                 onClick={() => setRevokeDialog(inv)}
                               >
                                 {t("Revogar")}
-                              </DropdownMenuItem>
+                              </DropdownMenuItem>}
+                              {inv.status === "revogado" && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setArchiveDialog(inv)}>{t("Remove from list")}</DropdownMenuItem>}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         ) : null}
@@ -246,6 +250,16 @@ export function TeamInvitesClient({ canManage }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={!!archiveDialog} onOpenChange={open => !open && setArchiveDialog(null)}><DialogContent>
+        <DialogHeader><DialogTitle>{t("Remove revoked invitation?")}</DialogTitle>
+          <DialogDescription>{archiveDialog?.email} — {t("This removes it from the list. The revoked invitation remains invalid and its audit record is retained.")}</DialogDescription></DialogHeader>
+        <DialogFooter><Button variant="ghost" onClick={() => setArchiveDialog(null)}>{t("Cancelar")}</Button>
+          <Button variant="destructive" disabled={archive.isPending} onClick={async () => {
+            if (!archiveDialog) return;
+            try { await archive.mutateAsync(archiveDialog.id); toast.success(t("Invitation removed from the list.")); setArchiveDialog(null); }
+            catch { /* showApiError already displayed */ }
+          }}>{t("Remove")}</Button></DialogFooter>
+      </DialogContent></Dialog>
     </section>
   );
 }

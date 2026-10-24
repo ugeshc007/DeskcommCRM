@@ -1,4 +1,6 @@
 import type {JobClaim} from "@/lib/agent-engine/queue/claim";
+import { choiceForPrompt } from './choice-reply';
+import { attachmentAnswerId, ATTACHMENT_ANSWER_COLUMNS } from './attachment-answer';
 import { assertAgendaEffectPg } from "@/lib/agenda/efeito";
 import { StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
 import { requireCurrentServiceBoundary } from "@/lib/atendimento/fronteira-server";
@@ -237,6 +239,7 @@ function mapEnrollmentRow(row: Record<string, unknown>): EnrollmentRow {
     // `?? null` e não `as TimingPlan`: num clone sem a migration 0144 a chave
     // simplesmente não vem, e "sem plano" é exatamente o que null significa.
     timing_plan: row.timing_plan ?? null,
+    variables: row.variables ?? {},
   };
 }
 
@@ -299,6 +302,39 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
         custom_fields: lead?.custom_fields ?? {},
       };
     },
+    async setVariableStep(enrollment, nextNodeId, key, type, value) {
+      const revision = revisions.get(enrollment.id);
+      if (revision === undefined) throw new StaleServiceBoundaryError();
+      try {
+        const { rows } = await pool.query<{ revision: string }>('select fn_followup_set_variable($1,$2,$3,$4,$5,$6,$7,$8::jsonb) revision',
+          [enrollment.organization_id, enrollment.id, revision, enrollment.current_node_id, nextNodeId, key, type, JSON.stringify(value)]);
+        revisions.set(enrollment.id, Number(rows[0]?.revision));
+      } catch (error) {
+        if ((error as { code?: string }).code === '40001') throw new StaleServiceBoundaryError();
+        throw new Error('session_variable_write_failed');
+      }
+    },
+    async loadAttachmentAnswer(enrollment) {
+      if (!enrollment.conversation_id) return null;
+      const { rows } = await pool.query(
+        `select ${ATTACHMENT_ANSWER_COLUMNS} from messages where organization_id=$1 and contact_id=$2 and conversation_id=$3
+          and direction='inbound' and sent_at >= $4 order by sent_at desc limit 1`,
+        [enrollment.organization_id, enrollment.contact_id, enrollment.conversation_id, enrollment.updated_at]);
+      return attachmentAnswerId(rows[0], enrollment);
+    },
+    async loadSelectedChoice(enrollment, sourceNodeId) {
+      if (!enrollment.conversation_id) return null;
+      const { rows: replies } = await pool.query<{ metadata: unknown }>(
+        `select metadata from messages where organization_id=$1 and contact_id=$2 and conversation_id=$3
+          and direction='inbound' and sent_at >= $4 order by sent_at desc limit 1`,
+        [enrollment.organization_id, enrollment.contact_id, enrollment.conversation_id, enrollment.updated_at]);
+      const { rows: prompts } = await pool.query<{ external_id: string | null; metadata: unknown }>(
+        `select external_id,metadata from messages where organization_id=$1 and contact_id=$2 and conversation_id=$3
+          and direction='outbound' and metadata->>'followup_enrollment_id'=$4 and metadata->>'followup_node_id'=$5
+          order by created_at desc limit 1`,
+        [enrollment.organization_id, enrollment.contact_id, enrollment.conversation_id, enrollment.id, sourceNodeId]);
+      return choiceForPrompt(replies[0]?.metadata, prompts[0] ?? null);
+    },
     async loadLastInboundBody(orgId, contactId, conversationId, naoAntesDe) {
       const params: unknown[] = [orgId, contactId, conversationId ?? null];
       const desde = naoAntesDe ? "and sent_at >= $4" : "";
@@ -312,10 +348,10 @@ export function createPgAdminClient(pool: pg.Pool): TurnBridgeAdminClient {
       const body = rows[0]?.body;
       return typeof body === "string" ? body : null;
     },
-    async loadEnrollmentEvents(enrollmentId) {
+    async loadEnrollmentEvents(enrollmentId, organizationId) {
       const { rows } = await pool.query(
-        `select node_id, idempotency_key, event_type, payload from followup_enrollment_events where enrollment_id = $1 order by created_at asc`,
-        [enrollmentId],
+        `select node_id, idempotency_key, event_type, payload from followup_enrollment_events where enrollment_id = $1 and organization_id = $2 order by created_at asc`,
+        [enrollmentId, organizationId],
       );
       return rows;
     },

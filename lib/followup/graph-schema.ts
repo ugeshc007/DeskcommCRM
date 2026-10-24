@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import { integrationFlowConfigSchema } from '@/lib/integrations/flow-config';
+import { interactiveMessageSchema } from '@/lib/messaging/interactive';
+import { expressionSchema, variableKeySchema } from './expression';
+import { variableTypeSchema } from './session-variables';
+import { businessHoursSchema } from './business-hours';
+import { flowMediaConfigSchema } from '@/lib/messaging/media/flow-media';
+import { answerFormatSchema, INVALID_ANSWER_BRANCH_ID } from './answer-validation';
 
 /**
  * Flow graph schema for the follow-up automation system.
@@ -124,6 +131,7 @@ export type MatchReplyBranch = z.infer<typeof matchReplyBranchSchema>;
  * with the current `repeat` index when the node sits inside a loop.
  */
 export const replySaveToSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('session_variable'), key: variableKeySchema }),
   z.strictObject({ kind: z.literal('contact_name') }),
   z.strictObject({
     kind: z.literal('lead_custom'),
@@ -146,13 +154,29 @@ export type IfExists = z.infer<typeof ifExistsSchema>;
  */
 export const matchReplyConfigSchema = z
   .strictObject({
-    branches: z.array(matchReplyBranchSchema).min(1).max(8),
+    branches: z.array(matchReplyBranchSchema).max(10),
+    choice_source_node_id: z.string().min(1).max(100).optional(),
     grace_timeout_ms: z.number().int().min(900_000),
     save_to: replySaveToSchema.optional(),
     if_exists: ifExistsSchema.optional(),
+    answer_format: answerFormatSchema.optional(),
+  })
+  .refine((c) => c.branches.length > 0 || c.answer_format !== undefined, {
+    message: "Declare text rules or choose an answer format",
+    path: ["branches"],
+  })
+  .refine(c => !c.choice_source_node_id || (!c.save_to && !c.answer_format && c.branches.every(b => b.op === 'eq')), {
+    message: 'Choice routing requires exact IDs and cannot save unvalidated text.',
+  })
+  .refine(c => c.save_to?.kind !== 'session_variable' || (!!c.answer_format && (!c.if_exists || c.if_exists === 'overwrite')), {
+    message: 'Session answers require a format and overwrite behavior.',
   })
   .refine((c) => new Set(c.branches.map((b) => b.id)).size === c.branches.length, {
     message: "branches[].id must be unique within the node",
+    path: ["branches"],
+  })
+  .refine((c) => !c.answer_format || !c.branches.some((b) => b.id === INVALID_ANSWER_BRANCH_ID), {
+    message: "invalid_answer is reserved when answer validation is enabled",
     path: ["branches"],
   });
 
@@ -210,6 +234,10 @@ export const aiClassifyConfigSchema = z
  * - template: send a canned message from Ajustes → Modelos
  */
 export const actionConfigSchema = z.discriminatedUnion('mode', [
+  integrationFlowConfigSchema,
+  z.strictObject({ mode: z.literal('set_variable'), key: variableKeySchema, value_type: variableTypeSchema, expression: expressionSchema }),
+  z.strictObject({ mode: z.literal('interactive'), body: z.string().trim().min(1).max(1024), interactive: interactiveMessageSchema }),
+  flowMediaConfigSchema,
   z.strictObject({
     mode: z.literal('text'),
     body: z.string().min(1).max(4000),
@@ -239,10 +267,19 @@ export const conditionCheckSchema = z.strictObject({
     'tag',
     'steps_taken',
     'last_outcome',
+    'formula',
+    'business_hours',
   ]),
   op: z.enum(['eq', 'neq', 'gte', 'lte', 'contains']),
-  value: z.union([z.string(), z.number()]),
-});
+  value: z.union([z.string(), z.number(), z.boolean()]),
+  expression: expressionSchema.optional(),
+  schedule: businessHoursSchema.optional(),
+}).refine(check => check.field !== 'formula' || check.expression !== undefined, { message: 'Configure the formula before saving.', path: ['expression'] })
+  .refine(check => typeof check.value !== 'boolean' || (check.field === 'formula' && (check.op === 'eq' || check.op === 'neq')), {
+    message: 'True / false values require an equals or does not equal formula comparison.', path: ['value'],
+  }).refine(check => check.field !== 'business_hours' || (check.schedule !== undefined && (check.op === 'eq' || check.op === 'neq') && (check.value === 'open' || check.value === 'closed')), {
+    message: 'Business hours require a schedule and an open / closed comparison.', path: ['schedule'],
+  });
 
 export type ConditionCheck = z.infer<typeof conditionCheckSchema>;
 
@@ -502,6 +539,11 @@ function fallbackBranch(label: string): FlowBranch {
  */
 export function nodeBranches(node: BranchableNode): FlowBranch[] {
   switch (node.type) {
+    case 'action':
+      return node.config.mode === 'integration' ? [
+        {id:'success',label:'Success',check:null,kind:'match',condition:{type:'branch',branch_id:'success'}},
+        {id:'error',label:'Error',check:null,kind:'match',condition:{type:'branch',branch_id:'error'}},
+      ] : [fallbackBranch(FALLBACK_ALWAYS_LABEL)];
     case 'condition': {
       if (node.config.branching === 'per_check') {
         const branches: FlowBranch[] = node.config.checks.flatMap((check) =>
@@ -580,6 +622,13 @@ export function nodeBranches(node: BranchableNode): FlowBranch[] {
       }));
       return [
         ...classBranches,
+        ...(node.config.answer_format ? [{
+          id: INVALID_ANSWER_BRANCH_ID,
+          label: 'Invalid answer',
+          check: null,
+          kind: 'match' as const,
+          condition: { type: 'branch' as const, branch_id: INVALID_ANSWER_BRANCH_ID },
+        }] : []),
         {
           id: NO_REPLY_BRANCH_ID,
           label: NO_REPLY_LABEL,
@@ -587,7 +636,7 @@ export function nodeBranches(node: BranchableNode): FlowBranch[] {
           kind: 'match',
           condition: { type: 'branch', branch_id: NO_REPLY_BRANCH_ID },
         },
-        fallbackBranch(FALLBACK_ALWAYS_LABEL),
+        fallbackBranch(node.config.answer_format ? 'Valid answer' : FALLBACK_ALWAYS_LABEL),
       ];
     }
 

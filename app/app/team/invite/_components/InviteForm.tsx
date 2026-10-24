@@ -9,6 +9,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useT } from "@/hooks/i18n/useT";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useInviteMembers } from "@/hooks/team/useInviteMembers";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +25,7 @@ import { ROLES, type Role } from "@/lib/schemas/team";
 import { descreverMotivoDaFalha } from "./motivo-da-falha";
 
 interface ResultState {
+  role: Role;
   sent: Array<{ email: string; accept_url: string; email_dispatched: boolean; expires_at: string }>;
   failed: Array<{ email: string; reason: string }>;
 }
@@ -35,6 +37,14 @@ export function InviteForm() {
   const [role, setRole] = useState<Role>("agent");
   const [result, setResult] = useState<ResultState | null>(null);
   const invite = useInviteMembers();
+
+  const copyInviteLink = async (url: string) => {
+    if (await copyToClipboard(url)) {
+      toast.success(t("Link de acesso copiado."));
+    } else {
+      toast.error(t("Não foi possível copiar. Selecione o link abaixo e copie manualmente."));
+    }
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,11 +65,11 @@ export function InviteForm() {
       const res = await invite.mutateAsync({
         invitations: unique.map((email) => ({ email, role, interface_settings: settings })),
       });
-      setResult(res.data);
+      setResult({ ...res.data, role });
       const ok = res.data.sent.length;
       const ko = res.data.failed.length;
       toast.success(
-        `${ok} ${t("convite(s) enviado(s)")}${ko > 0 ? `, ${ko} ${t("falha(s).")}` : "."}`,
+        `${ok} ${t("convite(s) criado(s)")}${ko > 0 ? `, ${ko} ${t("falha(s).")}` : "."}`,
       );
       setEmailsRaw("");
     } catch {
@@ -70,6 +80,12 @@ export function InviteForm() {
   return (
     <div className="grid gap-6 md:grid-cols-[1fr,2fr]">
       <form onSubmit={onSubmit} className="space-y-4">
+        <p className="rounded-md border bg-muted/40 p-3 text-sm">
+          {t("Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.")}
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {t("Convites manuais valem por 24 horas para todos os papéis. Para gerente ou administrador, confirme a identidade da pessoa antes de entregar o link em particular.")}
+          </span>
+        </p>
         <div className="space-y-2">
           <Label htmlFor="emails">Emails</Label>
           <Textarea
@@ -89,7 +105,7 @@ export function InviteForm() {
             <SelectContent>
               {ROLES.map((r) => (
                 <SelectItem key={r} value={r}>
-                  {r}
+                  {r === "field_officer" ? "Field Officer" : r}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -119,7 +135,7 @@ export function InviteForm() {
             {result.sent.length > 0 ? (
               <section>
                 <h2 className="text-sm font-semibold">
-                  {t("Enviados")} ({result.sent.length})
+                  {t("Convites criados")} ({result.sent.length})
                 </h2>
                 <ul className="mt-2 space-y-2 text-sm">
                   {result.sent.map((s) => (
@@ -128,11 +144,19 @@ export function InviteForm() {
                       <div className="text-xs text-muted-foreground">
                         {s.email_dispatched
                           ? t("Email enviado.")
-                          : t("Resend não configurado — link copiável abaixo (DEV).")}
+                          : result.role === "manager" || result.role === "admin"
+                            ? t("Email não enviado. Confirme a identidade da pessoa antes de entregar o link em particular. Quem tiver o link pode criar uma conta de gerente ou administrador nas próximas 24 horas.")
+                            : t("Email não enviado. Compartilhe este link somente com a pessoa convidada.")}
                       </div>
-                      {!s.email_dispatched ? (
-                        <code className="mt-1 block text-xs break-all">{s.accept_url}</code>
-                      ) : null}
+                      <div className="mt-2 space-y-2">
+                        <code className="block select-all text-xs break-all">{s.accept_url}</code>
+                        <Button type="button" variant="outline" size="sm" onClick={() => void copyInviteLink(s.accept_url)}>
+                          {t("Copiar link de acesso")}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          {t("Expira em 24 horas. Quem receber o link deve usar o email acima e definir a própria senha.")}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>

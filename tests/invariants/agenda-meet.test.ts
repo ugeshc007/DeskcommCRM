@@ -441,7 +441,7 @@ it("HTTP controlado: POST pending, polling GET, success/failure/unknown e convit
     expect(writes).toHaveLength(1);
     // Nova fixture de intenção existente: falha explícita não vira ready nem outro POST.
     await pool.query(
-      "update calendar_appointments set meeting_state='pending',meeting_next_attempt_at=now() where id=$1",
+      "update calendar_appointments set meeting_state='pending',meeting_next_attempt_at=now()-interval '1 second' where id=$1",
       [f.id],
     );
     remote = {

@@ -40,6 +40,7 @@ const CATALOGO = TOOL_CATALOG.map((t) => ({
   name: t.name,
   risco: t.risco,
   pacotes: t.pacotes,
+  opt_in_only: t.opt_in_only,
 }));
 
 /** Pacotes que realmente têm crítica — os únicos onde a reserva muda algo. */

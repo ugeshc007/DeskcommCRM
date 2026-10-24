@@ -27,6 +27,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { signInviteToken, INVITE_TTL_SECONDS } from "@/lib/auth/invite-token";
+
+const manualEnrollment = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/manual-invite-enrollment", () => ({ enrollFromManualInvite: manualEnrollment }));
 
 const configuracao = vi.hoisted(() => ({
   mode: "self_hosted",
@@ -53,6 +57,7 @@ vi.mock("@/lib/env", () => ({
 vi.mock("@/lib/audit", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   audit: vi.fn(async () => undefined),
+  isServiceRoleConfigured: () => true,
 }));
 
 const signUpDoProvedor = vi.fn();
@@ -73,6 +78,7 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
     configuracao.publicSignup = false;
     configuracao.locale = "en";
     signUpDoProvedor.mockReset();
+    manualEnrollment.mockReset();
     vi.mocked(headers).mockResolvedValue({
       // IP diferente a cada caso, pelo mesmo motivo do e-mail.
       get: (k: string) => (k === "x-forwarded-for" ? `198.51.100.${n % 250}` : null),
@@ -138,6 +144,44 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
     const res = await signUp(entrada());
 
     expect(res).toEqual({ ok: false, error: "conta_ja_existe" });
+  });
+
+  it("reconhece o código de conta existente mesmo com mensagem diferente", async () => {
+    signUpDoProvedor.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "user_already_exists", message: "Duplicate account", status: 422 },
+    });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+
+    expect(res).toEqual({ ok: false, error: "conta_ja_existe" });
+  });
+
+  it.each(["manager", "admin"] as const)("accepts a manually verified %s invitation without email delivery", async (role) => {
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const email = `new-${role}@example.test`;
+    const token = signInviteToken({
+      invite_id: "11111111-1111-4111-8111-111111111111",
+      organization_id: "22222222-2222-4222-8222-222222222222",
+      email,
+      role,
+      iat: issuedAt,
+      exp: issuedAt + INVITE_TTL_SECONDS,
+    });
+    manualEnrollment.mockResolvedValue({ kind: "accepted" });
+
+    const { signUp } = await import("./signUp");
+    const res = await signUp({
+      full_name: "New Manager",
+      email,
+      password: "SenhaForte!2026",
+      password_confirm: "SenhaForte!2026",
+    }, token);
+
+    expect(res).toEqual({ ok: true, sessao_ativa: true, convite_aceito: true });
+    expect(manualEnrollment).toHaveBeenCalledOnce();
+    expect(signUpDoProvedor).not.toHaveBeenCalled();
   });
 
   it("SaaS gerenciado recusa cadastro direto antes de chamar o provedor", async () => {

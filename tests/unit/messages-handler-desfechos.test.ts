@@ -106,8 +106,9 @@ function makeSupabase(
       }
       if (table === 'conversations') {
         return {
-          select: (cols?: string) => ({
-            eq: () => ({
+          select: (cols?: string) => {
+            const query = {
+              eq: () => query,
               maybeSingle: async () =>
                 opts.semColunaArquivada === true && (cols ?? '').includes('archived_at')
                   ? {
@@ -118,8 +119,9 @@ function makeSupabase(
                       },
                     }
                   : { data: conversation, error: null },
-            }),
-          }),
+            };
+            return query;
+          },
           update: () => ({ eq: async () => ({ error: null }) }),
         };
       }

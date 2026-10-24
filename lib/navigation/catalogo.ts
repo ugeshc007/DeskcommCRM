@@ -103,6 +103,34 @@ export const GRUPO_NO_RODAPE: NavGroupId = "organizacao";
  * fechada e por isso não vira `minRole`.
  */
 export const NAV_CATALOG = [
+  {
+    href: "/app/retail-leads",
+    label: "Retail leads",
+    description: "Create Event IDs with customer details, store assignment and a required follow-up.",
+    icon: "Storefront",
+    group: "crm",
+    section: "O dia a dia da venda",
+    minRole: "agent",
+  },
+  {
+    href: "/app/field-sales",
+    label: "Field Sales",
+    description: "Schedule project visits and coordinate on-duty field teams.",
+    icon: "CalendarBlank",
+    group: "crm",
+    section: "O dia a dia da venda",
+    minRole: "agent",
+    // Discoverable from the CRM hub and search; keep the full menu within 900px.
+  },
+  {
+    href: "/app/field-sales/live",
+    label: "Field team live map",
+    description: "Monitor on-duty field officers and review each recorded route by date.",
+    icon: "MapPin",
+    group: "crm",
+    section: "O dia a dia da venda",
+    minRole: "admin",
+  },
   // ---- Atendimento — onde o operador passa o dia ----
   {
     href: "/app/inbox",
@@ -412,6 +440,24 @@ export const NAV_CATALOG = [
 
   // ---- Canais — por onde as mensagens entram e saem ----
   {
+    href: "/app/store",
+      label: "Store",
+    description: "Manage your product catalogue, delivery charges and reviewed orders.",
+    icon: "ShoppingBag",
+    group: "crm",
+      section: "Preparar a venda",
+      minRole: "admin",
+  },
+  {
+    href: "/app/integrations",
+    label: "Integrations",
+    description: "Connect organization apps, manage credentials and inspect execution history.",
+    icon: "PlugsConnected",
+    group: "canais",
+    minRole: "manager",
+    sidebar: true,
+  },
+  {
     href: "/app/connections",
     label: "Conexões",
     // Cobre os DOIS caminhos desde o PR #105: número por QR e canal oficial da
@@ -502,7 +548,7 @@ export const NAV_CATALOG = [
     // pessoa — orçamento e criativo são da empresa inteira. Mesmo grau dos
     // outros dois vizinhos do grupo.
     minRole: "manager",
-    sidebar: true,
+    // Disponível no hub de Análise e na busca; preserva a dobra em 900px.
   },
   {
     // Irmã de "Desempenho", não a mesma coisa: lá é DESFECHO (funil agora,
@@ -518,6 +564,15 @@ export const NAV_CATALOG = [
     group: "analise",
     section: "Os números do período",
     sidebar: true,
+  },
+  {
+    href: "/app/lead-aging",
+    label: "Envelhecimento de leads",
+    description: "Leads abertos que permanecem numa etapa além do prazo escolhido.",
+    icon: "ClockCountdown",
+    group: "analise",
+    section: "Os números do período",
+    minRole: "manager",
   },
   {
     // Observabilidade, não configuração: por isso não fica junto dos agentes.

@@ -44,6 +44,7 @@ export function canSee(
   platform: boolean,
   role: Role | null,
 ): boolean {
+  if (role === "field_officer") return d.href === "/app/field-sales" || d.href === "/app/settings/profile" || d.href === "/app/settings/security";
   return platform || (!!role && ROLE_RANK[role] >= ROLE_RANK[d.minRole ?? "viewer"]);
 }
 export function permitidos(platform: boolean, role: Role | null): NavMetadata[] {

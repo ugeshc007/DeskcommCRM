@@ -9386,6 +9386,12 @@ alter table public.channel_sessions
   add column if not exists wacalls_jid text,
   add column if not exists wacalls_paired_at timestamptz;
 
+-- Colunas de identidade do canal nativo precisam anteceder o CHECK no UPDATE.
+alter table public.channel_sessions
+  add column if not exists provider_account_id text,
+  add column if not exists integration_connection_id uuid,
+  add column if not exists credential_revision integer;
+
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
@@ -9393,7 +9399,7 @@ alter table public.channel_sessions
   add constraint channel_sessions_provider_check
   -- 'wacalls' (migration 0233, chamada de voz) somado aqui — UM bloco só por
   -- constraint, doutrina de baseline (não duplicar drop+add por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text]));
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'messenger'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9403,7 +9409,8 @@ alter table public.channel_sessions
     (provider = 'waha'       and waha_session_name    is not null) or
     (provider = 'meta_cloud' and meta_phone_number_id is not null) or
     (provider = 'zernio'     and zernio_account_id    is not null) or
-    (provider = 'wacalls'    and wacalls_session_id    is not null)
+    (provider = 'wacalls'    and wacalls_session_id    is not null) or
+    (provider = 'messenger' and provider_account_id is not null and provider_account_id ~ '^[0-9]{1,64}$' and integration_connection_id is not null and credential_revision is not null and credential_revision > 0)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -24076,103 +24083,94 @@ comment on table public.organization_billing_events is 'Histórico append-only d
 notify pgrst, 'reload schema';
 
 -- ---- comando transacional do ledger SaaS (migration 0240) ----
-create or replace function public.fn_set_organization_subscription(p_actor uuid,p_organization_id uuid,p_idempotency_key uuid,p_request jsonb)
-returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare v_existing public.organization_billing_events%rowtype; v_before public.organization_subscriptions%rowtype; v_after public.organization_subscriptions%rowtype; v_event_type text;
+create or replace function public.fn_set_organization_subscription(
+  p_actor uuid,
+  p_organization_id uuid,
+  p_idempotency_key uuid,
+  p_request jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_existing public.organization_billing_events%rowtype;
+  v_before public.organization_subscriptions%rowtype;
+  v_after public.organization_subscriptions%rowtype;
+  v_event_type text;
 begin
-  if p_actor is null or p_organization_id is null or p_idempotency_key is null or jsonb_typeof(p_request)<>'object' then raise exception 'saas_subscription_invalid_arguments' using errcode='22023'; end if;
-  if not exists(select 1 from public.platform_admins where user_id=p_actor and revoked_at is null and scope='full') then raise exception 'saas_subscription_forbidden' using errcode='42501'; end if;
-  if not exists(select 1 from public.organizations where id=p_organization_id) then raise exception 'saas_subscription_org_not_found' using errcode='P0002'; end if;
-  if (p_request-array['plan_code','status','billing_provider','external_customer_ref','external_subscription_ref','trial_ends_at','current_period_start','current_period_end','cancel_at_period_end','limits']::text[])<>'{}'::jsonb then raise exception 'saas_subscription_unknown_field' using errcode='22023'; end if;
-  select * into v_existing from public.organization_billing_events where organization_id=p_organization_id and idempotency_key=p_idempotency_key;
-  if found then select * into v_after from public.organization_subscriptions where id=v_existing.subscription_id; return to_jsonb(v_after)||jsonb_build_object('created',false,'replayed',true); end if;
-  select * into v_before from public.organization_subscriptions where organization_id=p_organization_id for update;
-  v_event_type:=case when found then 'subscription_updated' else 'subscription_created' end;
-  insert into public.organization_subscriptions(organization_id,plan_code,status,billing_provider,external_customer_ref,external_subscription_ref,trial_ends_at,current_period_start,current_period_end,cancel_at_period_end,limits)
-  values(p_organization_id,p_request->>'plan_code',p_request->>'status',coalesce(nullif(p_request->>'billing_provider',''),'manual'),nullif(p_request->>'external_customer_ref',''),nullif(p_request->>'external_subscription_ref',''),nullif(p_request->>'trial_ends_at','')::timestamptz,nullif(p_request->>'current_period_start','')::timestamptz,nullif(p_request->>'current_period_end','')::timestamptz,coalesce((p_request->>'cancel_at_period_end')::boolean,false),coalesce(p_request->'limits','{}'::jsonb))
-  on conflict(organization_id) do update set plan_code=excluded.plan_code,status=excluded.status,billing_provider=excluded.billing_provider,external_customer_ref=excluded.external_customer_ref,external_subscription_ref=excluded.external_subscription_ref,trial_ends_at=excluded.trial_ends_at,current_period_start=excluded.current_period_start,current_period_end=excluded.current_period_end,cancel_at_period_end=excluded.cancel_at_period_end,limits=excluded.limits,revision=public.organization_subscriptions.revision+1 returning * into v_after;
-  insert into public.organization_billing_events(organization_id,subscription_id,event_type,billing_provider,idempotency_key,actor_user_id,previous_status,new_status,summary)
-  values(p_organization_id,v_after.id,v_event_type,v_after.billing_provider,p_idempotency_key,p_actor,v_before.status,v_after.status,jsonb_build_object('plan_code',v_after.plan_code,'revision',v_after.revision));
-  return to_jsonb(v_after)||jsonb_build_object('created',v_event_type='subscription_created','replayed',false);
-end; $$;
+  if p_actor is null or p_organization_id is null or p_idempotency_key is null
+     or jsonb_typeof(p_request) <> 'object' then
+    raise exception 'saas_subscription_invalid_arguments' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.platform_admins
+     where user_id = p_actor and revoked_at is null and scope = 'full'
+  ) then
+    raise exception 'saas_subscription_forbidden' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.organizations where id = p_organization_id) then
+    raise exception 'saas_subscription_org_not_found' using errcode = 'P0002';
+  end if;
+  if (p_request - array['plan_code','status','billing_provider','external_customer_ref',
+      'external_subscription_ref','trial_ends_at','current_period_start','current_period_end',
+      'cancel_at_period_end','limits']::text[]) <> '{}'::jsonb then
+    raise exception 'saas_subscription_unknown_field' using errcode = '22023';
+  end if;
+
+  select * into v_existing from public.organization_billing_events
+   where organization_id = p_organization_id and idempotency_key = p_idempotency_key;
+  if found then
+    select * into v_after from public.organization_subscriptions where id = v_existing.subscription_id;
+    return to_jsonb(v_after) || jsonb_build_object('created', false, 'replayed', true);
+  end if;
+
+  select * into v_before from public.organization_subscriptions
+   where organization_id = p_organization_id for update;
+  v_event_type := case when found then 'subscription_updated' else 'subscription_created' end;
+
+  insert into public.organization_subscriptions (
+    organization_id, plan_code, status, billing_provider, external_customer_ref,
+    external_subscription_ref, trial_ends_at, current_period_start, current_period_end,
+    cancel_at_period_end, limits
+  ) values (
+    p_organization_id, p_request->>'plan_code', p_request->>'status',
+    coalesce(nullif(p_request->>'billing_provider',''), 'manual'),
+    nullif(p_request->>'external_customer_ref',''), nullif(p_request->>'external_subscription_ref',''),
+    nullif(p_request->>'trial_ends_at','')::timestamptz,
+    nullif(p_request->>'current_period_start','')::timestamptz,
+    nullif(p_request->>'current_period_end','')::timestamptz,
+    coalesce((p_request->>'cancel_at_period_end')::boolean, false),
+    coalesce(p_request->'limits', '{}'::jsonb)
+  )
+  on conflict (organization_id) do update set
+    plan_code = excluded.plan_code, status = excluded.status,
+    billing_provider = excluded.billing_provider,
+    external_customer_ref = excluded.external_customer_ref,
+    external_subscription_ref = excluded.external_subscription_ref,
+    trial_ends_at = excluded.trial_ends_at,
+    current_period_start = excluded.current_period_start,
+    current_period_end = excluded.current_period_end,
+    cancel_at_period_end = excluded.cancel_at_period_end,
+    limits = excluded.limits,
+    revision = public.organization_subscriptions.revision + 1
+  returning * into v_after;
+
+  insert into public.organization_billing_events (
+    organization_id, subscription_id, event_type, billing_provider,
+    idempotency_key, actor_user_id, previous_status, new_status, summary
+  ) values (
+    p_organization_id, v_after.id, v_event_type, v_after.billing_provider,
+    p_idempotency_key, p_actor, v_before.status, v_after.status,
+    jsonb_build_object('plan_code', v_after.plan_code, 'revision', v_after.revision)
+  );
+  return to_jsonb(v_after) || jsonb_build_object('created', v_event_type = 'subscription_created', 'replayed', false);
+end;
+$$;
 revoke execute on function public.fn_set_organization_subscription(uuid,uuid,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.fn_set_organization_subscription(uuid,uuid,uuid,jsonb) to service_role;
 notify pgrst, 'reload schema';
 
--- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
---
--- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
-
--- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
--- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
---
--- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
--- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
--- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
--- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
--- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
---
--- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
--- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
--- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
---
--- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
--- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
--- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
--- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
---
--- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
--- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
--- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
--- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
-do $$
-declare
-  f record;
-  tinha_auth boolean;
-  tinha_service boolean;
-begin
-  if to_regrole('anon') is null then
-    return;
-  end if;
-
-  for f in
-    select p.oid, p.oid::regprocedure as assinatura
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
-       and p.prosecdef
-  loop
-    tinha_auth := to_regrole('authenticated') is not null
-                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
-    tinha_service := to_regrole('service_role') is not null
-                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
-
-    execute format('revoke execute on function %s from public, anon', f.assinatura);
-
-    if tinha_auth then
-      execute format('grant execute on function %s to authenticated', f.assinatura);
-    end if;
-    if tinha_service then
-      execute format('grant execute on function %s to service_role', f.assinatura);
-    end if;
-  end loop;
-end $$;
-
--- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
--- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
--- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
--- e o alvo de cada linha é o valor que um install fresco produz, medido.
-revoke execute on function public.fn_audit_log_row() from authenticated;
-revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
-revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
-revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
-revoke execute on function public.fn_update_budget_consumption() from authenticated;
-
-grant execute on function public.fn_audit_log_row() to service_role;
-grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
-grant execute on function public.fn_encrypt_oauth(text) to service_role;
-grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
-grant execute on function public.fn_update_budget_consumption() to service_role;
 -- BEGIN APPEND 0241: SaaS provider events
 -- Ingestão transacional e idempotente de eventos normalizados de billing.
 -- O tenant é resolvido pela referência externa já vinculada pelo platform
@@ -24290,3 +24288,1923 @@ drop trigger if exists trg_platform_meta_webhook_updated_at on public.platform_m
 create trigger trg_platform_meta_webhook_updated_at
   before update on public.platform_meta_webhook
   for each row execute function public.fn_set_updated_at();
+
+-- ---- Sessão tipada do construtor (migration 0265) ----
+-- Sessão tipada pertence ao enrollment; nenhum valor entra no evento de auditoria.
+alter table public.followup_enrollments add column if not exists variables jsonb not null default '{}'::jsonb;
+
+create or replace function public.fn_guard_followup_variables()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+ if current_setting('role',true) in ('anon','authenticated') and
+   ((tg_op='INSERT' and new.variables <> '{}'::jsonb) or (tg_op='UPDATE' and new.variables is distinct from old.variables)) then
+   raise exception 'session_variables_server_only' using errcode='42501';
+ end if;
+ if jsonb_typeof(new.variables) is distinct from 'object' or octet_length(new.variables::text)>32768 then
+   raise exception 'invalid_session_variables' using errcode='22023';
+ end if;
+ return new;
+end; $$;
+revoke all on function public.fn_guard_followup_variables() from public,anon,authenticated;
+drop trigger if exists trg_guard_followup_variables on public.followup_enrollments;
+create trigger trg_guard_followup_variables before insert or update on public.followup_enrollments
+ for each row execute function public.fn_guard_followup_variables();
+
+create or replace function public.fn_followup_set_variable(
+ p_org uuid,p_id uuid,p_revision bigint,p_node text,p_next text,p_key text,p_type text,p_value jsonb)
+returns bigint language plpgsql security definer set search_path=public as $$
+declare current public.followup_enrollments; contact uuid; next_variables jsonb; changed bigint; boundary jsonb;
+begin
+ select contact_id into contact from public.followup_enrollments where organization_id=p_org and id=p_id;
+ if not found then raise exception 'followup_stale' using errcode='40001'; end if;
+ perform public.fn_service_lock(p_org,contact);
+ select * into current from public.followup_enrollments where organization_id=p_org and id=p_id for update;
+ boundary:=public.fn_service_boundary(p_org,current.conversation_id);
+ if current.service_boundary is null or boundary is null or not (boundary @> current.service_boundary)
+   or boundary->>'status' in ('closed','resolved','archived') or boundary->>'demanda_fechada_em' is not null then
+   raise exception 'followup_stale' using errcode='40001'; end if;
+ if current.revision is distinct from p_revision or current.current_node_id is distinct from p_node
+   or current.status not in ('active','waiting_reply') then raise exception 'followup_stale' using errcode='40001'; end if;
+ if p_key is null or p_key !~ '^[a-zA-Z][a-zA-Z0-9_]{0,59}$'
+   or lower(p_key) in ('constructor','prototype','password','secret','token','api_key')
+   or p_type is null or p_type not in ('string','number','boolean')
+   or p_value is null or jsonb_typeof(p_value) is distinct from p_type or octet_length(p_value::text)>8000
+   or (p_type='string' and char_length(p_value #>> '{}')>2000) then
+   raise exception 'invalid_variable' using errcode='22023'; end if;
+ if current.variables ? p_key and current.variables->p_key->>'type' is distinct from p_type then
+   raise exception 'variable_type_mismatch' using errcode='22023'; end if;
+ if p_next is null or not exists (
+   select 1 from public.followup_flow_versions v, jsonb_array_elements(v.graph->'nodes') n
+   where v.organization_id=p_org and v.id=current.version_id and n->>'id'=p_next
+ ) then raise exception 'invalid_next_node' using errcode='22023'; end if;
+ if not exists (
+   select 1 from public.followup_flow_versions v, jsonb_array_elements(v.graph->'edges') e
+   where v.organization_id=p_org and v.id=current.version_id and e->>'source'=p_node and e->>'target'=p_next
+ ) then raise exception 'invalid_next_edge' using errcode='22023'; end if;
+ next_variables:=current.variables||jsonb_build_object(p_key,jsonb_build_object('type',p_type,'value',p_value));
+ if (select count(*) from jsonb_object_keys(next_variables))>50 or octet_length(next_variables::text)>32768 then
+   raise exception 'variable_limit_exceeded' using errcode='22023'; end if;
+ update public.followup_enrollments set variables=next_variables where organization_id=p_org and id=p_id returning revision into changed;
+ return public.fn_followup_apply_step(p_org,p_id,changed,
+   jsonb_build_object('current_node_id',p_next,'status','active','next_eval_at',now(),'claimed_until',null,'steps_taken',current.steps_taken+1),
+   jsonb_build_object('node_id',p_node,'event_type','variable_set','idempotency_key',p_node||':'||current.steps_taken,
+     'payload',jsonb_build_object('key',p_key,'value_type',p_type)));
+end; $$;
+revoke all on function public.fn_followup_set_variable(uuid,uuid,bigint,text,text,text,text,jsonb) from public,anon,authenticated;
+grant execute on function public.fn_followup_set_variable(uuid,uuid,bigint,text,text,text,text,jsonb) to service_role;
+notify pgrst,'reload schema';
+
+-- ---- integration execution ledger (migration 0275) ----
+-- Fundação compartilhada de integrações (núcleo): nenhuma conta/provedor é ativado.
+-- Segredos e resultados são server-only; RLS não substitui REVOKE do default ACL.
+create table if not exists public.integration_connections (
+ id uuid primary key default gen_random_uuid(),
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ provider text not null check (provider ~ '^[a-z][a-z0-9_]{0,63}$'),
+ label text not null check (char_length(label) between 1 and 120),
+ revision integer not null default 1 check (revision > 0),
+ active boolean not null default false,
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now(),
+ unique (organization_id,id)
+);
+create table if not exists public.integration_credentials (
+ connection_id uuid primary key,
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ revision integer not null check (revision > 0),
+ ciphertext bytea not null check (octet_length(ciphertext) between 1 and 65536),
+ iv bytea not null check (octet_length(iv)=12),
+ tag bytea not null check (octet_length(tag)=16),
+ foreign key (organization_id,connection_id) references public.integration_connections(organization_id,id) on delete cascade
+);
+create table if not exists public.integration_executions (
+ id uuid primary key default gen_random_uuid(),
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ connection_id uuid not null,
+ connection_revision integer not null check (connection_revision > 0),
+ execution_key text not null check (char_length(execution_key) between 1 and 200),
+ fingerprint text not null check (fingerprint ~ '^[a-f0-9]{64}$'),
+ action text not null check (action ~ '^[a-z][a-z0-9_]{0,63}$'),
+ retry_class text not null check (retry_class in ('read_only','provider_idempotent','never')),
+ lease uuid not null default gen_random_uuid(),
+ status text not null default 'pending' check (status in ('pending','succeeded','failed','indeterminate')),
+ failure_code text check (failure_code in ('connection_unavailable','provider_rejected','invalid_output','reconciliation_required')),
+ output jsonb check (octet_length(output::text)<=262144),
+ created_at timestamptz not null default now(),
+ finished_at timestamptz,
+ unique (organization_id,execution_key),
+ foreign key (organization_id,connection_id) references public.integration_connections(organization_id,id) on delete cascade,
+ check (
+  (status='pending' and failure_code is null and output is null and finished_at is null) or
+  (status='succeeded' and failure_code is null and output is not null and finished_at is not null) or
+  (status in ('failed','indeterminate') and failure_code is not null and output is null and finished_at is not null)
+ )
+);
+create index if not exists integration_executions_history on public.integration_executions(organization_id,created_at desc,id);
+alter table public.integration_connections enable row level security;
+alter table public.integration_credentials enable row level security;
+alter table public.integration_executions enable row level security;
+drop policy if exists tenant_isolation_integration_connections_all on public.integration_connections;
+create policy tenant_isolation_integration_connections_all on public.integration_connections for select to authenticated
+ using (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'manager'));
+-- Nenhuma policy de browser para cofre/ledger. Histórico expõe projeção por rota guardada.
+revoke all on public.integration_connections,public.integration_credentials,public.integration_executions from public,anon,authenticated,service_role;
+grant select on public.integration_connections to authenticated;
+grant select,insert,update on public.integration_connections to service_role;
+grant select,insert,update,delete on public.integration_credentials to service_role;
+grant select on public.integration_executions to service_role;
+
+create or replace function public.fn_integration_claim(
+ p_org uuid,p_key text,p_connection uuid,p_revision integer,p_action text,p_fingerprint text,p_retry text
+) returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare v public.integration_executions%rowtype; acquired uuid;
+begin
+ if p_org is null or p_connection is null or p_revision is null or p_revision<1
+  or p_key is null or char_length(p_key) not between 1 and 200
+  or p_action is null or p_action !~ '^[a-z][a-z0-9_]{0,63}$'
+  or p_fingerprint is null or p_fingerprint !~ '^[a-f0-9]{64}$'
+  or p_retry is null or p_retry not in ('read_only','provider_idempotent','never')
+ then raise exception 'integration_invalid_input' using errcode='22023'; end if;
+ perform 1 from public.integration_connections
+  where organization_id=p_org and id=p_connection and revision=p_revision and active for share;
+ if not found then return jsonb_build_object('kind','failed','code','connection_unavailable'); end if;
+ insert into public.integration_executions(organization_id,execution_key,connection_id,connection_revision,action,fingerprint,retry_class)
+ values(p_org,p_key,p_connection,p_revision,p_action,p_fingerprint,p_retry)
+ on conflict(organization_id,execution_key) do nothing returning lease into acquired;
+ if acquired is not null then return jsonb_build_object('kind','acquired','lease',acquired); end if;
+ select * into strict v from public.integration_executions where organization_id=p_org and execution_key=p_key for update;
+ if v.fingerprint<>p_fingerprint or v.connection_id<>p_connection or v.connection_revision<>p_revision
+  or v.action<>p_action or v.retry_class<>p_retry then return jsonb_build_object('kind','conflict'); end if;
+ if v.status='succeeded' then return jsonb_build_object('kind','completed','output',v.output); end if;
+ if v.status='failed' then return jsonb_build_object('kind','failed','code',v.failure_code); end if;
+ if v.status='indeterminate' then return jsonb_build_object('kind','indeterminate'); end if;
+ -- Não expira/reclama lease: timeout não prova que o efeito externo não ocorreu.
+ return jsonb_build_object('kind','busy');
+end; $$;
+revoke all on function public.fn_integration_claim(uuid,text,uuid,integer,text,text,text) from public,anon,authenticated;
+grant execute on function public.fn_integration_claim(uuid,text,uuid,integer,text,text,text) to service_role;
+
+create or replace function public.fn_integration_finish(p_org uuid,p_key text,p_lease uuid,p_status text,p_output jsonb,p_code text)
+ returns void language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ if p_org is null or p_key is null or p_lease is null or p_status is null
+  or p_status not in ('succeeded','failed','indeterminate')
+  or (p_status='succeeded' and (p_output is null or p_code is not null))
+  or (p_status in ('failed','indeterminate') and (p_output is not null or p_code is null
+    or p_code not in ('connection_unavailable','provider_rejected','invalid_output','reconciliation_required')))
+ then raise exception 'integration_invalid_result' using errcode='22023'; end if;
+ update public.integration_executions set status=p_status,output=p_output,failure_code=p_code,finished_at=now()
+ where organization_id=p_org and execution_key=p_key and lease=p_lease and status='pending';
+ if not found then raise exception 'integration_execution_conflict' using errcode='40001'; end if;
+end; $$;
+revoke all on function public.fn_integration_finish(uuid,text,uuid,text,jsonb,text) from public,anon,authenticated;
+grant execute on function public.fn_integration_finish(uuid,text,uuid,text,jsonb,text) to service_role;
+notify pgrst,'reload schema';
+
+-- ---- integration connection management (migration 0278) ----
+-- Controle de conexões: escrita apenas por RPC server-only, ator atual revalidado.
+alter table public.integration_connections add column if not exists auth_kind text not null default 'api_key' check(auth_kind in ('api_key','oauth'));
+alter table public.integration_connections add column if not exists validated_at timestamptz;
+alter table public.integration_connections add column if not exists failure_code text check(failure_code in ('validation_failed','reconnect_required'));
+create table if not exists public.integration_oauth_states (
+ state_hash text primary key check(state_hash ~ '^[a-f0-9]{64}$'),
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ connection_id uuid not null,
+ actor_user_id uuid not null references auth.users(id) on delete cascade,
+ revision integer not null check(revision>0),
+ browser_hash text not null check(browser_hash ~ '^[a-f0-9]{64}$'),
+ verifier jsonb not null,
+ expires_at timestamptz not null,
+ foreign key(organization_id,connection_id) references public.integration_connections(organization_id,id) on delete cascade
+);
+alter table public.integration_oauth_states enable row level security;
+revoke all on public.integration_oauth_states from public,anon,authenticated,service_role;
+grant select,insert,delete on public.integration_oauth_states to service_role;
+
+create or replace function public.fn_integration_manage(
+ p_org uuid,p_actor uuid,p_id uuid,p_revision integer,p_provider text,p_label text,p_auth_kind text,p_op text,
+ p_ciphertext bytea default null,p_iv bytea default null,p_tag bytea default null,p_verified boolean default false
+) returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare c public.integration_connections%rowtype;
+begin
+ if p_actor is null or not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_actor and role='admin' and revoked_at is null and accepted_at is not null)
+ then raise exception 'integration_forbidden' using errcode='42501'; end if;
+ if p_id is null or p_org is null or p_revision is null or p_revision<0 or p_op is null or p_op not in ('save','disconnect','test')
+ then raise exception 'integration_invalid_input' using errcode='22023'; end if;
+ if p_revision=0 then
+  if p_op<>'save' then raise exception 'integration_conflict' using errcode='40001'; end if;
+  insert into public.integration_connections(id,organization_id,provider,label,auth_kind)
+   values(p_id,p_org,p_provider,p_label,p_auth_kind) on conflict(id) do nothing;
+  if not found then raise exception 'integration_conflict' using errcode='40001'; end if;
+ end if;
+ select * into c from public.integration_connections where organization_id=p_org and id=p_id for update;
+ if not found or (p_revision<>0 and c.revision<>p_revision) then raise exception 'integration_conflict' using errcode='40001'; end if;
+ if p_op='save' then
+  if p_provider is distinct from c.provider or p_auth_kind is distinct from c.auth_kind or p_label is null or char_length(trim(p_label)) not between 1 and 120
+   then raise exception 'integration_invalid_input' using errcode='22023'; end if;
+  if p_ciphertext is null and (c.auth_kind<>'oauth' or p_revision<>0 or p_verified)
+   then raise exception 'integration_missing_credential' using errcode='22023'; end if;
+  update public.integration_connections set label=p_label, revision=case when p_revision=0 then 1 else revision+1 end,
+   active=coalesce(p_verified,false),validated_at=case when p_verified then now() else null end,failure_code=null,updated_at=now()
+   where organization_id=p_org and id=p_id returning * into c;
+  if p_ciphertext is not null then
+   insert into public.integration_credentials(organization_id,connection_id,revision,ciphertext,iv,tag)
+    values(p_org,p_id,c.revision,p_ciphertext,p_iv,p_tag)
+   on conflict(connection_id) do update set revision=excluded.revision,ciphertext=excluded.ciphertext,iv=excluded.iv,tag=excluded.tag
+    where integration_credentials.organization_id=p_org;
+  end if;
+ elsif p_op='disconnect' then
+  delete from public.integration_credentials where organization_id=p_org and connection_id=p_id;
+  delete from public.integration_oauth_states where organization_id=p_org and connection_id=p_id;
+  update public.integration_connections set active=false,revision=revision+1,validated_at=null,failure_code='reconnect_required',updated_at=now()
+   where organization_id=p_org and id=p_id returning * into c;
+ else
+  if not exists(select 1 from public.integration_credentials where organization_id=p_org and connection_id=p_id and revision=c.revision)
+   then raise exception 'integration_missing_credential' using errcode='22023'; end if;
+  update public.integration_connections set active=coalesce(p_verified,false),validated_at=case when p_verified then now() else null end,
+   failure_code=case when p_verified then null else 'validation_failed' end,updated_at=now()
+   where organization_id=p_org and id=p_id returning * into c;
+ end if;
+ return to_jsonb(c);
+end; $$;
+revoke all on function public.fn_integration_manage(uuid,uuid,uuid,integer,text,text,text,text,bytea,bytea,bytea,boolean) from public,anon,authenticated;
+grant execute on function public.fn_integration_manage(uuid,uuid,uuid,integer,text,text,text,text,bytea,bytea,bytea,boolean) to service_role;
+-- API/worker não podem contornar CAS por UPDATE direto.
+revoke insert,update on public.integration_connections from service_role;
+revoke insert,update,delete on public.integration_credentials from service_role;
+
+create or replace function public.fn_integration_oauth_consume(p_state text,p_browser text)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare s public.integration_oauth_states%rowtype;
+begin
+ delete from public.integration_oauth_states where state_hash=p_state and browser_hash=p_browser and expires_at>now() returning * into s;
+ if not found then return null; end if;
+ if not exists(select 1 from public.user_organizations where organization_id=s.organization_id and user_id=s.actor_user_id and role='admin' and revoked_at is null and accepted_at is not null)
+  or not exists(select 1 from public.integration_connections where organization_id=s.organization_id and id=s.connection_id and revision=s.revision and auth_kind='oauth')
+ then return null; end if;
+ return to_jsonb(s);
+end; $$;
+revoke all on function public.fn_integration_oauth_consume(text,text) from public,anon,authenticated;
+grant execute on function public.fn_integration_oauth_consume(text,text) to service_role;
+notify pgrst,'reload schema';
+
+-- 0279: canal nativo com identidade e revisão isoladas por organização.
+-- Identidade e autoridade de canal são núcleo. PSID nunca vira telefone.
+alter table public.channel_sessions add column if not exists provider_account_id text;
+alter table public.channel_sessions add column if not exists integration_connection_id uuid;
+alter table public.channel_sessions add column if not exists credential_revision integer;
+alter table public.channel_sessions add column if not exists webhook_verified_at timestamptz;
+alter table public.channel_sessions add column if not exists webhook_received_at timestamptz;
+-- Provider CHECK consolidado no bloco anterior para UPDATE seguro.
+alter table public.conversations drop constraint if exists conversations_channel_check;
+alter table public.conversations add constraint conversations_channel_check check(channel in ('whatsapp','messenger'));
+create unique index if not exists channel_sessions_org_id_identity on public.channel_sessions(organization_id,id);
+create unique index if not exists contacts_org_id_identity on public.contacts(organization_id,id);
+create unique index if not exists native_page_exclusive on public.channel_sessions(provider,provider_account_id) where provider='messenger';
+create unique index if not exists native_connection_exclusive on public.channel_sessions(integration_connection_id) where integration_connection_id is not null;
+do $$ begin
+ if not exists(select 1 from pg_constraint where conname='channel_integration_owner') then
+  alter table public.channel_sessions add constraint channel_integration_owner foreign key(organization_id,integration_connection_id) references public.integration_connections(organization_id,id);
+ end if;
+end $$;
+
+create table if not exists public.channel_contact_identities(
+ organization_id uuid not null references public.organizations(id) on delete cascade,
+ channel_session_id uuid not null,
+ provider_user_id text not null check(length(provider_user_id) between 1 and 128),
+ contact_id uuid not null,
+ primary key(organization_id,channel_session_id,provider_user_id),
+ foreign key(organization_id,channel_session_id) references public.channel_sessions(organization_id,id),
+ foreign key(organization_id,contact_id) references public.contacts(organization_id,id)
+);
+alter table public.channel_contact_identities enable row level security;
+revoke all on public.channel_contact_identities from public,anon,authenticated,service_role;
+grant select on public.channel_contact_identities to service_role;
+
+create or replace function public.fn_guard_native_channel_binding() returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ if current_setting('role',true) in ('anon','authenticated') and
+  (new.provider='messenger' or (tg_op='UPDATE' and old.provider='messenger')) then
+  raise exception 'native_channel_server_only' using errcode='42501';
+ end if;
+ return new;
+end $$;
+revoke all on function public.fn_guard_native_channel_binding() from public,anon,authenticated;
+drop trigger if exists guard_native_channel_binding on public.channel_sessions;
+create trigger guard_native_channel_binding before insert or update on public.channel_sessions for each row execute function public.fn_guard_native_channel_binding();
+
+create or replace function public.fn_bind_page_channel(p_org uuid,p_actor uuid,p_connection uuid,p_revision integer,p_page text)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare c public.integration_connections; s public.channel_sessions; result uuid;
+begin
+ if not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_actor and role='admin' and accepted_at is not null and revoked_at is null)
+ then raise exception 'channel_forbidden' using errcode='42501'; end if;
+ select * into c from public.integration_connections where organization_id=p_org and id=p_connection for update;
+ if not found or c.provider<>'messenger' or not c.active or c.revision<>p_revision or p_page is null or p_page !~ '^[0-9]{1,64}$'
+ then raise exception 'channel_connection_unavailable' using errcode='40001'; end if;
+ select * into s from public.channel_sessions where integration_connection_id=p_connection for update;
+ if found then
+  if s.organization_id<>p_org or s.provider_account_id<>p_page then raise exception 'channel_identity_conflict' using errcode='23505'; end if;
+  if s.credential_revision=p_revision and s.archived_at is null then return s.id; end if;
+  update public.channel_sessions set credential_revision=p_revision,status='STARTING',archived_at=null,webhook_verified_at=null,webhook_received_at=null where organization_id=p_org and id=s.id;
+  return s.id;
+ end if;
+ insert into public.channel_sessions(organization_id,provider,provider_account_id,integration_connection_id,credential_revision,display_name,status,webhook_secret_encrypted,created_by,metadata)
+ values(p_org,'messenger',p_page,p_connection,p_revision,c.label,'STARTING','\x'::bytea,p_actor,'{"ai_gate":"allowlist"}'::jsonb) returning id into result;
+ return result;
+end $$;
+revoke all on function public.fn_bind_page_channel(uuid,uuid,uuid,integer,text) from public,anon,authenticated;
+grant execute on function public.fn_bind_page_channel(uuid,uuid,uuid,integer,text) to service_role;
+
+-- Toda rotação/desconexão suspende a sessão; reativar exige o administrador.
+create or replace function public.fn_invalidate_connection_channel() returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ if new.revision is distinct from old.revision or not new.active then
+  update public.channel_sessions set status='STOPPED',status_reason='Connection changed; activate and verify again',webhook_verified_at=null
+   where organization_id=new.organization_id and integration_connection_id=new.id;
+ end if;
+ return new;
+end $$;
+revoke all on function public.fn_invalidate_connection_channel() from public,anon,authenticated;
+drop trigger if exists invalidate_connection_channel on public.integration_connections;
+create trigger invalidate_connection_channel after update on public.integration_connections for each row execute function public.fn_invalidate_connection_channel();
+
+-- Uma transação guarda identidade, conversa e mensagem; advisory lock evita duplicar
+-- contato na primeira entrega concorrente. Reentrega não move a janela nem o unread.
+create or replace function public.fn_ingest_page_message(p_org uuid,p_session uuid,p_revision integer,p_sender text,p_external text,p_at timestamptz,p_text text,p_selection text)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare s public.channel_sessions; contact uuid; conversation uuid; message uuid; duplicate boolean:=false;
+begin
+ -- Mesmo ordenamento de bind/rotate: conexão antes da sessão. Evita upgrade
+ -- SHARE->UPDATE concorrente e inversão com o trigger de rotação.
+ perform 1 from public.integration_connections ic
+ where ic.organization_id=p_org and ic.id=(select integration_connection_id from public.channel_sessions where organization_id=p_org and id=p_session)
+ for share;
+ select cs.* into s from public.channel_sessions cs join public.integration_connections ic on ic.organization_id=cs.organization_id and ic.id=cs.integration_connection_id
+ where cs.organization_id=p_org and cs.id=p_session and cs.provider='messenger' and cs.archived_at is null and cs.credential_revision=p_revision
+ and ic.revision=p_revision and ic.active for update of cs;
+ if not found then raise exception 'channel_unavailable' using errcode='42501'; end if;
+ if p_sender is null or p_sender !~ '^[0-9]{1,64}$' or p_sender=s.provider_account_id or p_external is null or length(p_external) not between 1 and 512
+ or p_at is null or p_at>now()+interval '5 minutes' or length(coalesce(p_text,''))>20000 or length(coalesce(p_selection,''))>2000 then
+  raise exception 'invalid_message' using errcode='22023'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(p_org::text||p_session::text||p_sender,0));
+ select contact_id into contact from public.channel_contact_identities where organization_id=p_org and channel_session_id=p_session and provider_user_id=p_sender;
+ if not found then
+  insert into public.contacts(organization_id,display_name,source) values(p_org,'Messenger customer','messenger') returning id into contact;
+  insert into public.channel_contact_identities values(p_org,p_session,p_sender,contact);
+ end if;
+ select id into conversation from public.conversations where organization_id=p_org and channel_session_id=p_session and contact_id=contact and provider_conversation_id=p_sender order by created_at desc limit 1;
+ if not found then
+  insert into public.conversations(organization_id,contact_id,channel_session_id,channel,provider_conversation_id,status)
+  values(p_org,contact,p_session,'messenger',p_sender,'open') returning id into conversation;
+ end if;
+ select id into message from public.messages where organization_id=p_org and external_id='page:'||s.provider_account_id||':'||p_external;
+ if found then
+  if not exists(select 1 from public.messages where organization_id=p_org and id=message and conversation_id=conversation) then raise exception 'message_identity_conflict' using errcode='23505'; end if;
+  duplicate:=true;
+ else
+  insert into public.messages(organization_id,conversation_id,channel_session_id,contact_id,external_id,type,direction,status,body,sent_at,metadata)
+  values(p_org,conversation,p_session,contact,'page:'||s.provider_account_id||':'||p_external,'text','inbound','received',p_text,p_at,
+   jsonb_build_object('selection',p_selection,'provider_message_id',p_external)) returning id into message;
+  update public.conversations set last_inbound_at=greatest(last_inbound_at,p_at),last_message_at=greatest(last_message_at,p_at),
+   last_message_preview=case when last_message_at is null or last_message_at<=p_at then left(p_text,200) else last_message_preview end,
+   unread_count_for_assignee=unread_count_for_assignee+1 where organization_id=p_org and id=conversation;
+ end if;
+ update public.channel_sessions set webhook_received_at=now(),status='WORKING',status_reason=null where organization_id=p_org and id=p_session;
+ return jsonb_build_object('contact_id',contact,'conversation_id',conversation,'message_id',message,'duplicate',duplicate);
+end $$;
+revoke all on function public.fn_ingest_page_message(uuid,uuid,integer,text,text,timestamptz,text,text) from public,anon,authenticated;
+grant execute on function public.fn_ingest_page_message(uuid,uuid,integer,text,text,timestamptz,text,text) to service_role;
+
+-- Módulo opcional: entregar a função não cria tabelas de loja para todos.
+-- Instalação da instância é separada da ativação por organização.
+create or replace function public.fn_provision_checkout_module()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform pg_advisory_xact_lock(hashtextextended('checkout-module-provisioner-v1',0));
+ create table if not exists public.store_settings (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  active boolean not null default false,
+  revision integer not null default 1 check(revision>0),
+  config jsonb not null check(jsonb_typeof(config)='object' and octet_length(config::text)<=65536),
+  prices_include_all_taxes boolean not null default false,
+  payment_connection_id uuid,
+  reservation_minutes integer not null check(reservation_minutes between 30 and 1440),
+  updated_at timestamptz not null default now(),
+  foreign key(organization_id,payment_connection_id) references public.integration_connections(organization_id,id)
+ );
+ create table if not exists public.store_products (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  sku text not null check(length(sku) between 1 and 100),
+  revision integer not null default 1 check(revision>0),
+  active boolean not null default true,
+  product jsonb not null check(jsonb_typeof(product)='object' and octet_length(product::text)<=65536),
+  stock_on_hand integer check(stock_on_hand>=0),
+  stock_reserved integer not null default 0 check(stock_reserved>=0),
+  updated_at timestamptz not null default now(),
+  primary key(organization_id,sku),
+  check((stock_on_hand is null and stock_reserved=0) or stock_on_hand>=stock_reserved)
+ );
+ create table if not exists public.store_orders (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id),
+  contact_id uuid not null,
+  request_key text not null check(length(request_key) between 1 and 200),
+  request_fingerprint text not null check(request_fingerprint ~ '^[a-f0-9]{64}$'),
+  quote jsonb not null check(jsonb_typeof(quote)='object' and octet_length(quote::text)<=65536),
+  total_cents bigint not null check(total_cents between 0 and 9007199254740991),
+  currency text not null check(currency ~ '^[A-Z]{3}$'),
+  status text not null check(status in ('reserved','awaiting_payment','payment_review','paid','cancelled','expired')),
+  stock_state text not null default 'reserved' check(stock_state in ('reserved','consumed','released')),
+  connection_id uuid not null,
+  connection_revision integer not null check(connection_revision>0),
+  payment_session_id text,
+  payment_url text,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(organization_id,id),
+  unique(organization_id,request_key),
+  unique(connection_id,payment_session_id),
+  foreign key(organization_id,contact_id) references public.contacts(organization_id,id),
+  foreign key(organization_id,connection_id) references public.integration_connections(organization_id,id)
+ );
+ create table if not exists public.store_order_items (
+  organization_id uuid not null,
+  order_id uuid not null,
+  sku text not null,
+  quantity integer not null check(quantity>0),
+  primary key(organization_id,order_id,sku),
+  foreign key(organization_id,order_id) references public.store_orders(organization_id,id),
+  foreign key(organization_id,sku) references public.store_products(organization_id,sku)
+ );
+ create table if not exists public.store_payment_events (
+  organization_id uuid not null,
+  connection_id uuid not null,
+  event_id text not null check(length(event_id) between 1 and 100),
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  order_id uuid not null,
+  outcome text not null check(outcome in ('paid','expired','review','ignored')),
+  created_at timestamptz not null default now(),
+  primary key(organization_id,connection_id,event_id),
+  foreign key(organization_id,connection_id) references public.integration_connections(organization_id,id),
+  foreign key(organization_id,order_id) references public.store_orders(organization_id,id)
+ );
+ alter table public.store_settings enable row level security;
+ alter table public.store_products enable row level security;
+ alter table public.store_orders enable row level security;
+ alter table public.store_order_items enable row level security;
+ alter table public.store_payment_events enable row level security;
+ -- Escritas exclusivamente pela transação servidor com ator e org revalidados.
+ revoke all on public.store_settings,public.store_products,public.store_orders,public.store_order_items,public.store_payment_events from public,anon,authenticated,service_role;
+ grant select on public.store_settings,public.store_products,public.store_orders,public.store_order_items,public.store_payment_events to service_role;
+ -- O cache REST só vê as tabelas depois do commit da instalação.
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_checkout_module() from public,anon,authenticated;
+grant execute on function public.fn_provision_checkout_module() to service_role;
+
+-- ---- Native inbound recovery (migration 0281) ----
+-- Recibo + mídia + trabalho durável no mesmo commit. Não executa HTTP no banco.
+create or replace function public.fn_ingest_page_message_v2(p_org uuid,p_session uuid,p_revision integer,p_sender text,p_external text,p_at timestamptz,p_text text,p_selection text,p_media jsonb,p_opt_out boolean)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare r jsonb; mid uuid; cid uuid;
+begin
+ if p_media is not null and (p_media->>'kind' not in ('image','video','audio','document') or p_media->>'url' is null or length(p_media->>'url')>8000 or p_media->>'url' !~ '^https://') then raise exception 'invalid_media'; end if;
+ r:=public.fn_ingest_page_message(p_org,p_session,p_revision,p_sender,p_external,p_at,p_text,p_selection);
+ mid:=(r->>'message_id')::uuid; cid:=(r->>'contact_id')::uuid;
+ if coalesce((r->>'duplicate')::boolean,false) then return r; end if;
+ if exists(select 1 from public.contacts where organization_id=p_org and id=cid and is_anonymized) then raise exception 'contact_unavailable'; end if;
+ if p_opt_out then
+  update public.contacts set is_blocked=true,blocked_reason='stop_keyword',blocked_at=now() where organization_id=p_org and id=cid;
+ end if;
+ if p_media is not null then
+  update public.messages set type=p_media->>'kind',media_url=p_media->>'url',metadata=metadata||'{"media_status":"pending"}'::jsonb
+   where organization_id=p_org and id=mid;
+  perform public.emit_event('media.persist_requested','message',mid,jsonb_build_object('message_id',mid),'{}',p_org);
+ end if;
+ perform public.emit_event('channel.inbound_postprocess','message',mid,jsonb_build_object('message_id',mid),'{}',p_org);
+ return r;
+end $$;
+revoke all on function public.fn_ingest_page_message_v2(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) from public,anon,authenticated;
+grant execute on function public.fn_ingest_page_message_v2(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) to service_role;
+
+-- Um evento de despacho por mensagem, mesmo se o worker morrer após o commit.
+create or replace function public.fn_dispatch_inbound_once(p_org uuid,p_message uuid)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare m public.messages; eid uuid;
+begin
+ select * into m from public.messages where organization_id=p_org and id=p_message and direction='inbound' for update;
+ if not found then raise exception 'message_unavailable'; end if;
+ if m.metadata ? 'native_dispatch_event_id' then return (m.metadata->>'native_dispatch_event_id')::uuid; end if;
+ if not exists(select 1 from public.contacts where organization_id=p_org and id=m.contact_id and not is_anonymized and not is_blocked) then return null; end if;
+ eid:=public.emit_event('ai_agent.dispatch_requested','message',m.id,jsonb_build_object('organization_id',p_org,'conversation_id',m.conversation_id,'contact_id',m.contact_id,'channel_session_id',m.channel_session_id,'inbound_message_id',m.id),'{"source":"durable_inbound"}',p_org);
+ update public.messages set metadata=coalesce(metadata,'{}')||jsonb_build_object('native_dispatch_event_id',eid) where organization_id=p_org and id=m.id;
+ return eid;
+end $$;
+revoke all on function public.fn_dispatch_inbound_once(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_dispatch_inbound_once(uuid,uuid) to service_role;
+
+-- Extensão opt-in: o baseline instala funções, não tabelas de um nicho.
+do $rename$ begin
+ if to_regprocedure('public.fn_provision_checkout_module_base()') is null then
+  alter function public.fn_provision_checkout_module() rename to fn_provision_checkout_module_base;
+ end if;
+end $rename$;
+revoke all on function public.fn_provision_checkout_module_base() from public,anon,authenticated,service_role;
+create or replace function public.fn_provision_checkout_module() returns void
+language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_checkout_module_base();
+ alter table public.store_settings add column if not exists automated_checkout boolean not null default false;
+ create unique index if not exists conversations_store_org_identity on public.conversations(organization_id,id);
+ create unique index if not exists messages_store_org_identity on public.messages(organization_id,id);
+ create table if not exists public.store_checkout_proposals (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id),
+  contact_id uuid not null,
+  conversation_id uuid not null,
+  source_message_id uuid not null,
+  cart jsonb not null,
+  quote jsonb not null,
+  confirmation text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  unique(organization_id,id),
+  unique(organization_id,source_message_id),
+  foreign key(organization_id,contact_id) references public.contacts(organization_id,id),
+  foreign key(organization_id,conversation_id) references public.conversations(organization_id,id),
+  foreign key(organization_id,source_message_id) references public.messages(organization_id,id)
+ );
+ alter table public.store_checkout_proposals enable row level security;
+ revoke all on public.store_checkout_proposals from public,anon,authenticated,service_role;
+ grant select on public.store_checkout_proposals to service_role;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_checkout_module() from public,anon,authenticated;
+grant execute on function public.fn_provision_checkout_module() to service_role;
+-- Atualiza somente instalações que já ativaram o módulo opcional.
+do $installed$ begin
+ if to_regclass('public.store_settings') is not null then perform public.fn_provision_checkout_module(); end if;
+end $installed$;
+
+-- Tombstone pseudônimo impede recriar automaticamente um contato apagado.
+create or replace function public.fn_redact_native_channel_store() returns trigger
+language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ update public.channel_contact_identities set provider_user_id='redacted:'||encode(sha256(convert_to(organization_id::text||channel_session_id::text||provider_user_id,'UTF8')),'hex')
+  where organization_id=new.organization_id and contact_id=new.id and provider_user_id not like 'redacted:%';
+ update public.conversations set provider_conversation_id=null where organization_id=new.organization_id and contact_id=new.id and channel='messenger';
+ if to_regclass('public.store_checkout_proposals') is not null then
+  delete from public.store_checkout_proposals where organization_id=new.organization_id and contact_id=new.id;
+ end if;
+ if to_regclass('public.store_orders') is not null then
+  update public.store_orders set quote='{}',payment_url=null,updated_at=now()
+   where organization_id=new.organization_id and contact_id=new.id;
+ end if;
+ return new;
+end $$;
+revoke all on function public.fn_redact_native_channel_store() from public,anon,authenticated;
+drop trigger if exists redact_native_channel_store on public.contacts;
+create trigger redact_native_channel_store after update of is_anonymized on public.contacts
+for each row when(new.is_anonymized is true) execute function public.fn_redact_native_channel_store();
+
+create or replace function public.fn_ingest_page_message_v3(p_org uuid,p_session uuid,p_revision integer,p_sender text,p_external text,p_at timestamptz,p_text text,p_selection text,p_media jsonb,p_opt_out boolean)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare redacted boolean;
+begin
+ select c.is_anonymized into redacted from public.channel_contact_identities i join public.contacts c on c.organization_id=i.organization_id and c.id=i.contact_id
+  where i.organization_id=p_org and i.channel_session_id=p_session
+    and i.provider_user_id in(p_sender,'redacted:'||encode(sha256(convert_to(p_org::text||p_session::text||p_sender,'UTF8')),'hex'))
+  for share of c;
+ if coalesce(redacted,false) then return '{"ignored":true}'::jsonb; end if;
+ return public.fn_ingest_page_message_v2(p_org,p_session,p_revision,p_sender,p_external,p_at,p_text,p_selection,p_media,p_opt_out);
+end $$;
+revoke all on function public.fn_ingest_page_message_v3(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) from public,anon,authenticated;
+grant execute on function public.fn_ingest_page_message_v3(uuid,uuid,integer,text,text,timestamptz,text,text,jsonb,boolean) to service_role;
+
+-- Metadata da mensagem também é atualizada pelo worker de mídia. Recibo de
+-- despacho separado: nenhum merge de metadata pode apagar a deduplicação.
+create table if not exists public.inbound_dispatch_receipts (
+ organization_id uuid not null references public.organizations(id),
+ message_id uuid primary key references public.messages(id) on delete cascade,
+ event_id uuid not null,
+ created_at timestamptz not null default now()
+);
+alter table public.inbound_dispatch_receipts enable row level security;
+revoke all on public.inbound_dispatch_receipts from public,anon,authenticated,service_role;
+grant select on public.inbound_dispatch_receipts to service_role;
+create or replace function public.fn_dispatch_inbound_once(p_org uuid,p_message uuid)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare m public.messages; eid uuid;
+begin
+ select * into m from public.messages where organization_id=p_org and id=p_message and direction='inbound' for update;
+ if not found then raise exception 'message_unavailable'; end if;
+ select event_id into eid from public.inbound_dispatch_receipts where organization_id=p_org and message_id=p_message;
+ if found then return eid; end if;
+ if not exists(select 1 from public.contacts where organization_id=p_org and id=m.contact_id and not is_anonymized and not is_blocked) then return null; end if;
+ -- Compatibilidade com recibos emitidos pela versão anterior.
+ select id into eid from public.event_log where organization_id=p_org and entity_id=p_message
+  and event_type='ai_agent.dispatch_requested' and metadata->>'source'='durable_inbound' order by created_at limit 1;
+ if not found then
+  eid:=public.emit_event('ai_agent.dispatch_requested','message',m.id,jsonb_build_object('organization_id',p_org,'conversation_id',m.conversation_id,'contact_id',m.contact_id,'channel_session_id',m.channel_session_id,'inbound_message_id',m.id),'{"source":"durable_inbound"}',p_org);
+ end if;
+ insert into public.inbound_dispatch_receipts(organization_id,message_id,event_id) values(p_org,p_message,eid);
+ return eid;
+end $$;
+revoke all on function public.fn_dispatch_inbound_once(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_dispatch_inbound_once(uuid,uuid) to service_role;
+
+-- ---- Optional Field Sales module (migration 0311) ----
+-- Optional Field Sales module. Installing schema never enrolls or tracks employees.
+create or replace function public.fn_provision_field_sales_module()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+declare table_name text;
+begin
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ create table if not exists public.field_sales_settings (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  enabled boolean not null default false,
+  revision integer not null default 1 check(revision>0),
+  track_breaks boolean not null default true check(track_breaks),
+  retention_days integer not null check(retention_days between 1 and 365),
+  notice_text text not null check(length(notice_text) between 1 and 8000),
+  updated_at timestamptz not null default now()
+ );
+ create table if not exists public.field_sales_employees (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id),
+  active boolean not null default true,
+  display_name text not null check(length(display_name) between 1 and 160),
+  primary key(organization_id,user_id)
+ );
+ create table if not exists public.field_sales_manager_scope (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  manager_id uuid not null references auth.users(id),
+  employee_id uuid not null,
+  primary key(organization_id,manager_id,employee_id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id)
+ );
+ create table if not exists public.field_sales_projects (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null default gen_random_uuid(),
+  revision integer not null default 1 check(revision>0),
+  name text not null check(length(name) between 1 and 160),
+  customer_id uuid,
+  site_name text not null check(length(site_name) between 1 and 160),
+  address text not null default '' check(length(address)<=1000),
+  latitude double precision check(latitude between -90 and 90),
+  longitude double precision check(longitude between -180 and 180),
+  instructions text not null default '' check(length(instructions)<=4000),
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  primary key(organization_id,id),
+  foreign key(organization_id,customer_id) references public.contacts(organization_id,id),
+  check((latitude is null)=(longitude is null))
+ );
+ create table if not exists public.field_sales_schedules (
+  organization_id uuid not null,
+  id uuid not null default gen_random_uuid(),
+  project_id uuid not null,
+  employee_id uuid not null,
+  revision integer not null default 1 check(revision>0),
+  timezone text not null check(length(timezone) between 1 and 100),
+  country_code text not null check(country_code ~ '^[A-Z]{2}$'),
+  rule jsonb not null check(jsonb_typeof(rule)='object' and octet_length(rule::text)<=16384),
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  primary key(organization_id,id),
+  foreign key(organization_id,project_id) references public.field_sales_projects(organization_id,id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id)
+ );
+ create table if not exists public.field_sales_schedule_exceptions (
+  organization_id uuid not null,
+  schedule_id uuid not null,
+  local_date date not null,
+  cancelled boolean not null default true,
+  replacement jsonb check(replacement is null or (jsonb_typeof(replacement)='object' and octet_length(replacement::text)<=16384)),
+  primary key(organization_id,schedule_id,local_date),
+  foreign key(organization_id,schedule_id) references public.field_sales_schedules(organization_id,id),
+  check(cancelled=(replacement is null))
+ );
+ create table if not exists public.field_sales_sessions (
+  organization_id uuid not null,
+  id uuid not null,
+  employee_id uuid not null,
+  status text not null check(status in ('working','on_break','off_duty')),
+  punched_in_at timestamptz not null,
+  punched_out_at timestamptz,
+  last_event_at timestamptz not null,
+  last_sequence integer not null default 0 check(last_sequence>=0),
+  created_at timestamptz not null default now(),
+  primary key(organization_id,id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id),
+  check((status='off_duty')=(punched_out_at is not null)),
+  check(punched_out_at is null or punched_out_at>=punched_in_at),
+  check(last_event_at>=punched_in_at)
+ );
+ create unique index if not exists field_sales_one_active_session on public.field_sales_sessions(organization_id,employee_id) where punched_out_at is null;
+ create table if not exists public.field_sales_attendance_events (
+  organization_id uuid not null,
+  id uuid not null,
+  session_id uuid not null,
+  sequence integer not null check(sequence>=0),
+  action text not null check(action in ('punch_in','break_start','break_end','punch_out')),
+  captured_at timestamptz not null,
+  received_at timestamptz not null default now(),
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  primary key(organization_id,id),
+  unique(organization_id,session_id,sequence),
+  foreign key(organization_id,session_id) references public.field_sales_sessions(organization_id,id)
+ );
+ create table if not exists public.field_sales_locations (
+  organization_id uuid not null,
+  id uuid not null,
+  session_id uuid not null,
+  sequence integer not null check(sequence>=0),
+  captured_at timestamptz not null,
+  received_at timestamptz not null default now(),
+  latitude double precision not null check(latitude between -90 and 90),
+  longitude double precision not null check(longitude between -180 and 180),
+  accuracy_m double precision not null check(accuracy_m between 0 and 100000),
+  mock_location boolean not null,
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  primary key(organization_id,id),
+  unique(organization_id,session_id,sequence),
+  foreign key(organization_id,session_id) references public.field_sales_sessions(organization_id,id)
+ );
+ create index if not exists field_sales_location_history on public.field_sales_locations(organization_id,session_id,captured_at);
+ -- GPS is not exposed through PostgREST, generic AI tokens or authenticated table reads.
+ -- Server transactions revalidate current membership AND explicit employee/manager scope.
+ foreach table_name in array array['field_sales_settings','field_sales_employees','field_sales_manager_scope',
+   'field_sales_projects','field_sales_schedules','field_sales_schedule_exceptions','field_sales_sessions',
+   'field_sales_attendance_events','field_sales_locations']
+ loop
+  execute format('alter table public.%I enable row level security',table_name);
+  execute format('revoke all on public.%I from public,anon,authenticated,service_role',table_name);
+  execute format('grant select on public.%I to service_role',table_name);
+  execute format('drop policy if exists %I on public.%I','tenant_isolation_'||table_name||'_all',table_name);
+  execute format('create policy %I on public.%I for all to authenticated using (false) with check (false)','tenant_isolation_'||table_name||'_all',table_name);
+ end loop;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_field_sales_module() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_module() to service_role;
+
+-- ---- Field Sales devices (migration 0312) ----
+-- Device credentials are employee-scoped and stored only as hashes.
+create or replace function public.fn_provision_field_sales_devices()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_module();
+ create table if not exists public.field_sales_devices (
+  organization_id uuid not null,
+  id uuid not null default gen_random_uuid(),
+  employee_id uuid not null,
+  label text not null check(length(label) between 1 and 100),
+  token_hash text not null unique check(token_hash ~ '^[a-f0-9]{64}$'),
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  primary key(organization_id,id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id)
+ );
+ alter table public.field_sales_devices enable row level security;
+ revoke all on public.field_sales_devices from public,anon,authenticated,service_role;
+ grant select on public.field_sales_devices to service_role;
+ drop policy if exists tenant_isolation_field_sales_devices_all on public.field_sales_devices;
+ create policy tenant_isolation_field_sales_devices_all on public.field_sales_devices for all to authenticated using(false) with check(false);
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_field_sales_devices() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_devices() to service_role;
+
+-- ---- Field Sales raw-location retention (migration 0313) ----
+-- Optional Field Sales: remove only raw GPS older than each organization's explicit policy.
+create or replace function public.fn_expurgar_field_sales_locations(p_limite integer default 1000)
+returns integer language plpgsql security definer set search_path=public,pg_temp as $retention$
+declare total integer;
+begin
+ if to_regclass('public.field_sales_locations') is null then return 0; end if;
+ with expired as (
+  select l.organization_id,l.id from public.field_sales_locations l
+  join public.field_sales_settings s on s.organization_id=l.organization_id
+  where l.captured_at < now()-make_interval(days=>s.retention_days)
+  order by l.captured_at,l.organization_id,l.id
+  limit greatest(1,least(coalesce(p_limite,1000),10000))
+  for update of l skip locked
+ ), removed as (
+  delete from public.field_sales_locations l using expired e
+  where l.organization_id=e.organization_id and l.id=e.id returning l.organization_id
+ ), counts as (
+  select organization_id,count(*)::integer n from removed group by organization_id
+ ), audited as (
+  insert into public.api_audit_log(organization_id,action,resource_type,resource_id,metadata,bypassed_rls)
+  select organization_id,'field_sales.location_retention','field_sales',organization_id,
+    jsonb_build_object('deleted',n),true from counts returning id
+ )
+ select coalesce(sum(n),0)::integer into total from counts;
+ return total;
+end $retention$;
+revoke all on function public.fn_expurgar_field_sales_locations(integer) from public,anon,authenticated;
+grant execute on function public.fn_expurgar_field_sales_locations(integer) to service_role;
+
+-- ---- Field Sales operations (migration 0314) ----
+-- Optional Field Sales operational records; no automatic tracking activation.
+create or replace function public.fn_provision_field_sales_operations()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+declare table_name text;
+begin
+ perform public.fn_provision_field_sales_devices();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ alter table public.field_sales_settings add column if not exists map_tile_path text;
+ alter table public.field_sales_settings add column if not exists map_attribution text not null default '';
+ create table if not exists public.field_sales_visits (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null, employee_id uuid not null, project_id uuid not null,
+  schedule_id uuid not null, local_date date not null, session_id uuid,
+  status text not null check(status in ('traveling','arrived','completed','skipped')),
+  revision integer not null default 1 check(revision>0),
+  started_at timestamptz not null default now(), arrived_at timestamptz, completed_at timestamptz,
+  notes text not null default '' check(length(notes)<=8000),
+  next_action text not null default '' check(length(next_action)<=2000),
+  next_action_at timestamptz,
+  primary key(organization_id,id), unique(organization_id,schedule_id,local_date),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id),
+  foreign key(organization_id,project_id) references public.field_sales_projects(organization_id,id),
+  foreign key(organization_id,schedule_id) references public.field_sales_schedules(organization_id,id),
+  foreign key(organization_id,session_id) references public.field_sales_sessions(organization_id,id),
+  check((status in ('completed','skipped'))=(completed_at is not null))
+ );
+ create table if not exists public.field_sales_visit_events (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null, visit_id uuid not null, employee_id uuid not null,
+  action text not null check(action in ('travel','arrive','complete','skip')),
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  created_at timestamptz not null default now(),
+  primary key(organization_id,id),
+  foreign key(organization_id,visit_id) references public.field_sales_visits(organization_id,id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id)
+ );
+ create table if not exists public.field_sales_corrections (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null, employee_id uuid not null, session_id uuid not null,
+  proposed_in timestamptz not null, proposed_out timestamptz not null,
+  reason text not null check(length(reason) between 1 and 2000),
+  status text not null default 'pending' check(status in ('pending','approved','rejected')),
+  reviewed_by uuid references auth.users(id), review_note text not null default '',
+  created_at timestamptz not null default now(), reviewed_at timestamptz,
+  primary key(organization_id,id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id),
+  foreign key(organization_id,session_id) references public.field_sales_sessions(organization_id,id),
+  check(proposed_out>proposed_in),
+  check((status='pending')=(reviewed_at is null)),
+  check(reviewed_by is null or reviewed_by<>employee_id)
+ );
+ create unique index if not exists field_sales_pending_correction on public.field_sales_corrections(organization_id,session_id) where status='pending';
+ foreach table_name in array array['field_sales_visits','field_sales_visit_events','field_sales_corrections'] loop
+  execute format('alter table public.%I enable row level security',table_name);
+  execute format('revoke all on public.%I from public,anon,authenticated,service_role',table_name);
+  execute format('grant select on public.%I to service_role',table_name);
+  execute format('drop policy if exists %I on public.%I','tenant_isolation_'||table_name||'_all',table_name);
+  execute format('create policy %I on public.%I for all to authenticated using(false) with check(false)','tenant_isolation_'||table_name||'_all',table_name);
+ end loop;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_field_sales_operations() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_operations() to service_role;
+
+-- ---- Field Sales organization lifecycle (migration 0315) ----
+-- Preserve organization deletion without allowing individual employee history deletion.
+create or replace function public.fn_provision_field_sales_lifecycle()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+declare table_name text; constraint_name text;
+begin
+ perform public.fn_provision_field_sales_operations();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ foreach table_name in array array['field_sales_schedules','field_sales_schedule_exceptions','field_sales_sessions','field_sales_attendance_events','field_sales_locations'] loop
+  constraint_name := table_name || '_organization_owner';
+  if not exists(select 1 from pg_constraint where conrelid=to_regclass('public.'||table_name) and conname=constraint_name) then
+   execute format('alter table public.%I add constraint %I foreign key(organization_id) references public.organizations(id) on delete cascade',table_name,constraint_name);
+  end if;
+ end loop;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_field_sales_lifecycle() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_lifecycle() to service_role;
+
+-- ---- Field Sales next-action lifecycle (migration 0316) ----
+-- Optional next-action lifecycle; keeps the original follow-up text and due date.
+create or replace function public.fn_provision_field_sales_followups()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_lifecycle();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ alter table public.field_sales_visits add column if not exists next_action_completed_at timestamptz;
+ alter table public.field_sales_visits add column if not exists next_action_completed_by uuid references auth.users(id) on delete set null;
+ create index if not exists field_sales_visits_open_action_due on public.field_sales_visits(organization_id,employee_id,next_action_at)
+  where next_action<>'' and next_action_completed_at is null;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_field_sales_followups() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_followups() to service_role;
+
+-- ---- Private visit photos (migration 0317) ----
+-- Private visit photos live with their owning visit; no public URLs or storage-orphan lifecycle.
+create or replace function public.fn_provision_field_sales_photos()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_followups();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ create table if not exists public.field_sales_photos (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null, visit_id uuid not null, employee_id uuid not null,
+  captured_at timestamptz not null, received_at timestamptz not null default now(),
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  image bytea not null check(octet_length(image) between 1 and 1048576),
+  primary key(organization_id,id),
+  foreign key(organization_id,visit_id) references public.field_sales_visits(organization_id,id) on delete cascade,
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id) on delete cascade
+ );
+ create index if not exists field_sales_photos_visit on public.field_sales_photos(organization_id,visit_id);
+ alter table public.field_sales_photos enable row level security;
+ revoke all on public.field_sales_photos from public,anon,authenticated,service_role;
+ grant select on public.field_sales_photos to service_role;
+ drop policy if exists tenant_isolation_field_sales_photos_all on public.field_sales_photos;
+ create policy tenant_isolation_field_sales_photos_all on public.field_sales_photos for all to authenticated using(false) with check(false);
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_field_sales_photos() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_photos() to service_role;
+
+-- ---- Selected project per Field Sales session (migration 0318) ----
+-- Existing rows remain valid; every new mobile punch-in writes a verified assignment.
+create or replace function public.fn_provision_field_sales_session_projects()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_photos();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ alter table public.field_sales_sessions add column if not exists project_id uuid;
+ alter table public.field_sales_sessions add column if not exists schedule_id uuid;
+ alter table public.field_sales_sessions add column if not exists local_date date;
+ if not exists(select 1 from pg_constraint where conrelid='public.field_sales_sessions'::regclass and conname='field_sales_sessions_project') then
+  alter table public.field_sales_sessions add constraint field_sales_sessions_project
+   foreign key(organization_id,project_id) references public.field_sales_projects(organization_id,id);
+ end if;
+ if not exists(select 1 from pg_constraint where conrelid='public.field_sales_sessions'::regclass and conname='field_sales_sessions_schedule') then
+  alter table public.field_sales_sessions add constraint field_sales_sessions_schedule
+   foreign key(organization_id,schedule_id) references public.field_sales_schedules(organization_id,id);
+ end if;
+ -- Final vocabulary (0381): a shift may begin before project selection.
+ alter table public.field_sales_sessions drop constraint if exists field_sales_sessions_assignment_complete;
+ alter table public.field_sales_sessions add constraint field_sales_sessions_assignment_complete
+  check((project_id is null and schedule_id is null)
+    or (project_id is not null and local_date is not null));
+ create index if not exists field_sales_sessions_employee_date
+  on public.field_sales_sessions(organization_id,employee_id,local_date,punched_in_at);
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke all on function public.fn_provision_field_sales_session_projects() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_session_projects() to service_role;
+
+-- 0319: Field Officer remains below viewer in both API and SQL RBAC.
+alter table public.user_organizations drop constraint if exists user_organizations_role_check;
+alter table public.user_organizations add constraint user_organizations_role_check
+  check (role in ('field_officer','viewer','agent','manager','admin'));
+alter table public.team_invites drop constraint if exists team_invites_role_check;
+alter table public.team_invites add constraint team_invites_role_check
+  check (role in ('field_officer','viewer','agent','manager','admin'));
+alter table public.team_invites add column if not exists archived_at timestamptz;
+
+create or replace function public.fn_user_org_ids()
+returns setof uuid language sql stable security definer set search_path = public as $f$
+ select organization_id from public.user_organizations
+ where user_id=auth.uid() and revoked_at is null and role <> 'field_officer'
+ union select (s->>'organization_id')::uuid from (select public.fn_support_context() s) c where s->>'status'='active';
+$f$;
+revoke execute on function public.fn_user_org_ids() from public,anon;
+grant execute on function public.fn_user_org_ids() to authenticated,service_role;
+
+create or replace function public.fn_accept_team_invite(
+  p_user uuid, p_org uuid, p_role text, p_invited_by uuid,
+  p_issued_at timestamptz, p_invited_at timestamptz,
+  p_interface_settings jsonb
+) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
+declare m public.user_organizations%rowtype;
+begin
+  if p_role not in ('field_officer','viewer','agent','manager','admin') then
+    raise exception 'invalid_role' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':' || p_org::text, 0));
+  if not exists(select 1 from public.organizations where id = p_org and status = 'active') then
+    raise exception 'organization_unavailable' using errcode = '42501';
+  end if;
+  select * into m from public.user_organizations
+    where organization_id = p_org and user_id = p_user for update;
+  if found and m.revoked_at is null and m.accepted_at is not null then
+    return jsonb_build_object('id', m.id, 'changed', false);
+  end if;
+  if found and m.revoked_at is not null and (p_issued_at is null or p_issued_at <= m.revoked_at) then
+    raise exception 'invite_revoked' using errcode = '42501';
+  end if;
+  if m.id is not null then
+    update public.user_organizations set role = p_role, revoked_at = null, interface_settings = p_interface_settings,
+      invited_by = coalesce(p_invited_by, invited_by), invited_at = p_invited_at,
+      accepted_at = now(), updated_at = now()
+      where organization_id = p_org and id = m.id returning * into m;
+  else
+    insert into public.user_organizations(organization_id, user_id, role, invited_by, invited_at, accepted_at, interface_settings)
+      values (p_org, p_user, p_role, p_invited_by, p_invited_at, now(), p_interface_settings) returning * into m;
+  end if;
+  return jsonb_build_object('id', m.id, 'changed', true);
+end $$;
+revoke execute on function public.fn_accept_team_invite(uuid,uuid,text,uuid,timestamptz,timestamptz,jsonb) from public,anon,authenticated;
+grant execute on function public.fn_accept_team_invite(uuid,uuid,text,uuid,timestamptz,timestamptz,jsonb) to service_role;
+
+-- ---- Six-digit Field Sales pairing (migration 0320) ----
+create or replace function public.fn_provision_field_sales_pairing()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_devices();
+ alter table public.field_sales_devices alter column token_hash drop not null;
+ alter table public.field_sales_devices add column if not exists pairing_code_hash text;
+ alter table public.field_sales_devices add column if not exists pairing_expires_at timestamptz;
+ create unique index if not exists field_sales_devices_pairing_code_hash_key
+   on public.field_sales_devices(pairing_code_hash) where pairing_code_hash is not null;
+ revoke all on public.field_sales_devices from public,anon,authenticated,service_role;
+ grant select on public.field_sales_devices to service_role;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_pairing() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_pairing() to service_role;
+do $upgrade$
+begin
+ if to_regclass('public.field_sales_devices') is not null then
+   perform public.fn_provision_field_sales_pairing();
+ end if;
+end $upgrade$;
+
+-- ---- flexible Field Sales shifts (migration 0381) ----
+create or replace function public.fn_provision_field_sales_flexible_shifts()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_session_projects();
+ perform public.fn_provision_field_sales_pairing();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ alter table public.field_sales_devices alter column expires_at drop not null;
+ update public.field_sales_devices set expires_at=null
+  where token_hash is not null and revoked_at is null;
+ -- The assignment constraint is rebuilt once, with the final vocabulary,
+ -- by fn_provision_field_sales_session_projects above.
+ alter table public.field_sales_sessions drop constraint if exists field_sales_sessions_schedule_requires_project;
+ alter table public.field_sales_sessions add constraint field_sales_sessions_schedule_requires_project
+  check(schedule_id is null or project_id is not null);
+ alter table public.field_sales_attendance_events drop constraint if exists field_sales_attendance_events_action_check;
+ alter table public.field_sales_attendance_events add constraint field_sales_attendance_events_action_check
+  check(action in ('punch_in','select_project','break_start','break_end','punch_out'));
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_flexible_shifts() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_flexible_shifts() to service_role;
+do $upgrade$
+begin
+ if to_regclass('public.field_sales_sessions') is not null then
+  perform public.fn_provision_field_sales_flexible_shifts();
+ end if;
+end $upgrade$;
+
+-- ---- Field Sales device presence (migration 0383) ----
+-- Optional module remains unprovisioned on fresh installs until explicitly installed.
+create or replace function public.fn_provision_field_sales_pairing()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_devices();
+ alter table public.field_sales_devices alter column token_hash drop not null;
+ alter table public.field_sales_devices add column if not exists pairing_code_hash text;
+ alter table public.field_sales_devices add column if not exists pairing_expires_at timestamptz;
+ alter table public.field_sales_devices add column if not exists last_seen_at timestamptz;
+ create unique index if not exists field_sales_devices_pairing_code_hash_key
+   on public.field_sales_devices(pairing_code_hash) where pairing_code_hash is not null;
+ create index if not exists field_sales_devices_presence_idx
+   on public.field_sales_devices(organization_id,employee_id,last_seen_at desc)
+   where token_hash is not null and revoked_at is null;
+ revoke all on public.field_sales_devices from public,anon,authenticated,service_role;
+ grant select on public.field_sales_devices to service_role;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_pairing() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_pairing() to service_role;
+do $upgrade$
+begin
+ if to_regclass('public.field_sales_devices') is not null then
+   perform public.fn_provision_field_sales_pairing();
+ end if;
+end $upgrade$;
+
+-- ---- project customer roster and collection ledger (migration 0384) ----
+create or replace function public.fn_provision_field_sales_project_customers()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+declare table_name text;
+begin
+ perform public.fn_provision_field_sales_flexible_shifts();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ create table if not exists public.field_sales_project_customers (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null, project_id uuid not null,
+  customer_code text check(customer_code is null or length(customer_code) between 1 and 100),
+  shop_name text not null check(length(shop_name) between 1 and 200),
+  address text not null default '' check(length(address)<=1000),
+  balance_cents bigint,
+  currency text not null check(currency ~ '^[A-Z]{3}$'),
+  active boolean not null default true,
+  revision integer not null default 1 check(revision>0),
+  updated_at timestamptz not null default now(),
+  primary key(organization_id,id),
+  foreign key(organization_id,project_id) references public.field_sales_projects(organization_id,id)
+ );
+ create unique index if not exists field_sales_customer_code on public.field_sales_project_customers(organization_id,project_id,customer_code) where customer_code is not null;
+ create index if not exists field_sales_customer_project on public.field_sales_project_customers(organization_id,project_id,shop_name);
+ create table if not exists public.field_sales_customer_collections (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null, project_customer_id uuid not null, project_id uuid not null,
+  employee_id uuid not null, session_id uuid not null,
+  captured_at timestamptz not null, received_at timestamptz not null default now(),
+  amount_cents bigint check(amount_cents is null or amount_cents>0),
+  balance_after_cents bigint,
+  currency text not null check(currency ~ '^[A-Z]{3}$'),
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  voided_at timestamptz,
+  voided_by uuid references auth.users(id),
+  void_reason text check(void_reason is null or length(void_reason) between 5 and 500),
+  primary key(organization_id,id),
+  foreign key(organization_id,project_customer_id) references public.field_sales_project_customers(organization_id,id),
+  foreign key(organization_id,project_id) references public.field_sales_projects(organization_id,id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id),
+  foreign key(organization_id,session_id) references public.field_sales_sessions(organization_id,id)
+ );
+ alter table public.field_sales_customer_collections add column if not exists voided_at timestamptz;
+ alter table public.field_sales_customer_collections add column if not exists voided_by uuid references auth.users(id);
+ alter table public.field_sales_customer_collections add column if not exists void_reason text;
+ create index if not exists field_sales_collection_employee_day on public.field_sales_customer_collections(organization_id,employee_id,captured_at desc);
+ foreach table_name in array array['field_sales_project_customers','field_sales_customer_collections'] loop
+  execute format('alter table public.%I enable row level security',table_name);
+  execute format('revoke all on public.%I from public,anon,authenticated,service_role',table_name);
+  execute format('grant select on public.%I to service_role',table_name);
+  execute format('drop policy if exists %I on public.%I','tenant_isolation_'||table_name||'_all',table_name);
+  execute format('create policy %I on public.%I for all to authenticated using(false) with check(false)','tenant_isolation_'||table_name||'_all',table_name);
+ end loop;
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_project_customers() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_project_customers() to service_role;
+do $installed$ begin
+ if to_regclass('public.field_sales_settings') is not null then
+  perform public.fn_provision_field_sales_project_customers();
+ end if;
+end $installed$;
+
+-- ---- confirmed field officer activity notes (migration 0385) ----
+create or replace function public.fn_provision_field_sales_activity_notes()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_project_customers();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ create table if not exists public.field_sales_activity_notes (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  id uuid not null,
+  employee_id uuid not null,
+  session_id uuid not null,
+  project_id uuid not null,
+  project_customer_id uuid,
+  note text not null check(length(btrim(note)) between 1 and 1000),
+  source text not null check(source in ('voice','typed')),
+  captured_at timestamptz not null,
+  received_at timestamptz not null default now(),
+  fingerprint text not null check(fingerprint ~ '^[a-f0-9]{64}$'),
+  primary key(organization_id,id),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id),
+  foreign key(organization_id,session_id) references public.field_sales_sessions(organization_id,id),
+  foreign key(organization_id,project_id) references public.field_sales_projects(organization_id,id),
+  foreign key(organization_id,project_customer_id) references public.field_sales_project_customers(organization_id,id)
+ );
+ create index if not exists field_sales_activity_employee_day on public.field_sales_activity_notes(organization_id,employee_id,captured_at desc);
+ alter table public.field_sales_activity_notes enable row level security;
+ revoke all on public.field_sales_activity_notes from public,anon,authenticated,service_role;
+ grant select on public.field_sales_activity_notes to service_role;
+ drop policy if exists tenant_isolation_field_sales_activity_notes_all on public.field_sales_activity_notes;
+ create policy tenant_isolation_field_sales_activity_notes_all on public.field_sales_activity_notes
+  for all to authenticated using(false) with check(false);
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_activity_notes() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_activity_notes() to service_role;
+do $installed$ begin
+ if to_regclass('public.field_sales_settings') is not null then
+  perform public.fn_provision_field_sales_activity_notes();
+ end if;
+end $installed$;
+
+-- ---- Lead stage aging (migration 0386) ----
+-- Lead stage aging, scoped to the active organization and caller RLS.
+-- stage_changed_at is maintained by the existing CRM lead trigger.
+create or replace function public.fn_lead_stage_aging(
+  p_org uuid, p_min_days integer, p_limit integer default 100
+)
+returns jsonb
+language sql stable security invoker
+set search_path = public
+as $$
+  with aged as (
+    select l.id, l.title, l.pipeline_id, l.stage_id, s.name as stage_name,
+      l.owner_user_id, l.stage_changed_at as stage_since
+    from public.crm_leads l
+    join public.crm_stages s
+      on s.id = l.stage_id and s.organization_id = l.organization_id
+    where l.organization_id = p_org and l.status = 'open'
+      and l.stage_changed_at <= now() - make_interval(days => greatest(1, least(p_min_days, 365)))
+  ),
+  selected as (
+    select * from aged
+    order by stage_since asc, id asc
+    limit greatest(1, least(p_limit, 200))
+  )
+  select jsonb_build_object(
+    'total', (select count(*) from aged),
+    'items', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', id, 'title', title, 'pipeline_id', pipeline_id,
+          'stage_id', stage_id, 'stage_name', stage_name,
+          'owner_user_id', owner_user_id, 'stage_since', stage_since
+        ) order by stage_since asc, id asc
+      ) from selected
+    ), '[]'::jsonb)
+  );
+$$;
+
+revoke execute on function public.fn_lead_stage_aging(uuid, integer, integer) from public, anon;
+grant execute on function public.fn_lead_stage_aging(uuid, integer, integer) to authenticated;
+
+-- ---- optional retail lead foundation (migration 0387) ----
+-- Optional retail lead profile. Existing CRM leads and tenants are unaffected.
+-- The lead UUID is the immutable Event ID; the phone uniqueness rule applies
+-- only while an event is open, preserving all closed historical events.
+create table if not exists public.crm_retail_store_assignments (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  store_name text not null check (length(trim(store_name)) between 1 and 120),
+  updated_at timestamptz not null default now(),
+  primary key (organization_id, user_id)
+);
+
+create unique index if not exists crm_leads_id_org_for_retail_fk
+  on public.crm_leads (id, organization_id);
+
+create table if not exists public.crm_retail_leads (
+  lead_id uuid primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  primary_phone text not null check (primary_phone ~ '^\+[0-9]{8,15}$'),
+  secondary_phone text check (secondary_phone is null or secondary_phone ~ '^\+[0-9]{8,15}$'),
+  how_known text,
+  products text[] not null check (array_length(products, 1) is not null),
+  store_name text not null check (length(trim(store_name)) between 1 and 120),
+  address text,
+  next_followup_at timestamptz,
+  active boolean not null default true,
+  retention_parent_lead_id uuid references public.crm_leads(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint crm_retail_leads_open_has_followup check (not active or next_followup_at is not null),
+  constraint crm_retail_leads_lead_org_fkey foreign key (lead_id, organization_id)
+    references public.crm_leads(id, organization_id) on delete cascade deferrable initially immediate
+);
+
+create unique index if not exists crm_retail_one_open_event_per_phone
+  on public.crm_retail_leads (organization_id, primary_phone) where active;
+create index if not exists crm_retail_followups_due
+  on public.crm_retail_leads (organization_id, next_followup_at) where active;
+
+create table if not exists public.crm_retail_followup_actions (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  lead_id uuid not null,
+  due_at timestamptz not null,
+  completed_at timestamptz not null default now(),
+  next_due_at timestamptz,
+  stage_from uuid not null references public.crm_stages(id),
+  stage_to uuid not null references public.crm_stages(id),
+  performed_by_user_id uuid not null references auth.users(id),
+  note text,
+  constraint crm_retail_followup_lead_org_fkey foreign key (lead_id, organization_id)
+    references public.crm_leads(id, organization_id) on delete cascade deferrable initially immediate
+);
+create index if not exists crm_retail_followup_history
+  on public.crm_retail_followup_actions(organization_id,lead_id,completed_at desc);
+
+alter table public.crm_retail_store_assignments enable row level security;
+alter table public.crm_retail_leads enable row level security;
+alter table public.crm_retail_followup_actions enable row level security;
+drop policy if exists tenant_isolation_crm_retail_store_assignments_all on public.crm_retail_store_assignments;
+create policy tenant_isolation_crm_retail_store_assignments_all on public.crm_retail_store_assignments
+  for all using (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, 'manager'))
+  with check (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, 'manager'));
+drop policy if exists tenant_isolation_crm_retail_leads_all on public.crm_retail_leads;
+drop policy if exists tenant_isolation_crm_retail_leads_select on public.crm_retail_leads;
+create policy tenant_isolation_crm_retail_leads_select on public.crm_retail_leads
+  for select using (organization_id in (select public.fn_user_org_ids())
+    and exists (select 1 from public.crm_leads l where l.id=lead_id
+      and l.organization_id=crm_retail_leads.organization_id
+      and public.fn_can_view_lead(l.organization_id,l.owner_user_id)));
+drop policy if exists tenant_isolation_crm_retail_followup_actions_all on public.crm_retail_followup_actions;
+drop policy if exists tenant_isolation_crm_retail_followup_actions_select on public.crm_retail_followup_actions;
+create policy tenant_isolation_crm_retail_followup_actions_select on public.crm_retail_followup_actions
+  for select using (organization_id in (select public.fn_user_org_ids())
+    and exists (select 1 from public.crm_leads l where l.id=lead_id
+      and l.organization_id=crm_retail_followup_actions.organization_id
+      and public.fn_can_view_lead(l.organization_id,l.owner_user_id)));
+
+create or replace function public.fn_sync_retail_lead_active() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status is distinct from old.status then
+    update public.crm_retail_leads
+       set active = (new.status = 'open'),
+           next_followup_at = case when new.status = 'open' then next_followup_at else null end,
+           updated_at = now()
+     where lead_id = new.id and organization_id = new.organization_id;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.fn_sync_retail_lead_active() from public, anon, authenticated;
+drop trigger if exists trg_sync_retail_lead_active on public.crm_leads;
+create trigger trg_sync_retail_lead_active after update of status on public.crm_leads
+  for each row execute function public.fn_sync_retail_lead_active();
+
+-- The manager configures a salesperson's store once; lead entry then derives
+-- the store from the authenticated person instead of trusting a form field.
+create or replace function public.fn_assign_retail_store(p_org uuid, p_user uuid, p_store text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or not public.fn_role_at_least(p_org, 'manager')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'retail_store_forbidden' using errcode = '42501';
+  end if;
+  if length(trim(coalesce(p_store, ''))) not between 1 and 120 then
+    raise exception 'retail_store_invalid' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.user_organizations u
+                 where u.organization_id = p_org and u.user_id = p_user
+                   and u.accepted_at is not null and u.revoked_at is null) then
+    raise exception 'retail_user_unavailable' using errcode = '22023';
+  end if;
+  insert into public.crm_retail_store_assignments(organization_id,user_id,store_name)
+  values(p_org,p_user,trim(p_store))
+  on conflict(organization_id,user_id) do update
+    set store_name=excluded.store_name,updated_at=now();
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id)
+  values(p_org,auth.uid(),'retail_store.assigned','user',p_user);
+end;
+$$;
+revoke execute on function public.fn_assign_retail_store(uuid,uuid,text) from public, anon;
+grant execute on function public.fn_assign_retail_store(uuid,uuid,text) to authenticated;
+
+create or replace function public.fn_my_retail_store(p_org uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select a.store_name from public.crm_retail_store_assignments a
+  join public.user_organizations u on u.organization_id=a.organization_id
+    and u.user_id=a.user_id and u.accepted_at is not null and u.revoked_at is null
+  where a.organization_id=p_org and a.user_id=auth.uid()
+    and public.fn_role_at_least(p_org,'agent');
+$$;
+revoke execute on function public.fn_my_retail_store(uuid) from public, anon;
+grant execute on function public.fn_my_retail_store(uuid) to authenticated;
+
+create or replace function public.fn_create_retail_lead(
+  p_org uuid, p_pipeline uuid, p_stage uuid, p_name text, p_phone text,
+  p_secondary_phone text, p_email text, p_source text, p_how_known text,
+  p_products text[], p_budget_cents bigint, p_purchase_date date,
+  p_address text, p_next_followup_at timestamptz
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_actor uuid := auth.uid();
+  v_store text;
+  v_contact uuid;
+  v_contact_ids uuid[];
+  v_existing_email text;
+  v_lead uuid;
+  v_position numeric;
+  v_currency text;
+begin
+  if v_actor is null or not public.fn_role_at_least(p_org, 'agent')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'retail_lead_forbidden' using errcode = '42501';
+  end if;
+  if length(trim(coalesce(p_name,''))) < 2
+     or coalesce(p_phone,'') !~ '^\+[0-9]{8,15}$'
+     or length(trim(coalesce(p_source,''))) = 0
+     or p_budget_cents is null or p_budget_cents < 0
+     or p_purchase_date is null
+     or p_next_followup_at is null or p_next_followup_at <= now()
+     or coalesce(array_length(p_products,1),0) = 0 then
+    raise exception 'retail_lead_invalid' using errcode = '22023';
+  end if;
+  if p_secondary_phone is not null and p_secondary_phone !~ '^\+[0-9]{8,15}$' then
+    raise exception 'retail_lead_invalid' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.crm_stages s
+                 where s.id=p_stage and s.pipeline_id=p_pipeline
+                   and s.organization_id=p_org and not s.is_won
+                   and not s.is_lost and not s.is_archived) then
+    raise exception 'retail_stage_unavailable' using errcode = '22023';
+  end if;
+  select a.store_name into v_store from public.crm_retail_store_assignments a
+    join public.user_organizations u on u.organization_id=a.organization_id
+      and u.user_id=a.user_id and u.accepted_at is not null and u.revoked_at is null
+   where a.organization_id=p_org and a.user_id=v_actor;
+  if v_store is null then
+    raise exception 'retail_store_unassigned' using errcode = '22023';
+  end if;
+  select o.currency into v_currency from public.organizations o where o.id=p_org;
+  if exists(select 1 from public.crm_retail_leads r
+            where r.organization_id=p_org and r.primary_phone=p_phone and r.active) then
+    raise exception 'retail_event_open' using errcode = '23505';
+  end if;
+  -- The partial unique index on open profiles is the concurrency-safe guard.
+  -- A conflict rolls back both inserts in this function's transaction.
+  select array_agg(c.id order by c.created_at,c.id) into v_contact_ids
+    from public.contacts c where c.organization_id=p_org and c.phone_number=p_phone
+      and not c.is_anonymized and c.is_merged_into is null;
+  if coalesce(array_length(v_contact_ids,1),0) > 1 then
+    raise exception 'retail_phone_ambiguous' using errcode = '22023';
+  end if;
+  if coalesce(array_length(v_contact_ids,1),0) = 1 then
+    v_contact := v_contact_ids[1];
+    select c.email into v_existing_email from public.contacts c
+      where c.id=v_contact and c.organization_id=p_org for update;
+    if v_existing_email is not null and p_email is not null
+       and lower(trim(v_existing_email)) <> lower(trim(p_email)) then
+      raise exception 'retail_phone_identity_conflict' using errcode = '22023';
+    end if;
+    if v_existing_email is null and nullif(trim(p_email),'') is not null then
+      update public.contacts set email=trim(p_email),updated_at=now()
+        where id=v_contact and organization_id=p_org;
+    end if;
+  else
+    insert into public.contacts(organization_id,name,display_name,phone_number,email,source,created_by_user_id)
+    values(p_org,trim(p_name),trim(p_name),p_phone,nullif(trim(p_email),''),p_source,v_actor)
+    returning id into v_contact;
+  end if;
+  select coalesce(max(position_in_stage),0)+1000 into v_position
+    from public.crm_leads where organization_id=p_org and stage_id=p_stage;
+  insert into public.crm_leads(organization_id,pipeline_id,stage_id,contact_id,title,status,
+    position_in_stage,value_cents,currency,owner_user_id,owner_kind,assigned_at,expected_close_date,
+    source,created_by_user_id,custom_fields)
+  values(p_org,p_pipeline,p_stage,v_contact,trim(p_name),'open',v_position,p_budget_cents,coalesce(v_currency,'USD'),
+    v_actor,'user',now(),p_purchase_date,p_source,v_actor,'{"retail_status":"Created"}'::jsonb)
+  returning id into v_lead;
+  insert into public.crm_retail_leads(lead_id,organization_id,primary_phone,secondary_phone,
+    how_known,products,store_name,address,next_followup_at)
+  values(v_lead,p_org,p_phone,p_secondary_phone,nullif(trim(p_how_known),''),p_products,
+    v_store,nullif(trim(p_address),''),p_next_followup_at);
+  insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,
+    source_id,type,payload,performed_by_user_id)
+  values(p_org,v_lead,v_contact,'crm',v_lead,'lead_created',
+    jsonb_build_object('next_followup_at',p_next_followup_at),v_actor);
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id)
+  values(p_org,v_actor,'retail_lead.created','crm_lead',v_lead);
+  return v_lead;
+end;
+$$;
+revoke execute on function public.fn_create_retail_lead(uuid,uuid,uuid,text,text,text,text,text,text,text[],bigint,date,text,timestamptz) from public, anon;
+grant execute on function public.fn_create_retail_lead(uuid,uuid,uuid,text,text,text,text,text,text,text[],bigint,date,text,timestamptz) to authenticated;
+
+create or replace function public.fn_complete_retail_followup(
+  p_org uuid, p_lead uuid, p_expected_due_at timestamptz, p_next_stage uuid,
+  p_next_due_at timestamptz, p_note text, p_lost_reason text
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_actor uuid := auth.uid();
+  v_lead public.crm_leads%rowtype;
+  v_profile public.crm_retail_leads%rowtype;
+  v_stage public.crm_stages%rowtype;
+begin
+  if v_actor is null or not public.fn_role_at_least(p_org,'agent')
+     or not public.fn_support_write_allowed(p_org) then
+    raise exception 'retail_followup_forbidden' using errcode='42501';
+  end if;
+  select * into v_lead from public.crm_leads
+    where id=p_lead and organization_id=p_org for update;
+  if not found or not public.fn_can_view_lead(v_lead.organization_id,v_lead.owner_user_id)
+     or v_lead.status <> 'open' then
+    raise exception 'retail_lead_unavailable' using errcode='22023';
+  end if;
+  select * into v_profile from public.crm_retail_leads
+    where lead_id=p_lead and organization_id=p_org and active for update;
+  if not found or v_profile.next_followup_at is distinct from p_expected_due_at then
+    raise exception 'retail_followup_changed' using errcode='22023';
+  end if;
+  select * into v_stage from public.crm_stages
+    where id=p_next_stage and organization_id=p_org and pipeline_id=v_lead.pipeline_id
+      and not is_archived;
+  if not found then raise exception 'retail_stage_unavailable' using errcode='22023'; end if;
+  if not v_stage.is_won and not v_stage.is_lost and
+     (p_next_due_at is null or p_next_due_at <= now()) then
+    raise exception 'retail_next_followup_required' using errcode='22023';
+  end if;
+  if v_stage.is_lost and length(trim(coalesce(p_lost_reason,''))) = 0 then
+    raise exception 'retail_lost_reason_required' using errcode='22023';
+  end if;
+  update public.crm_leads set stage_id=p_next_stage,
+    lost_reason=case when v_stage.is_lost then trim(p_lost_reason) else null end,
+    custom_fields=coalesce(custom_fields,'{}'::jsonb) || jsonb_build_object(
+      'retail_status',case when v_stage.is_won then 'Converted'
+        when v_stage.is_lost then 'Lost' else v_stage.name end),
+    updated_at=now()
+    where id=p_lead and organization_id=p_org;
+  update public.crm_retail_leads
+    set next_followup_at=case when v_stage.is_won or v_stage.is_lost then null else p_next_due_at end,
+        updated_at=now()
+    where lead_id=p_lead and organization_id=p_org;
+  insert into public.crm_retail_followup_actions(organization_id,lead_id,due_at,next_due_at,
+    stage_from,stage_to,performed_by_user_id,note)
+  values(p_org,p_lead,v_profile.next_followup_at,
+    case when v_stage.is_won or v_stage.is_lost then null else p_next_due_at end,
+    v_lead.stage_id,p_next_stage,v_actor,nullif(trim(p_note),''));
+  insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,
+    source_id,type,payload,performed_by_user_id)
+  values(p_org,p_lead,v_lead.contact_id,'crm',p_lead,'retail_followup_done',
+    jsonb_build_object('previous_due_at',v_profile.next_followup_at,
+      'next_due_at',case when v_stage.is_won or v_stage.is_lost then null else p_next_due_at end,
+      'note',nullif(trim(p_note),'')),v_actor);
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id)
+  values(p_org,v_actor,'retail_followup.completed','crm_lead',p_lead);
+  return jsonb_build_object('lead_id',p_lead,'status',case when v_stage.is_won then 'Converted'
+    when v_stage.is_lost then 'Lost' else v_stage.name end,
+    'next_followup_at',case when v_stage.is_won or v_stage.is_lost then null else p_next_due_at end);
+end;
+$$;
+revoke execute on function public.fn_complete_retail_followup(uuid,uuid,timestamptz,uuid,timestamptz,text,text) from public, anon;
+grant execute on function public.fn_complete_retail_followup(uuid,uuid,timestamptz,uuid,timestamptz,text,text) to authenticated;
+
+create or replace function public.fn_next_retail_workday_at(p_due timestamptz,p_timezone text)
+returns timestamptz language plpgsql stable security invoker set search_path = public as $$
+declare v_local timestamp; begin
+  v_local := (p_due at time zone p_timezone) + interval '1 day';
+  while extract(isodow from v_local) > 5 loop
+    v_local := v_local + interval '1 day';
+  end loop;
+  return v_local at time zone p_timezone;
+end;
+$$;
+revoke execute on function public.fn_next_retail_workday_at(timestamptz,text) from public, anon;
+grant execute on function public.fn_next_retail_workday_at(timestamptz,text) to authenticated;
+
+create or replace function public.fn_retail_overdue_followups(p_org uuid,p_limit integer default 100)
+returns jsonb language sql stable security invoker set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'lead_id',q.lead_id,'title',q.title,'pipeline_id',q.pipeline_id,
+    'owner_user_id',q.owner_user_id,'store_name',q.store_name,
+    'due_at',q.next_followup_at,'escalation_at',q.escalation_at,
+    'escalated',q.escalation_at <= now()
+  ) order by q.next_followup_at,q.lead_id),'[]'::jsonb)
+  from (select r.lead_id,l.title,l.pipeline_id,l.owner_user_id,r.store_name,r.next_followup_at,
+      public.fn_next_retail_workday_at(r.next_followup_at,o.timezone) escalation_at
+    from public.crm_retail_leads r
+    join public.crm_leads l on l.id=r.lead_id and l.organization_id=r.organization_id
+    join public.organizations o on o.id=r.organization_id
+    where r.organization_id=p_org and public.fn_role_at_least(p_org,'manager')
+      and r.active and r.next_followup_at < now()
+    order by r.next_followup_at,r.lead_id
+    limit greatest(1,least(coalesce(p_limit,100),200))) q;
+$$;
+revoke execute on function public.fn_retail_overdue_followups(uuid,integer) from public, anon;
+grant execute on function public.fn_retail_overdue_followups(uuid,integer) to authenticated;
+
+-- Move the existing Event ID and its activity history in one transaction. A
+-- lead/contact with other linked records is rejected rather than leaving a
+-- readable source-tenant fragment or changing an unrelated record's tenant.
+create or replace function public.fn_transfer_retail_lead(
+  p_source_org uuid, p_destination_org uuid, p_lead uuid,
+  p_destination_pipeline uuid, p_destination_stage uuid, p_destination_owner uuid
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_lead public.crm_leads%rowtype;
+  v_profile public.crm_retail_leads%rowtype;
+  v_contact uuid;
+  v_store text;
+  v_dependency record;
+  v_count bigint;
+begin
+  if p_source_org is null or p_destination_org is null or p_source_org=p_destination_org
+     or auth.uid() is null
+     or not public.fn_role_at_least(p_source_org,'manager')
+     or not public.fn_role_at_least(p_destination_org,'manager')
+     or not public.fn_support_write_allowed(p_source_org)
+     or not public.fn_support_write_allowed(p_destination_org) then
+    raise exception 'retail_transfer_forbidden' using errcode='42501';
+  end if;
+  select * into v_lead from public.crm_leads
+    where id=p_lead and organization_id=p_source_org and status='open' for update;
+  if not found or v_lead.contact_id is null then
+    raise exception 'retail_transfer_unavailable' using errcode='22023';
+  end if;
+  select * into v_profile from public.crm_retail_leads
+    where lead_id=p_lead and organization_id=p_source_org and active for update;
+  if not found then raise exception 'retail_transfer_unavailable' using errcode='22023'; end if;
+  if not exists (select 1 from public.crm_stages s
+    where s.id=p_destination_stage and s.pipeline_id=p_destination_pipeline
+      and s.organization_id=p_destination_org and not s.is_won
+      and not s.is_lost and not s.is_archived) then
+    raise exception 'retail_destination_stage_unavailable' using errcode='22023';
+  end if;
+  select a.store_name into v_store from public.crm_retail_store_assignments a
+    join public.user_organizations u on u.organization_id=a.organization_id
+      and u.user_id=a.user_id and u.accepted_at is not null and u.revoked_at is null
+    where a.organization_id=p_destination_org and a.user_id=p_destination_owner;
+  if v_store is null then
+    raise exception 'retail_destination_owner_store_unavailable' using errcode='22023';
+  end if;
+  if exists (select 1 from public.crm_retail_leads r where
+    r.organization_id=p_destination_org and r.primary_phone=v_profile.primary_phone and r.active) then
+    raise exception 'retail_event_open' using errcode='23505';
+  end if;
+  if exists (select 1 from public.crm_lead_activities a
+    where a.organization_id=p_source_org and a.lead_id=p_lead
+      and (a.source_module <> 'crm' or (a.source_id is not null and a.source_id <> p_lead))) then
+    raise exception 'retail_transfer_linked_records' using errcode='22023';
+  end if;
+
+  -- Every other lead FK is checked from the live catalogue. New modules that
+  -- add linked records fail closed until their transfer semantics are defined.
+  for v_dependency in
+    select c.conrelid::regclass as table_name, a.attname as column_name
+    from pg_constraint c
+    join pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
+    where c.contype='f' and c.confrelid='public.crm_leads'::regclass
+      and array_length(c.conkey,1)=1
+      and c.conrelid not in ('public.crm_lead_activities'::regclass,
+        'public.crm_retail_leads'::regclass,'public.crm_retail_followup_actions'::regclass)
+  loop
+    execute format('select count(*) from %s where %I=$1',v_dependency.table_name,v_dependency.column_name)
+      into v_count using p_lead;
+    if v_count > 0 then
+      raise exception 'retail_transfer_linked_records' using errcode='22023';
+    end if;
+  end loop;
+
+  v_contact := v_lead.contact_id;
+  perform 1 from public.contacts where id=v_contact and organization_id=p_source_org for update;
+  if not found then
+    raise exception 'retail_transfer_linked_contact' using errcode='22023';
+  end if;
+  select count(*) into v_count from public.crm_leads where contact_id=v_contact;
+  if v_count <> 1 then
+    raise exception 'retail_transfer_shared_contact' using errcode='22023';
+  end if;
+  -- The source contact travels with the Event ID. Other references to that
+  -- contact (including conversations) must not remain in the source tenant.
+  for v_dependency in
+    select c.conrelid::regclass as table_name, a.attname as column_name
+    from pg_constraint c
+    join pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
+    where c.contype='f' and c.confrelid='public.contacts'::regclass
+      and array_length(c.conkey,1)=1
+      and c.conrelid not in ('public.crm_leads'::regclass,
+        'public.crm_lead_activities'::regclass)
+  loop
+    execute format('select count(*) from %s where %I=$1',v_dependency.table_name,v_dependency.column_name)
+      into v_count using v_contact;
+    if v_count > 0 then
+      raise exception 'retail_transfer_linked_contact' using errcode='22023';
+    end if;
+  end loop;
+  if exists (select 1 from public.contacts c where c.organization_id=p_destination_org
+    and (c.phone_number=v_profile.primary_phone or
+      (c.email is not null and c.email=(select email from public.contacts where id=v_contact)))) then
+    raise exception 'retail_destination_contact_exists' using errcode='22023';
+  end if;
+
+  set constraints crm_retail_leads_lead_org_fkey, crm_retail_followup_lead_org_fkey deferred;
+  update public.contacts set organization_id=p_destination_org,updated_at=now()
+    where id=v_contact and organization_id=p_source_org;
+  update public.crm_leads set organization_id=p_destination_org,
+    pipeline_id=p_destination_pipeline,stage_id=p_destination_stage,
+    owner_user_id=p_destination_owner,owner_kind='user',owner_agent_id=null,
+    assigned_at=now(),position_in_stage=1000,
+    custom_fields=coalesce(custom_fields,'{}'::jsonb) ||
+      jsonb_build_object('retail_transferred_from_org_id',p_source_org),updated_at=now()
+    where id=p_lead and organization_id=p_source_org;
+  update public.crm_lead_activities set organization_id=p_destination_org
+    where lead_id=p_lead and organization_id=p_source_org;
+  update public.crm_retail_leads set organization_id=p_destination_org,
+    store_name=v_store,updated_at=now()
+    where lead_id=p_lead and organization_id=p_source_org;
+  update public.crm_retail_followup_actions set organization_id=p_destination_org
+    where lead_id=p_lead and organization_id=p_source_org;
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id)
+  values(p_source_org,auth.uid(),'retail_lead.transferred_out','crm_lead',p_lead),
+        (p_destination_org,auth.uid(),'retail_lead.transferred_in','crm_lead',p_lead);
+  return p_lead;
+end;
+$$;
+revoke execute on function public.fn_transfer_retail_lead(uuid,uuid,uuid,uuid,uuid,uuid) from public, anon;
+grant execute on function public.fn_transfer_retail_lead(uuid,uuid,uuid,uuid,uuid,uuid) to authenticated;
+
+-- Keep profiles readable through tenant RLS but mutation only through guarded
+-- functions; an agent must not flip active=false to bypass the open-event rule.
+revoke insert, update, delete on public.crm_retail_leads from authenticated;
+revoke insert, update, delete on public.crm_retail_store_assignments from authenticated;
+revoke insert, update, delete on public.crm_retail_followup_actions from authenticated;
+grant select on public.crm_retail_leads, public.crm_retail_store_assignments,
+  public.crm_retail_followup_actions to authenticated;
+
+notify pgrst, 'reload schema';
+
+-- 0388: opt-in Field Sales raw fix metadata, including device-monotonic age and quality flags.
+create or replace function public.fn_provision_field_sales_location_quality()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_activity_notes();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ alter table public.field_sales_locations add column if not exists device_received_at timestamptz;
+ alter table public.field_sales_locations add column if not exists fix_age_ms integer;
+ alter table public.field_sales_locations add column if not exists speed_m_s double precision;
+ alter table public.field_sales_locations add column if not exists bearing_deg double precision;
+ alter table public.field_sales_locations add column if not exists quality_flags text[] not null default '{}';
+ alter table public.field_sales_locations add column if not exists device_sequence integer;
+ alter table public.field_sales_settings add column if not exists moving_interval_ms integer not null default 3000 check(moving_interval_ms between 2000 and 5000);
+ alter table public.field_sales_settings add column if not exists stationary_interval_ms integer not null default 30000 check(stationary_interval_ms between 10000 and 60000);
+ alter table public.field_sales_settings add column if not exists position_accuracy_m integer not null default 100 check(position_accuracy_m between 10 and 500);
+ alter table public.field_sales_settings add column if not exists route_accuracy_m integer not null default 30 check(route_accuracy_m between 5 and 200);
+ alter table public.field_sales_settings add column if not exists plausible_speed_m_s integer not null default 55 check(plausible_speed_m_s between 1 and 100);
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_location_quality() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_location_quality() to service_role;
+do $upgrade$ begin
+ if to_regclass('public.field_sales_locations') is not null then
+  perform public.fn_provision_field_sales_location_quality();
+ end if;
+end $upgrade$;
+
+-- 0389: optional, organization-scoped approved leave calendar for daily Field Sales attendance.
+create or replace function public.fn_provision_field_sales_attendance_leave()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform public.fn_provision_field_sales_location_quality();
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ create table if not exists public.field_sales_leave_days (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  employee_id uuid not null,
+  local_date date not null,
+  note text not null default '' check(length(note)<=500),
+  approved_by uuid not null references auth.users(id),
+  approved_at timestamptz not null default now(),
+  primary key(organization_id,employee_id,local_date),
+  foreign key(organization_id,employee_id) references public.field_sales_employees(organization_id,user_id)
+ );
+ create index if not exists field_sales_leave_days_date on public.field_sales_leave_days(organization_id,local_date,employee_id);
+ alter table public.field_sales_leave_days enable row level security;
+ revoke all on public.field_sales_leave_days from public,anon,authenticated,service_role;
+ grant select on public.field_sales_leave_days to service_role;
+ drop policy if exists tenant_isolation_field_sales_leave_days_all on public.field_sales_leave_days;
+ create policy tenant_isolation_field_sales_leave_days_all on public.field_sales_leave_days
+  for all to authenticated using(false) with check(false);
+ perform pg_notify('pgrst','reload schema');
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_attendance_leave() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_attendance_leave() to service_role;
+do $installed$ begin
+ if to_regclass('public.field_sales_settings') is not null then
+  perform public.fn_provision_field_sales_attendance_leave();
+ end if;
+end $installed$;
+
+-- ---- Stable Field Sales officer route identities (migration 0694) ----
+-- Stable officer route identities for existing and future Field Sales installations.
+create or replace function public.fn_field_sales_assign_route_style()
+returns trigger language plpgsql security definer set search_path=public,pg_temp as $assign$
+begin
+ if new.route_style_index is not null then return new; end if;
+ perform pg_advisory_xact_lock(hashtext('field-sales-route-style'),hashtext(new.organization_id::text));
+ select coalesce(max(route_style_index),-1)+1 into new.route_style_index
+   from public.field_sales_employees where organization_id=new.organization_id;
+ return new;
+end $assign$;
+revoke execute on function public.fn_field_sales_assign_route_style() from public,anon,authenticated;
+grant execute on function public.fn_field_sales_assign_route_style() to service_role;
+create or replace function public.fn_provision_field_sales_route_styles()
+returns void language plpgsql security definer set search_path=public,pg_temp as $provision$
+begin
+ perform pg_advisory_xact_lock(hashtextextended('field-sales-module-v1',0));
+ if to_regclass('public.field_sales_employees') is null then return; end if;
+ alter table public.field_sales_employees add column if not exists route_style_index integer;
+ with existing as (
+  select organization_id,coalesce(max(route_style_index),-1) as last_index
+  from public.field_sales_employees group by organization_id
+ ), missing as (
+  select e.organization_id,e.user_id,
+    row_number() over(partition by e.organization_id order by e.user_id)-1 as offset_index
+  from public.field_sales_employees e where e.route_style_index is null
+ )
+ update public.field_sales_employees e
+   set route_style_index=(existing.last_index+missing.offset_index+1)::integer
+   from existing,missing
+   where e.organization_id=missing.organization_id and e.user_id=missing.user_id
+     and existing.organization_id=e.organization_id;
+ alter table public.field_sales_employees alter column route_style_index set not null;
+ if not exists(select 1 from pg_constraint where conrelid='public.field_sales_employees'::regclass
+   and conname='field_sales_route_style_nonnegative') then
+  alter table public.field_sales_employees add constraint field_sales_route_style_nonnegative
+    check(route_style_index>=0);
+ end if;
+ create unique index if not exists field_sales_route_style_unique
+   on public.field_sales_employees(organization_id,route_style_index);
+ if not exists(select 1 from pg_trigger where tgrelid='public.field_sales_employees'::regclass
+   and tgname='field_sales_assign_route_style') then
+  create trigger field_sales_assign_route_style before insert on public.field_sales_employees
+    for each row execute function public.fn_field_sales_assign_route_style();
+ end if;
+end $provision$;
+revoke execute on function public.fn_provision_field_sales_route_styles() from public,anon,authenticated;
+grant execute on function public.fn_provision_field_sales_route_styles() to service_role;
+do $installed$ begin
+ if to_regclass('public.field_sales_employees') is not null then
+  perform public.fn_provision_field_sales_route_styles();
+ end if;
+end $installed$;
+
+-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
+--
+-- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
+-- dele — quem o empurrar para o meio desarma a cura para tudo que vier depois.
+-- Vigiado por `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
+--
+-- A 0108 revogou anon numa LISTA de 8 funções, medida num banco instalado do
+-- ZERO. Quem ATUALIZA tem outro estado: o `ALTER DEFAULT PRIVILEGES ... GRANT
+-- ALL ON FUNCTIONS TO anon` do corpo deste arquivo grava uma entrada em
+-- `pg_default_acl` que fica no catálogo PARA SEMPRE, e a partir daí toda função
+-- criada em `public` nasce com EXECUTE para anon — inclusive as deste apêndice.
+--
+-- Medido numa VPS real (2026-08-07), comparando com o que um install fresco
+-- produz: 6 definer expostas a anon e 5 a authenticated, entre elas
+-- `fn_decrypt_oauth` — alcançável pela anon key, que vai para o browser.
+--
+-- Lista conserta o estoque e reabre no próximo `create function`. Esta varredura
+-- é auto-curativa e roda DEPOIS de tudo que cria função, então cura no mesmo run
+-- em que o defeito nasceria. Desfazer o ALTER DEFAULT PRIVILEGES não serve: ele
+-- vem do `pg_dump` do Supabase e é reescrito a cada re-aplicação.
+--
+-- As duas origens de EXECUTE (a mesma lição da 0108): grant DIRETO a anon, que
+-- `revoke from public` não remove; e grant a PUBLIC, do qual anon HERDA, que
+-- `revoke from anon` não remove. O privilégio EFETIVO de authenticated e
+-- service_role é medido ANTES e devolvido depois — tira anon sem tirar leitura.
+do $$
+declare
+  f record;
+  tinha_auth boolean;
+  tinha_service boolean;
+begin
+  if to_regrole('anon') is null then
+    return;
+  end if;
+
+  for f in
+    select p.oid, p.oid::regprocedure as assinatura
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prosecdef
+  loop
+    tinha_auth := to_regrole('authenticated') is not null
+                  and has_function_privilege('authenticated', f.oid, 'EXECUTE');
+    tinha_service := to_regrole('service_role') is not null
+                     and has_function_privilege('service_role', f.oid, 'EXECUTE');
+
+    execute format('revoke execute on function %s from public, anon', f.assinatura);
+
+    if tinha_auth then
+      execute format('grant execute on function %s to authenticated', f.assinatura);
+    end if;
+    if tinha_service then
+      execute format('grant execute on function %s to service_role', f.assinatura);
+    end if;
+  end loop;
+end $$;
+
+-- regra 2 (authenticated): as 5 que o update abriu e o install não abre. Aqui não
+-- cabe varredura — `authenticated` PRECISA de EXECUTE nos helpers de RLS e em
+-- `retrieve_top_k_chunks` (num install fresco ele tem). É julgamento por função,
+-- e o alvo de cada linha é o valor que um install fresco produz, medido.
+revoke execute on function public.fn_audit_log_row() from authenticated;
+revoke execute on function public.fn_decrypt_oauth(bytea) from authenticated;
+revoke execute on function public.fn_encrypt_oauth(text) from authenticated;
+revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from authenticated;
+revoke execute on function public.fn_update_budget_consumption() from authenticated;
+
+grant execute on function public.fn_audit_log_row() to service_role;
+grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
+grant execute on function public.fn_encrypt_oauth(text) to service_role;
+grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
+grant execute on function public.fn_update_budget_consumption() to service_role;

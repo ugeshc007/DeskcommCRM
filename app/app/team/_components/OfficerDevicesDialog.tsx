@@ -9,7 +9,7 @@ import type { TeamMember } from "@/hooks/team/useTeamMembers";
 
 type Device = { id: string; label: string; expires_at: string | null; revoked_at: string | null; paired: boolean };
 
-export function OfficerDevicesDialog({ member, onClose }: { member: TeamMember; onClose: () => void }) {
+export function OfficerDevicesDialog({ member, onClose }: { member: Pick<TeamMember, "user_id" | "full_name" | "email">; onClose: () => void }) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [issued, setIssued] = useState<string | null>(null);
   const [error, setError] = useState("");

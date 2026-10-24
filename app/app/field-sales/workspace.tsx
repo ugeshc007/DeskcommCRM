@@ -17,6 +17,7 @@ import { FieldOperations, type ShopCollection } from './operations';
 import { FieldLiveView } from './live/view';
 import { AttendanceView } from './attendance-view';
 import { ProjectStaff } from './project-staff';
+import { OfficerDevicesDialog } from '@/app/app/team/_components/OfficerDevicesDialog';
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
 
@@ -65,6 +66,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [dialog, setDialog] = useState<'project' | 'schedule' | 'employee' | 'rename' | 'manage' | 'customers' | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [removingEmployee, setRemovingEmployee] = useState<Employee | null>(null);
+  const [deviceEmployee, setDeviceEmployee] = useState<Employee | null>(null);
   const [customerProjectId, setCustomerProjectId] = useState<string | null>(null);
   const [managedEmployeeId, setManagedEmployeeId] = useState<string | null>(null);
   const [managedProjectId, setManagedProjectId] = useState<string | null>(null);
@@ -108,6 +110,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   }, [timezone]);
   const days = Array.from({ length: view === 'week' ? 7 : 1 }, (_, i) => addCalendarDays(start, i));
   const people = data?.employees ?? [], projects = data?.projects ?? [];
+  const fieldOfficerIds = new Set((members.data ?? []).filter(member => member.role === 'field_officer').map(member => member.user_id));
   const onlineEmployeeIds = new Set(teamPresence.data?.latest.filter(person => person.online).map(person => person.employee_id) ?? []);
   const teamPeople = people.filter(person => person.active).sort((a, b) => Number(onlineEmployeeIds.has(b.user_id)) - Number(onlineEmployeeIds.has(a.user_id))
     || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' }) || a.user_id.localeCompare(b.user_id));
@@ -271,6 +274,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
                   {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
                   <Button variant="outline" onClick={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</Button>
                   {manager && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setEditingEmployee(person); setDialog('rename'); }}>Edit name</Button>}
+                  {administrator && fieldOfficerIds.has(person.user_id) && <Button variant="outline" onClick={() => setDeviceEmployee(person)}>Android keys</Button>}
                   {administrator && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setRemovingEmployee(person); }}>Remove</Button>}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>
@@ -411,6 +415,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         }}>End assignment</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    {deviceEmployee && <OfficerDevicesDialog key={deviceEmployee.user_id} member={{ user_id: deviceEmployee.user_id, full_name: deviceEmployee.display_name, email: null }} onClose={() => setDeviceEmployee(null)} />}
     <AlertDialog open={removingEmployee !== null} onOpenChange={open => { if (!open) setRemovingEmployee(null); }}>
       <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove this field officer?</AlertDialogTitle>
         <AlertDialogDescription>{removingEmployee?.display_name} will leave the active Field Sales team and their device pairing will be revoked. Their CRM account, attendance, routes and visits remain saved. An officer who is punched in must punch out first. Re-enrollment requires a new device pairing.</AlertDialogDescription>

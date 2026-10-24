@@ -1,6 +1,6 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
-Updated 2026-10-22. This is a dated map, not proof of current production behavior. Check the
+Updated 2026-10-24. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 
 - This worktree carries the multi-tenant Field Sales Android module under `mobile/android`, its
@@ -66,6 +66,10 @@ repository, GitHub checks and the running installation before any release claim.
   confirmation dialog hides Team rows from role queries. The test now waits for the
   server-backed success and dialog close before checking both the row and stored
   `active` state. This paragraph is not a deployment claim.
+- The 2026-10-24 source-only Field Sales Team change adds an admin-only Android keys action
+  beside each active enrolled Field Officer. It reuses the CRM Team dialog and existing
+  organization-scoped issuance/revocation API; the original CRM Team entry remains. Managers
+  cannot issue codes. The Field Sales list stays compact rather than returning to large cards.
 - In this worktree, manual team invitations have the same 24-hour signed-token lifetime for
   field officers, viewers, agents, managers and admins. When invitation email is not delivered,
   a tenant admin verifies the recipient offline and shares the private link; a persisted,

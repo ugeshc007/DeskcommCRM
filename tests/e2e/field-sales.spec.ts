@@ -67,6 +67,16 @@ test('admin edits and removes a Field Sales officer from the compact Team list w
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   const list = page.locator('[data-layout="list"]');
   const row = list.getByRole('article').filter({ hasText: 'Roster test officer' });
+  await row.getByRole('button', { name: 'Android keys' }).click();
+  const devices = page.getByRole('dialog', { name: 'Android access — Roster test officer' });
+  await devices.getByRole('textbox', { name: 'Phone name' }).fill('Roster test phone');
+  await devices.getByRole('button', { name: 'Create pairing code' }).click();
+  await expect(devices.getByLabel('Pairing code')).toHaveValue(/^\d{6}$/);
+  expect((await pool.query(`select count(*)::int n from field_sales_devices
+    where organization_id=$1 and employee_id=$2 and label=$3 and pairing_code_hash is not null and token_hash is null`,
+  [org, teammate, 'Roster test phone'])).rows[0].n).toBe(1);
+  await page.keyboard.press('Escape');
+  await expect(devices).not.toBeVisible();
   await row.getByRole('button', { name: 'Edit name' }).click();
   await page.getByRole('dialog', { name: 'Edit field officer name' }).getByLabel('Field Sales display name').fill('Updated roster officer');
   await page.getByRole('dialog', { name: 'Edit field officer name' }).getByRole('button', { name: 'Save name' }).click();
@@ -84,6 +94,7 @@ test('admin edits and removes a Field Sales officer from the compact Team list w
   expect((await pool.query('select active from field_sales_employees where organization_id=$1 and user_id=$2', [org, teammate])).rows[0].active).toBe(false);
   expect((await pool.query('select count(*)::int n from field_sales_sessions where organization_id=$1 and id=$2', [org, session])).rows[0].n).toBe(1);
   await page.screenshot({ path: testInfo.outputPath('field-team-removed-officer.png'), fullPage: true });
+  await pool.query('delete from field_sales_devices where organization_id=$1 and employee_id=$2', [org, teammate]);
   await pool.query('delete from field_sales_sessions where organization_id=$1 and id=$2', [org, session]);
   await pool.query('delete from field_sales_employees where organization_id=$1 and user_id=$2', [org, teammate]);
   await pool.query('delete from user_organizations where organization_id=$1 and user_id=$2', [org, teammate]);
@@ -102,6 +113,7 @@ test('manager can edit a Field Sales name but cannot remove or enroll an officer
     await page.getByRole('tab', { name: 'Team', exact: true }).click();
     const row = page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Synthetic salesperson' });
     await expect(row.getByRole('button', { name: 'Edit name' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Android keys' })).toHaveCount(0);
     await expect(row.getByRole('button', { name: 'Remove' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Enroll salesperson' })).toHaveCount(0);
     await row.getByRole('button', { name: 'Edit name' }).click();

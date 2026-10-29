@@ -4,7 +4,7 @@ import { requireSupportWrite } from '@/lib/impersonate/support';
 import { getRequestPool } from '@/lib/agent-engine/db/request-pool';
 import { readIntegrationJson } from '../../integration-connections/_shared';
 import { fieldError } from '../_shared';
-import { manageAttendanceLeave, readAttendanceDay } from '@/lib/field-sales/attendance-calendar';
+import { manageAttendanceLeave, manageAttendanceShift, readAttendanceDay } from '@/lib/field-sales/attendance-calendar';
 
 const headers = { 'Cache-Control': 'private, no-store' };
 export async function GET(req: Request) {
@@ -21,6 +21,9 @@ export async function POST(req: Request) {
   const auth = await requireRole('manager'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Use your own organization account for attendance.', 403);
   try {
-    return ok(await manageAttendanceLeave(getRequestPool(), auth.org.orgId, auth.user.id, await readIntegrationJson(req)), { headers });
+    const command = await readIntegrationJson(req) as { operation?: string };
+    const action = command.operation === 'close_shift' || command.operation === 'correct_shift'
+      ? manageAttendanceShift : manageAttendanceLeave;
+    return ok(await action(getRequestPool(), auth.org.orgId, auth.user.id, command), { headers });
   } catch (error) { return fieldError(error); }
 }

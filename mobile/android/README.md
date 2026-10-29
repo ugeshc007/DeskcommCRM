@@ -47,8 +47,9 @@ It intentionally refuses to run against an already-connected employee installati
    fewer updates. Approximate-only permission is shown in the app. It preserves raw coordinates,
    accuracy, speed/bearing when available, mock flags and monotonic fix age. No cached
    pre-session fix is used as live position.
-5. Breaks continue tracking. The phone stops GPS at punch-out or the 14-hour limit; the server
-   rejects points at/after that limit and a minute-level worker closes forgotten shifts.
+5. Breaks continue tracking. At 14 hours the phone shows a one-time shift reminder without
+   ending attendance or GPS. The phone stops GPS at punch-out or after a manager ends the shift
+   and the phone successfully syncs. The retired server worker no longer closes shifts.
    Punch-out requests local service shutdown before disk/network
    operations. Offline attendance and sample IDs survive retries without duplicate inserts.
    A delayed sync response cannot replace attendance changed while the request was in flight.

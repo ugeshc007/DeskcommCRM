@@ -29,7 +29,11 @@ export function dailyAttendance(date: string, timezone: string, observedAt: Inst
     const ownSessions = sessions.filter(session => session.employee_id === person.user_id
       && localParts(epoch(session.corrected_in ?? session.punched_in_at), timezone).slice(0, 10) === date);
     let workedMs = 0, breakMs = 0, firstIn = Infinity, lastOut = -Infinity, open = false;
+    let latestSession: AttendanceSession | null = null;
+    let openSession: AttendanceSession | null = null;
     for (const session of ownSessions) {
+      if (!latestSession || epoch(session.punched_in_at) > epoch(latestSession.punched_in_at)) latestSession = session;
+      if (!session.punched_out_at) openSession = session;
       const start = epoch(session.corrected_in ?? session.punched_in_at);
       const end = Math.min(session.corrected_out ? epoch(session.corrected_out)
         : session.punched_out_at ? epoch(session.punched_out_at) : now, now);
@@ -61,7 +65,11 @@ export function dailyAttendance(date: string, timezone: string, observedAt: Inst
       leave_conflict: Boolean(leave && workedMs > 0),
       leave_note: leave?.note ?? null, first_in_at: Number.isFinite(firstIn) ? new Date(firstIn).toISOString() : null,
       last_out_at: Number.isFinite(lastOut) ? new Date(lastOut).toISOString() : null,
-      open, working_minutes: Math.round(Math.max(0, workedMs - breakMs) / 60000),
+      open, latest_session_id: latestSession?.id ?? null, open_session_id: openSession?.id ?? null,
+      latest_session_in_at: latestSession ? new Date(latestSession.corrected_in ?? latestSession.punched_in_at).toISOString() : null,
+      latest_session_out_at: latestSession?.punched_out_at
+        ? new Date(latestSession.corrected_out ?? latestSession.punched_out_at).toISOString() : null,
+      working_minutes: Math.round(Math.max(0, workedMs - breakMs) / 60000),
       break_minutes: Math.round(breakMs / 60000), travel_distance_m: reliablePoints >= 3 ? Math.round(route.distance_m) : null,
       gps_points: ownPoints.length, reliable_route_points: route.plotted.length };
   });

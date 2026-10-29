@@ -4,12 +4,15 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { addCalendarDays } from '@/lib/field-sales/schedule';
+import { addCalendarDays, localParts, wallTimeToUtc } from '@/lib/field-sales/schedule';
 
 type AttendanceRow = { employee_id: string; display_name: string; status: 'present' | 'leave' | 'absent' | 'pending' | 'inactive'; leave_conflict: boolean;
   leave_note: string | null; first_in_at: string | null; last_out_at: string | null; open: boolean;
+  latest_session_id: string | null; open_session_id: string | null;
+  latest_session_in_at: string | null; latest_session_out_at: string | null;
   working_minutes: number; break_minutes: number; travel_distance_m: number | null; gps_points: number; reliable_route_points: number };
-type AttendanceDay = { date: string; timezone: string; role: string; rows: AttendanceRow[] };
+type AttendanceDay = { date: string; timezone: string; role: string; generated_at: string; rows: AttendanceRow[];
+  overdue: { session_id: string; employee_id: string; display_name: string; punched_in_at: string }[] };
 type AttendanceMonth = { month: string; timezone: string; employee: { id: string; name: string };
   rows: (AttendanceRow & { date: string; project_names: string[] })[] };
 const statusLabel: Record<AttendanceRow['status'], string> = {
@@ -30,6 +33,8 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
   const [monthEmployeeId, setMonthEmployeeId] = useState(selectedEmployeeId === 'all' ? '' : selectedEmployeeId);
   const [exporting, setExporting] = useState(false);
   const [monthProblem, setMonthProblem] = useState('');
+  const [shiftEdit, setShiftEdit] = useState<{ row: AttendanceRow; action: 'close_shift' | 'correct_shift' } | null>(null);
+  const [overdueTarget, setOverdueTarget] = useState<AttendanceDay['overdue'][number] | null>(null);
   const query = useQuery({ queryKey: ['field-attendance', organizationId, userId, date],
     queryFn: async () => {
       const response = await fetch(`/api/v1/field-sales/attendance?date=${encodeURIComponent(date)}`, { cache: 'no-store' });
@@ -62,6 +67,46 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       await cache.invalidateQueries({ queryKey: ['field-attendance-month', organizationId, userId] });
       setNote('');
     } catch (error) { setProblem(error instanceof Error ? error.message : 'Leave could not be updated.'); }
+    finally { setBusyId(null); }
+  }
+  async function saveShift(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!shiftEdit || !query.data) return;
+    const form = new FormData(event.currentTarget);
+    const reason = String(form.get('reason') ?? '').trim();
+    const { row, action } = shiftEdit;
+    setBusyId(row.employee_id); setProblem('');
+    try {
+      const command = action === 'close_shift'
+        ? { operation: action, session_id: row.open_session_id, reason }
+        : { operation: action, id: crypto.randomUUID(), session_id: row.latest_session_id, reason,
+          proposed_in: wallTimeToUtc(String(form.get('in')).slice(0, 10), String(form.get('in')).slice(11), query.data.timezone),
+          proposed_out: wallTimeToUtc(String(form.get('out')).slice(0, 10), String(form.get('out')).slice(11), query.data.timezone) };
+      const response = await fetch('/api/v1/field-sales/attendance', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(command) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message ?? 'Shift could not be updated.');
+      await cache.invalidateQueries({ queryKey: ['field-attendance', organizationId, userId] });
+      await cache.invalidateQueries({ queryKey: ['field-attendance-month', organizationId, userId] });
+      setShiftEdit(null);
+    } catch (error) { setProblem(error instanceof Error ? error.message : 'Shift could not be updated.'); }
+    finally { setBusyId(null); }
+  }
+  async function closeOverdue(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!overdueTarget) return;
+    setBusyId(overdueTarget.employee_id); setProblem('');
+    try {
+      const reason = String(new FormData(event.currentTarget).get('reason') ?? '').trim();
+      const response = await fetch('/api/v1/field-sales/attendance', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'close_shift',
+          session_id: overdueTarget.session_id, reason }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message ?? 'Shift could not be ended.');
+      await cache.invalidateQueries({ queryKey: ['field-attendance', organizationId, userId] });
+      await cache.invalidateQueries({ queryKey: ['field-attendance-month', organizationId, userId] });
+      setOverdueTarget(null);
+    } catch (error) { setProblem(error instanceof Error ? error.message : 'Shift could not be ended.'); }
     finally { setBusyId(null); }
   }
   async function exportMonth(allEmployees = false) {
@@ -99,6 +144,19 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
     {query.isPending && <p role="status">Loading attendance…</p>}
     {query.error && <p role="alert">{query.error.message} <Button variant="outline" onClick={() => void query.refetch()}>Retry</Button></p>}
     {problem && <p role="alert">{problem}</p>}
+    {manager && Boolean(query.data?.overdue.length) && <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3" aria-label="Overdue field shifts">
+      <h3 className="font-semibold text-amber-950">Open shifts over 14 hours · {query.data!.overdue.length}</h3>
+      <p className="text-sm text-amber-950">Call the officer to confirm whether work continues. These shifts remain open until the officer or a manager ends them.</p>
+      <div className="divide-y divide-amber-200">{query.data!.overdue.map(shift => <div key={shift.session_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+        <span>{shift.display_name} · In: {time(shift.punched_in_at)}</span>
+        {shift.employee_id !== userId && <Button variant="outline" disabled={busyId !== null} onClick={() => setOverdueTarget(shift)}>End shift</Button>}
+      </div>)}</div>
+      {overdueTarget && <form className="space-y-2 border-t border-amber-200 pt-3" onSubmit={event => void closeOverdue(event)}>
+        <p className="text-sm font-medium">End {overdueTarget.display_name}&apos;s shift now after confirming with them?</p>
+        <label className="grid max-w-md gap-1 text-sm">Reason<Input name="reason" required minLength={5} maxLength={2000} placeholder="What did the officer confirm?"/></label>
+        <div className="flex gap-2"><Button disabled={busyId !== null}>Confirm end</Button><Button type="button" variant="outline" onClick={() => setOverdueTarget(null)}>Cancel</Button></div>
+      </form>}
+    </section>}
     {manager && <label className="grid max-w-md gap-1 text-sm font-medium">Leave reason (optional)<Input value={note} maxLength={500} onChange={event => setNote(event.target.value)} placeholder="Approved leave note"/></label>}
     <div data-layout="list" className="divide-y rounded-lg border bg-card">{rows.map(row => <article key={row.employee_id} className="grid gap-2 p-2 lg:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)_auto] lg:items-center lg:gap-3">
       <div className="flex items-start justify-between gap-2"><h3 className="font-semibold">{row.display_name}</h3><span className={`rounded-full px-2 py-1 text-xs font-medium ${row.status === 'present' ? 'bg-emerald-100 text-emerald-900' : row.status === 'leave' ? 'bg-sky-100 text-sky-900' : 'bg-muted text-muted-foreground'}`}>{statusLabel[row.status]}</span></div>
@@ -111,14 +169,30 @@ export function AttendanceView({ organizationId, userId, initialDate, selectedEm
       </dl>
       {row.leave_note && <p className="mt-2 text-sm">Leave: {row.leave_note}</p>}
       {row.leave_conflict && <p className="mt-2 text-sm text-amber-800" role="alert">Approved leave overlaps a recorded punch. Review this day.</p>}
+      {row.open && row.first_in_at && query.data && Date.parse(query.data.generated_at) - Date.parse(row.first_in_at) >= 14 * 3600000 &&
+        <p className="mt-2 text-sm text-amber-800" role="status">Over 14 hours. Contact the officer to confirm whether work continues, then close or correct the shift if needed.</p>}
       {row.gps_points > 0 && <p className="mt-2 text-xs text-muted-foreground">Distance is estimated from quality-filtered, sampled GPS. It may undercount travel.</p>}
       </div>
-      {manager && row.status !== 'inactive' && <div>
+      {manager && row.status !== 'inactive' && <div className="flex flex-wrap gap-2">
         {row.status === 'leave' ? <Button variant="outline" disabled={busyId !== null} onClick={() => void leave(row, 'revoke_leave')}>Remove leave</Button>
           : row.status !== 'present' && <Button variant="outline" disabled={busyId !== null} onClick={() => void leave(row, 'approve_leave')}>Approve leave</Button>}
+        {row.open_session_id && row.employee_id !== userId && <Button variant="outline" disabled={busyId !== null} onClick={() => setShiftEdit({ row, action: 'close_shift' })}>End shift</Button>}
+        {row.latest_session_out_at && row.employee_id !== userId && <Button variant="outline" disabled={busyId !== null} onClick={() => setShiftEdit({ row, action: 'correct_shift' })}>Correct hours</Button>}
       </div>}
     </article>)}</div>
     {query.data && !rows.length && <p>No employees in this attendance view.</p>}
+    {shiftEdit && query.data && <form className="max-w-xl space-y-3 rounded-lg border bg-card p-4" onSubmit={event => void saveShift(event)}>
+      <h3 className="font-semibold">{shiftEdit.action === 'close_shift' ? 'End shift' : 'Correct working hours'} · {shiftEdit.row.display_name}</h3>
+      <p className="text-sm text-muted-foreground">{shiftEdit.action === 'close_shift'
+        ? 'Confirm with the officer first. This ends the active shift now and stops GPS when the phone next syncs.'
+        : `Times use ${query.data.timezone}. The original punches and GPS remain in the audit history. This edits the latest session shown for this day.`}</p>
+      {shiftEdit.action === 'correct_shift' && <>
+        <label className="grid gap-1 text-sm">Corrected punch-in<Input name="in" type="datetime-local" required defaultValue={shiftEdit.row.latest_session_in_at ? localParts(Date.parse(shiftEdit.row.latest_session_in_at), query.data.timezone) : ''}/></label>
+        <label className="grid gap-1 text-sm">Corrected punch-out<Input name="out" type="datetime-local" required defaultValue={shiftEdit.row.latest_session_out_at ? localParts(Date.parse(shiftEdit.row.latest_session_out_at), query.data.timezone) : ''}/></label>
+      </>}
+      <label className="grid gap-1 text-sm">Reason<Input name="reason" required minLength={5} maxLength={2000} placeholder="What was confirmed with the officer?"/></label>
+      <div className="flex gap-2"><Button disabled={busyId !== null}>Confirm</Button><Button type="button" variant="outline" onClick={() => setShiftEdit(null)}>Cancel</Button></div>
+    </form>}
     <section id="field-monthly-attendance" className="space-y-3 border-t pt-5" aria-label="Monthly field officer attendance">
       <div><h2 className="text-lg font-semibold">Monthly attendance</h2>
         <p className="text-sm text-muted-foreground">One row for every check-in date, including days without a punch. Overnight hours stay with the check-in date; check-out shows its full local date and time in {query.data?.timezone ?? 'the organization time zone'}.</p></div>

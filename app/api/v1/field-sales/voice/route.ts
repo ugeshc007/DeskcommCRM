@@ -26,7 +26,7 @@ async function handle(req: Request, prompt: boolean) {
         const active = await db.query(`select 1 from public.field_sales_sessions s
           join public.field_sales_settings policy on policy.organization_id=s.organization_id
           where s.organization_id=$1 and s.employee_id=$2 and s.punched_out_at is null
-            and s.punched_in_at>now()-interval '14 hours' and policy.enabled limit 1`, [auth.org, auth.actor]);
+            and policy.enabled limit 1`, [auth.org, auth.actor]);
         if (!active.rowCount) throw new Error('field_work_session_required');
       });
       const audio = prompt ? undefined : await readFieldVoiceAudio(req);

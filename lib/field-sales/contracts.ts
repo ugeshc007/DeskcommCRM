@@ -81,7 +81,6 @@ export const attendanceCommandSchema = z.discriminatedUnion('action', [
 ]);
 export type AttendanceCommand = z.infer<typeof attendanceCommandSchema>;
 export type WorkStatus = 'off_duty' | 'working' | 'on_break';
-export const MAX_FIELD_SHIFT_MS = 14 * 60 * 60 * 1000;
 
 export function transitionAttendance(status: WorkStatus, action: AttendanceCommand['action']): WorkStatus {
   if (status === 'off_duty' && action === 'punch_in') return 'working';
@@ -121,7 +120,7 @@ export interface WorkInterval {
 /** Half-open work interval: no point at or after punch-out is admissible. */
 export function sampleWithinSession(sample: LocationSample, session: WorkInterval): boolean {
   const at = Date.parse(sample.captured_at), start = Date.parse(session.punched_in_at);
-  const end = Math.min(session.punched_out_at === null ? Infinity : Date.parse(session.punched_out_at), start + MAX_FIELD_SHIFT_MS);
+  const end = session.punched_out_at === null ? Infinity : Date.parse(session.punched_out_at);
   return sample.session_id === session.id && Number.isFinite(at) && Number.isFinite(start) && at >= start && at < end;
 }
 

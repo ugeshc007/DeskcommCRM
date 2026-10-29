@@ -10,7 +10,7 @@ import { manageFieldSales, readFieldCalendar } from '@/lib/field-sales/managemen
 import { saveFieldPhoto, readFieldPhoto, listFieldPhotos, deleteFieldPhoto } from '@/lib/field-sales/photos';
 import { manageProjectCustomers, readProjectCustomers, readAssignedCustomers, recordCustomerCollection, removeProjectCustomer, voidCustomerCollection } from '@/lib/field-sales/collections';
 import { recordFieldActivity } from '@/lib/field-sales/activity';
-import { manageAttendanceLeave, readAttendanceDay } from '@/lib/field-sales/attendance-calendar';
+import { manageAttendanceLeave, manageAttendanceShift, readAttendanceDay } from '@/lib/field-sales/attendance-calendar';
 import sharp from 'sharp';
 
 if (!process.env.TEST_DB_CONTAINER) throw new Error('Run through scripts/test-db.sh');
@@ -620,25 +620,42 @@ describe('optional field-sales foundation', () => {
     expect((await pool.query('select captured_at from field_sales_attendance_events where organization_id=$1 and id=$2', [f.org, stop.event_id])).rows[0].captured_at.toISOString()).toBe(at(120));
     expect((await pool.query("select count(*)::int n from api_audit_log where organization_id=$1 and action='field_sales.punch_out'", [f.org])).rows[0].n).toBe(2);
   });
-  it('closes forgotten sessions at exactly fourteen hours and rejects later GPS', async () => {
+  it('keeps a fourteen-hour shift open until the officer or a manager ends it', async () => {
     const start = new Date(Date.now() - 15 * 3600000).toISOString();
-    const f = await fixture(start);
+    const f = await fixture(start), foreign = await fixture();
     await recordAttendance(pool, f.org, f.actor, f.command);
-    expect((await closeExpiredFieldSessions(pool)).closed).toBeGreaterThanOrEqual(1);
+    expect((await closeExpiredFieldSessions(pool)).closed).toBe(0);
     const cutoff = new Date(Date.parse(start) + 14 * 3600000).toISOString();
     const saved = (await pool.query('select punched_out_at,status from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0];
-    expect(saved.status).toBe('off_duty'); expect(saved.punched_out_at.toISOString()).toBe(cutoff);
+    expect(saved.status).toBe('working'); expect(saved.punched_out_at).toBeNull();
+    expect((await readAttendanceDay(pool, f.org, f.manager, f.localDate)).overdue
+      .some(shift => shift.session_id === f.session)).toBe(true);
     const point = { sample_id: randomUUID(), session_id: f.session, sequence: 0,
-      captured_at: new Date(Date.parse(cutoff) - 1000).toISOString(), latitude: 25, longitude: 55, accuracy_m: 10, mock_location: false };
+      captured_at: new Date(Date.parse(cutoff) + 1000).toISOString(), latitude: 25, longitude: 55, accuracy_m: 10, mock_location: false };
     expect((await recordLocations(pool, f.org, f.actor, { samples: [point] })).inserted).toBe(1);
-    await expect(recordLocations(pool, f.org, f.actor, { samples: [{ ...point, sample_id: randomUUID(), sequence: 1, captured_at: cutoff }] }))
-      .rejects.toThrow('field_outside_work_session');
-    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'break_start', sequence: 1,
-      captured_at: new Date(Date.parse(cutoff) - 120000).toISOString() });
-    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'break_end', sequence: 2,
-      captured_at: new Date(Date.parse(cutoff) - 60000).toISOString() });
-    await recordAttendance(pool, f.org, f.actor, { ...f.command, event_id: randomUUID(), action: 'punch_out', sequence: 3, captured_at: cutoff });
-    expect((await pool.query('select punched_out_at from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0].punched_out_at.toISOString()).toBe(cutoff);
+    await expect(manageAttendanceShift(pool, f.org, f.actor, { operation: 'close_shift', session_id: f.session, reason: 'Confirmed by phone' }))
+      .rejects.toThrow('field_forbidden');
+    await expect(manageAttendanceShift(pool, foreign.org, foreign.manager, { operation: 'close_shift', session_id: f.session,
+      reason: 'Confirmed by phone' })).rejects.toThrow('field_forbidden');
+    await manageAttendanceShift(pool, f.org, f.manager, { operation: 'close_shift', session_id: f.session, reason: 'Confirmed by phone' });
+    const closed = (await pool.query('select punched_out_at,status from field_sales_sessions where organization_id=$1 and id=$2', [f.org, f.session])).rows[0];
+    expect(closed.status).toBe('off_duty'); expect(closed.punched_out_at.getTime()).toBeGreaterThan(Date.parse(point.captured_at));
+    expect((await manageAttendanceShift(pool, f.org, f.manager, { operation: 'close_shift', session_id: f.session,
+      reason: 'Confirmed by phone' })).replayed).toBe(true);
+    const queuedBreak = { ...f.command, event_id: randomUUID(), action: 'break_start', sequence: 1,
+      captured_at: new Date(Date.parse(cutoff) + 2000).toISOString() };
+    await recordAttendance(pool, f.org, f.actor, queuedBreak);
+    expect((await pool.query('select status,punched_out_at from field_sales_sessions where organization_id=$1 and id=$2',
+      [f.org, f.session])).rows[0].punched_out_at.toISOString()).toBe(closed.punched_out_at.toISOString());
+    await expect(recordLocations(pool, f.org, f.actor, { samples: [{ ...point, sample_id: randomUUID(), sequence: 1,
+      captured_at: new Date(closed.punched_out_at.getTime() + 1000).toISOString() }] })).rejects.toThrow('field_outside_work_session');
+    const correction = { operation: 'correct_shift', id: randomUUID(), session_id: f.session,
+      proposed_in: start, proposed_out: new Date(closed.punched_out_at.getTime() - 60000).toISOString(), reason: 'Verified with officer' };
+    await expect(manageAttendanceShift(pool, foreign.org, foreign.manager, correction)).rejects.toThrow('field_forbidden');
+    expect((await manageAttendanceShift(pool, f.org, f.manager, correction)).replayed).toBe(false);
+    expect((await manageAttendanceShift(pool, f.org, f.manager, correction)).replayed).toBe(true);
+    const report = await readAttendanceDay(pool, f.org, f.manager, f.localDate);
+    expect(report.rows.find(row => row.employee_id === f.actor)?.last_out_at).toBe(correction.proposed_out);
   });
   it('never accepts another employee/org session or off-duty points', async () => {
     const f = await fixture(), other = await fixture();

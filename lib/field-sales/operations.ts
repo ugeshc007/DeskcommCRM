@@ -107,6 +107,10 @@ export async function manageCorrection(pool: Pick<pg.Pool, 'connect'>, org: stri
       if (!existing || (role !== 'manager' && role !== 'admin') || existing.employee_id === actor) throw new Error('field_forbidden');
       await requireFieldScope(db, org, actor, role, existing.employee_id, true);
       if (existing.status !== 'pending') throw new Error('field_revision_conflict');
+      const newerApproved = await db.query(`select 1 from public.field_sales_corrections
+        where organization_id=$1 and session_id=$2 and status='approved' and reviewed_at>$3 limit 1`,
+      [org, existing.session_id, existing.created_at]);
+      if (newerApproved.rowCount) throw new Error('field_revision_conflict');
       await db.query(`update public.field_sales_corrections set status=$3,reviewed_by=$4,review_note=$5,reviewed_at=now()
         where organization_id=$1 and id=$2`, [org, input.id, input.decision, actor, input.note]);
       // A correction changes reporting only. Original capture intervals/GPS acceptance never expand.

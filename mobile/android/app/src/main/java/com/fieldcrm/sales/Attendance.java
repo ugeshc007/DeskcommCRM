@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.json.JSONObject;
 
 public final class Attendance {
-    public static final long MAX_SHIFT_MS = 14L * 60 * 60 * 1000;
+    public static final long SHIFT_REMINDER_MS = 14L * 60 * 60 * 1000;
     private Attendance() {}
     public static void punchIn(Context context) throws Exception {
         punchIn(context, null, null);
@@ -28,6 +28,7 @@ public final class Attendance {
             if (policy == null || !policy.optBoolean("enabled") || state.optBoolean("access_denied")) throw new IllegalStateException("Sync an enabled policy first.");
             if (state.getJSONArray("events").length() > (project == null ? 999 : 998)) throw new IllegalStateException("Attendance queue is full.");
             state.remove("attendance_sync_error");
+            state.remove("shift_reminder_sent_for_session");
             Instant capturedAt = Instant.now();
             state.put("session_id", UUID.randomUUID().toString()).put("session_start_ms", System.currentTimeMillis())
                 .put("event_sequence", 0).put("point_sequence", -1).put("status", WorkState.transition(state.getString("status"), "punch_in"))
@@ -78,12 +79,6 @@ public final class Attendance {
     public static void act(Context context, String action) throws Exception {
         actAt(context, action, Instant.now());
     }
-    public static void autoPunchOut(Context context) throws Exception {
-        JSONObject state = SecureState.read(context);
-        long start = state.optLong("session_start_ms", 0);
-        if (start > 0 && WorkState.collecting(state.optString("status", "off_duty")) && System.currentTimeMillis() >= start + MAX_SHIFT_MS)
-            actAt(context, "punch_out", Instant.ofEpochMilli(start + MAX_SHIFT_MS));
-    }
     private static void actAt(Context context, String action, Instant capturedAt) throws Exception {
         if (action.equals("punch_in")) throw new IllegalArgumentException("Choose an assigned project before punching in.");
         // Stop collection before persistence/network. A disk failure must never keep GPS on.
@@ -99,6 +94,7 @@ public final class Attendance {
                 .put("action", action).put("captured_at", capturedAt.toString()));
             state.put("event_sequence", sequence); state.put("status", next);
             if (action.equals("punch_out")) {
+                state.remove("shift_reminder_sent_for_session");
                 state.remove("active_project_id"); state.remove("active_schedule_id"); state.remove("active_local_date");
                 state.remove("active_project_name"); state.remove("active_site_name");
             }

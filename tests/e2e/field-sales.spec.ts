@@ -6,6 +6,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import pg from 'pg';
 import sharp from 'sharp';
 import { authenticateFieldDevice, deviceTokenHash } from '@/lib/field-sales/devices';
+import { localParts } from '@/lib/field-sales/schedule';
 
 // A real software WebGL renderer is needed for the map in headless CI.
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
@@ -40,6 +41,49 @@ test.beforeAll(async () => {
   await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Synthetic salesperson')", [org, employee]);
   await pool.query("insert into field_sales_projects(organization_id,id,name,site_name) values($1,$2,'Synthetic showroom','Dubai test site')", [org, project]);
   await pool.query("insert into field_sales_projects(organization_id,id,name,site_name) values($1,$2,'Secondary project','Second Dubai site')", [org, secondProject]);
+});
+
+test('manager reviews an overdue shift, ends it, and corrects reported hours', async ({ page }, testInfo) => {
+  const teammate = randomUUID(), session = randomUUID();
+  const started = new Date(Date.now() - 15 * 3600000);
+  const date = localParts(started.getTime(), 'Asia/Dubai').slice(0, 10);
+  await pool.query('insert into auth.users(id,email) values($1,$2)', [teammate, `${teammate}@synthetic.test`]);
+  await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'field_officer',now())", [teammate, org]);
+  await pool.query("insert into field_sales_employees(organization_id,user_id,display_name) values($1,$2,'Shift review officer')", [org, teammate]);
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,local_date,status,punched_in_at,last_event_at)
+    values($1,$2,$3,$4,'working',$5,$5)`, [org, session, teammate, date, started]);
+  await page.goto('/login');
+  await page.locator('#email').fill(email);
+  await page.locator('#password').fill(password);
+  await page.getByRole('button', { name: /entrar|sign in/i }).click();
+  await page.waitForURL(/\/app(?:\/|$)/);
+  await page.goto('/app/field-sales');
+  await page.getByRole('tab', { name: 'Attendance' }).click();
+  const attendance = page.getByRole('region', { name: 'Daily field officer attendance' });
+  await expect(attendance.getByRole('region', { name: 'Overdue field shifts' }).getByText('Shift review officer')).toBeVisible();
+  await attendance.getByLabel('Date', { exact: true }).fill(date);
+  const row = attendance.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Shift review officer' }) });
+  await expect(row.getByText('Over 14 hours.', { exact: false })).toBeVisible();
+  await row.getByRole('button', { name: 'End shift' }).click();
+  await attendance.getByRole('textbox', { name: 'Reason', exact: true }).fill('Officer confirmed shift ended by phone');
+  await attendance.getByRole('button', { name: 'Confirm' }).click();
+  await expect(row.getByRole('button', { name: 'Correct hours' })).toBeVisible();
+  const closed = (await pool.query('select punched_out_at from field_sales_sessions where organization_id=$1 and id=$2',
+    [org, session])).rows[0].punched_out_at as Date;
+  const revised = new Date(Math.floor((closed.getTime() - 5 * 60000) / 60000) * 60000);
+  await row.getByRole('button', { name: 'Correct hours' }).click();
+  await attendance.getByLabel('Corrected punch-out').fill(localParts(revised.getTime(), 'Asia/Dubai'));
+  await attendance.getByRole('textbox', { name: 'Reason', exact: true }).fill('Verified actual finish time with officer');
+  await attendance.getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(async () => (await pool.query(`select proposed_out from field_sales_corrections
+    where organization_id=$1 and session_id=$2 and status='approved'`, [org, session])).rows[0]?.proposed_out?.toISOString())
+    .toBe(revised.toISOString());
+  await page.screenshot({ path: testInfo.outputPath('manager-shift-review.png'), fullPage: true });
+  await pool.query('delete from field_sales_corrections where organization_id=$1 and session_id=$2', [org, session]);
+  await pool.query('delete from field_sales_sessions where organization_id=$1 and id=$2', [org, session]);
+  await pool.query('delete from field_sales_employees where organization_id=$1 and user_id=$2', [org, teammate]);
+  await pool.query('delete from user_organizations where organization_id=$1 and user_id=$2', [org, teammate]);
+  await pool.query('delete from auth.users where id=$1', [teammate]);
 });
 test.afterAll(async () => {
   if (pool) {

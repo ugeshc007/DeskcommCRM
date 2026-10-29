@@ -2047,9 +2047,11 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 - [P0] An employee's paired Android phone stays signed in until explicit sign-out. Punch in
   starts work time and GPS before project choice; today's scheduled projects appear first,
   followed by other projects explicitly assigned to that officer. Punch out stops GPS immediately.
-- [P0] At 14 hours, the phone and server independently stop the shift at the exact cutoff;
-  later GPS is rejected. Offline queued attendance before the cutoff can still replay after
-  server auto-close. Database proof: `tests/invariants/field-sales.test.ts` (24 passing).
+- [P0] Current source: at 14 hours, the Android app reminds the officer but leaves attendance
+  and GPS running. Daily attendance flags the open shift for manager follow-up. A manager/admin
+  may end it manually and approve a working-hours correction with a reason; queued offline
+  events are acknowledged without reopening a remotely closed shift. Database proof:
+  `tests/invariants/field-sales.test.ts`. Browser proof is required before release.
 - Android build/unit, focused contracts, TypeScript, lint, local baseline INSTALL/UPDATE and
   focused browser E2E pass. A real-device locked-screen/battery pilot is still needed before
   claiming field reliability; no production deployment is implied by these local tests.

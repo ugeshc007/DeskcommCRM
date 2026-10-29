@@ -53,7 +53,7 @@ public final class MainActivity extends Activity {
         render();
     }
     @Override public void onResume() {
-        super.onResume(); try { Attendance.autoPunchOut(this); } catch (Exception ignored) { }
+        super.onResume(); try { ShiftReminder.notifyIfDue(this); } catch (Exception ignored) { }
         render(); sync(); offerPermissions();
         try { if (hasLocationPermission() && WorkState.collecting(SecureState.read(this).optString("status"))) startTracking(); }
         catch (Exception ignored) { /* Secure storage error is already shown by render. */ }
@@ -134,7 +134,7 @@ public final class MainActivity extends Activity {
         String status = state.optString("status", "off_duty"); boolean working = WorkState.collecting(status);
         LinearLayout hero = card(); hero.setBackground(shape(working ? Color.rgb(228, 249, 240) : Color.rgb(235, 232, 255), 20));
         add(hero, label(working ? "You are punched in" : "Ready for today's work", 23, working ? Color.rgb(7, 105, 74) : BRAND_DARK, true), 0);
-        add(hero, label(working ? "Your work session is in progress. Punch out when finished or after the 14-hour limit." : "Choose a project to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
+        add(hero, label(working ? "Your work session is in progress. Punch out when finished." : "Choose a project to start your work session.", 15, MUTED, false), 6); add(content, hero, 22);
         int pending = state.getJSONArray("events").length();
         String syncIssue = state.optString("attendance_sync_error");
         if (pending > 0) add(hero, label(syncIssue.isEmpty()
@@ -158,8 +158,10 @@ public final class MainActivity extends Activity {
     private void activeShift(JSONObject state) throws Exception {
         LinearLayout panel = card(); add(panel, label("Active project", 16, MUTED, true), 0);
         add(panel, label(state.optString("active_project_name", "Choose a project below"), 23, INK, true), 8);
-        long elapsed = Math.max(0, Math.min(Attendance.MAX_SHIFT_MS, System.currentTimeMillis() - state.optLong("session_start_ms", System.currentTimeMillis())));
+        long elapsed = Math.max(0, System.currentTimeMillis() - state.optLong("session_start_ms", System.currentTimeMillis()));
         add(panel, label(String.format(Locale.US, "Working time: %d h %02d min", elapsed / 3600000L, (elapsed / 60000L) % 60), 15, INK, true), 7);
+        if (elapsed >= Attendance.SHIFT_REMINDER_MS)
+            add(panel, label("This shift has reached 14 hours. Punch out if finished, or contact your manager if still working.", 14, RED, true), 8);
         if (!state.optString("active_site_name").isEmpty()) add(panel, label(state.optString("active_site_name"), 15, MUTED, false), 5);
         String trackingIssue = state.optString("tracking_error");
         boolean tracking = TrackingService.running && trackingIssue.isEmpty();
@@ -247,7 +249,7 @@ public final class MainActivity extends Activity {
             if (policy == null || !policy.optBoolean("enabled")) throw new IllegalStateException();
             new AlertDialog.Builder(this).setTitle("Start your work session?")
                 .setMessage("Project: " + project.optString("project_name") + "\n\n" + policy.optString("notice_text")
-                    + "\n\nGPS starts now and stops at punch-out or after 14 hours.")
+                    + "\n\nGPS starts now and stops at punch-out. After 14 hours the app reminds you to check your shift.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Confirm and start", (dialog, which) -> {
                     try {
                         Attendance.punchInWithProject(this, project, () -> runOnUiThread(this::render));

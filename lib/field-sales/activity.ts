@@ -27,7 +27,7 @@ export async function recordFieldActivity(pool: Pick<pg.Pool, 'connect'>, org: s
     if (at.getTime() > now.getTime() + 60_000) throw new Error('field_device_clock_ahead');
     const session = (await db.query(`select punched_in_at,punched_out_at from public.field_sales_sessions
       where organization_id=$1 and id=$2 and employee_id=$3 for share`, [org, input.session_id, actor])).rows[0];
-    if (!session || at < session.punched_in_at || at.getTime() >= new Date(session.punched_in_at).getTime() + 14 * 3600000 ||
+    if (!session || at < session.punched_in_at ||
       session.punched_out_at && at >= session.punched_out_at) throw new Error('field_work_session_required');
     const lastEvent = (await db.query(`select action from public.field_sales_attendance_events
       where organization_id=$1 and session_id=$2 and captured_at<=$3 order by sequence desc limit 1`,

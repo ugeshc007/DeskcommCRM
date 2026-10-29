@@ -1,5 +1,15 @@
 # Project memory — DeskcommCRM Field Sales worktree
 
+## 2026-10-29 source change (not yet deployed)
+
+- The 14-hour auto punch-out is retired in server and Android source. The Android foreground
+  service gives a one-time local reminder at 14 hours; it keeps tracking until punch-out or a
+  manager/admin ends the shift. Older installed APKs retain their old local cutoff until updated.
+- Daily attendance gives managers/admins an audited End shift action and an approved working-hours
+  correction for a closed session. A reason is required; original punches and GPS are preserved.
+  The dashboard flags open shifts after 14 hours for a human follow-up. Remote closure reaches
+  the Android app on its next successful sync, so it is not an instantaneous remote stop.
+
 Updated 2026-10-24. This is a dated map, not proof of current production behavior. Check the
 repository, GitHub checks and the running installation before any release claim.
 

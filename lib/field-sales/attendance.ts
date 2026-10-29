@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
-import { attendanceCommandSchema, locationBatchSchema, sampleWithinSession, transitionAttendance, MAX_FIELD_SHIFT_MS, type WorkStatus } from './contracts';
+import { attendanceCommandSchema, locationBatchSchema, sampleWithinSession, transitionAttendance, type WorkStatus } from './contracts';
 import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldProjectAccess, type FieldDb } from './authority';
 import { expandSchedule, localParts } from './schedule';
 
@@ -29,14 +29,32 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
       if (previous.employee_id !== actor || previous.fingerprint !== fingerprint) throw new Error('field_idempotency_conflict');
       return { event_id: command.event_id, replayed: true };
     }
-    // Stopping remains possible when an administrator disabled collection.
-    if (command.action !== 'punch_out') await trackingPolicy(db, org);
     const at = Date.parse(command.captured_at);
     const now = (await db.query('select clock_timestamp() as at')).rows[0].at as Date;
     if (at > now.getTime() + 60000) throw new Error('field_device_clock_ahead');
     const session = (await db.query(`select id,employee_id,status,last_sequence,last_event_at,punched_in_at,punched_out_at,local_date::text as local_date
       from public.field_sales_sessions where organization_id=$1 and id=$2 for update`, [org, command.session_id])).rows[0];
     if (session && session.employee_id !== actor) throw new Error('field_forbidden');
+    // A remote manager close may race with events saved while the phone was offline.
+    // Acknowledge them in sequence without reopening the shift; the next snapshot stops GPS.
+    if (session?.punched_out_at && session.status === 'off_duty') {
+      const deviceStop = await db.query(`select 1 from public.field_sales_attendance_events
+        where organization_id=$1 and session_id=$2 and action='punch_out' limit 1`, [org, command.session_id]);
+      if (!deviceStop.rowCount) {
+        if (command.sequence !== session.last_sequence + 1 || at < (session.last_event_at as Date).getTime())
+          throw new Error('field_sync_out_of_order');
+        await db.query(`update public.field_sales_sessions set last_event_at=$3,last_sequence=$4
+          where organization_id=$1 and id=$2`, [org, command.session_id, command.captured_at, command.sequence]);
+        await db.query(`insert into public.field_sales_attendance_events(organization_id,id,session_id,sequence,action,captured_at,fingerprint)
+          values($1,$2,$3,$4,$5,$6,$7)`, [org, command.event_id, command.session_id, command.sequence,
+          command.action, command.captured_at, fingerprint]);
+        await fieldAudit(db, org, actor, 'field_sales.remote_closed_event_acknowledged', command.session_id,
+          { sequence: command.sequence, action: command.action });
+        return { event_id: command.event_id, replayed: false };
+      }
+    }
+    // Stopping remains possible when an administrator disabled collection.
+    if (command.action !== 'punch_out') await trackingPolicy(db, org);
     if (command.action === 'punch_in') {
       if (session || command.sequence !== 0) throw new Error('field_invalid_transition');
       const active = await db.query('select id from public.field_sales_sessions where organization_id=$1 and employee_id=$2 and punched_out_at is null', [org, actor]);
@@ -63,7 +81,7 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
     } else if (command.action === 'select_project') {
       if (!session || command.sequence !== session.last_sequence + 1 || session.punched_out_at && at >= (session.punched_out_at as Date).getTime())
         throw new Error('field_sync_out_of_order');
-      if (at < (session.last_event_at as Date).getTime() || at >= (session.punched_in_at as Date).getTime() + MAX_FIELD_SHIFT_MS)
+      if (at < (session.last_event_at as Date).getTime())
         throw new Error('field_outside_work_session');
       const project = await db.query('select id from public.field_sales_projects where organization_id=$1 and id=$2 and active for share', [org, command.project_id]);
       if (!project.rowCount) throw new Error('field_assignment_unavailable');
@@ -84,18 +102,15 @@ export async function recordAttendance(pool: Pick<pg.Pool, 'connect'>, org: stri
     } else {
       if (!session || command.sequence !== session.last_sequence + 1) throw new Error('field_sync_out_of_order');
       if (at < (session.last_event_at as Date).getTime()) throw new Error('field_device_clock_reversed');
-      const cutoff = (session.punched_in_at as Date).getTime() + MAX_FIELD_SHIFT_MS;
-      const autoClosed = session.status === 'off_duty' && (session.punched_out_at as Date)?.getTime() === cutoff;
       // Um stop repetido avança a fila, mas nunca estende/reabre o intervalo já fechado.
       const repeatedStop = command.action === 'punch_out' && session.status === 'off_duty' && !!session.punched_out_at;
-      if (at >= cutoff && command.action !== 'punch_out') throw new Error('field_outside_work_session');
-      const next = autoClosed || repeatedStop ? 'off_duty'
+      const next = repeatedStop ? 'off_duty'
         : transitionAttendance(session.status as WorkStatus, command.action);
       const effectiveAt = repeatedStop ? (session.punched_out_at as Date).toISOString()
-        : command.action === 'punch_out' && at > cutoff ? new Date(cutoff).toISOString() : command.captured_at;
+        : command.captured_at;
       await db.query(`update public.field_sales_sessions set status=$3,last_event_at=$4,last_sequence=$5,
         punched_out_at=case when $6::boolean then punched_out_at when $3='off_duty' then $4::timestamptz else null end where organization_id=$1 and id=$2`,
-      [org, command.session_id, next, repeatedStop ? command.captured_at : effectiveAt, command.sequence, autoClosed || repeatedStop]);
+      [org, command.session_id, next, repeatedStop ? command.captured_at : effectiveAt, command.sequence, repeatedStop]);
       if (next === 'off_duty') {
         // An offline stop can arrive after newer samples: remove those outside its work interval.
         await db.query('delete from public.field_sales_locations where organization_id=$1 and session_id=$2 and captured_at >= $3', [org, command.session_id, effectiveAt]);

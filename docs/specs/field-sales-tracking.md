@@ -71,9 +71,11 @@ clearer satellite view; the map must not snap a fix to a shop or building withou
   service and elapsed work time. Today's scheduled projects are shown first; another assigned
   project can be chosen and the override is audited. Project selection
   can be changed while the work session remains open.
-- Punch-out stops GPS immediately. Both the Android app and a server cron close a forgotten
-  session at exactly 14 hours. Late GPS is rejected, while events captured before the cutoff
-  can replay after an offline period. The pairing code still expires after five minutes; the
+- Punch-out stops GPS immediately. A 14-hour Android reminder asks the officer to punch out
+  if work is complete or contact a manager. It never closes the shift. Managers and admins can
+  review an overdue shift, contact the officer, end it from Daily attendance, and make an audited
+  working-hours correction for a closed shift. Original punches and GPS remain unchanged.
+  A remotely ended shift stops phone tracking on its next successful sync. The pairing code still expires after five minutes; the
   redeemed device credential now lasts until explicit sign-out or administrator revocation.
 - Migration 0381 and the corresponding app and scheduler images must be deployed together.
   This section describes the contract, not proof of a completed CT102 rollout.

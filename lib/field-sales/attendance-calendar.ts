@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import { z } from 'zod';
-import { fieldAudit, fieldTransaction, requireFieldEmployee } from './authority';
+import { fieldAudit, fieldTransaction, requireFieldEmployee, requireFieldScope } from './authority';
 import { localDateSchema, organizationRegion } from './contracts';
 import { addCalendarDays, localParts, wallTimeToUtc } from './schedule';
 import { dailyAttendance } from './attendance-report';
@@ -50,7 +50,15 @@ export async function readAttendanceDay(pool: Pick<pg.Pool, 'connect'>, org: str
     ) sampled order by employee_id,session_id,captured_at limit 30001`, [org, ids, start, end])).rows;
     if (points.length > 30000) throw new Error('field_operations_too_large');
     const observedAt = new Date();
+    const overdue = role === 'manager' || role === 'admin' ? (await db.query(`select s.id as session_id,s.employee_id,e.display_name,s.punched_in_at
+      from public.field_sales_sessions s join public.field_sales_employees e
+        on e.organization_id=s.organization_id and e.user_id=s.employee_id
+      where s.organization_id=$1 and s.punched_out_at is null
+        and s.punched_in_at<=clock_timestamp()-interval '14 hours'
+      order by s.punched_in_at,s.id limit 201`, [org])).rows : [];
+    if (overdue.length > 200) throw new Error('field_operations_too_large');
     return { date, timezone: region.data.timezone, generated_at: observedAt.toISOString(), role,
+      overdue,
       rows: dailyAttendance(date, region.data.timezone, observedAt, visible, sessions, events, leaves, points, quality) };
   });
 }
@@ -156,5 +164,69 @@ export async function manageAttendanceLeave(pool: Pick<pg.Pool, 'connect'>, org:
     }
     await fieldAudit(db, org, actor, 'field_sales.' + input.operation, input.employee_id, { date: input.date });
     return { saved: true };
+  });
+}
+
+const managerShiftCommand = z.discriminatedUnion('operation', [
+  z.strictObject({ operation: z.literal('close_shift'), session_id: z.uuid(), reason: z.string().trim().min(5).max(2000) }),
+  z.strictObject({ operation: z.literal('correct_shift'), id: z.uuid(), session_id: z.uuid(),
+    proposed_in: z.iso.datetime({ offset: true }), proposed_out: z.iso.datetime({ offset: true }),
+    reason: z.string().trim().min(5).max(2000) }),
+]);
+
+/** Manager decisions are audited; corrections affect reports, never original punches or GPS. */
+export async function manageAttendanceShift(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, raw: unknown) {
+  const input = managerShiftCommand.parse(raw);
+  return fieldTransaction(pool, org, actor, async (db, role) => {
+    if (role !== 'manager' && role !== 'admin') throw new Error('field_forbidden');
+    const target = (await db.query('select employee_id from public.field_sales_sessions where organization_id=$1 and id=$2',
+      [org, input.session_id])).rows[0];
+    if (!target || target.employee_id === actor) throw new Error('field_forbidden');
+    await requireFieldScope(db, org, actor, role, target.employee_id, true);
+    await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`field-session:${org}:${target.employee_id}`]);
+    const session = (await db.query(`select employee_id,punched_in_at,punched_out_at,last_event_at from public.field_sales_sessions
+      where organization_id=$1 and id=$2 for update`, [org, input.session_id])).rows[0];
+    if (!session || session.employee_id !== target.employee_id) throw new Error('field_revision_conflict');
+    if (input.operation === 'close_shift') {
+      if (session.punched_out_at) return { saved: true, replayed: true, punched_out_at: (session.punched_out_at as Date).toISOString() };
+      const now = (await db.query('select clock_timestamp() as at')).rows[0].at as Date;
+      if (now <= session.punched_in_at) throw new Error('field_revision_conflict');
+      await db.query(`update public.field_sales_sessions set status='off_duty',punched_out_at=$3
+        where organization_id=$1 and id=$2 and punched_out_at is null`, [org, input.session_id, now]);
+      await db.query(`delete from public.field_sales_locations where organization_id=$1 and session_id=$2 and captured_at >= $3`,
+        [org, input.session_id, now]);
+      await fieldAudit(db, org, actor, 'field_sales.manager_close_shift', input.session_id, { reason: input.reason });
+      return { saved: true, punched_out_at: now.toISOString() };
+    }
+    if (!session.punched_out_at) throw new Error('field_closed_session_required');
+    const start = Date.parse(input.proposed_in), end = Date.parse(input.proposed_out);
+    const now = (await db.query('select clock_timestamp() as at')).rows[0].at as Date;
+    if (start >= end || end > now.getTime() || start < 0) throw new Error('field_invalid_correction');
+    const existing = (await db.query('select * from public.field_sales_corrections where organization_id=$1 and id=$2 for update',
+      [org, input.id])).rows[0];
+    if (existing) {
+      if (existing.session_id !== input.session_id || existing.employee_id !== target.employee_id ||
+        existing.reason !== input.reason || existing.proposed_in.getTime() !== start || existing.proposed_out.getTime() !== end)
+        throw new Error('field_idempotency_conflict');
+      return { saved: true, replayed: true };
+    }
+    const pending = await db.query(`select 1 from public.field_sales_corrections
+      where organization_id=$1 and session_id=$2 and status='pending' limit 1`, [org, input.session_id]);
+    if (pending.rowCount) throw new Error('field_revision_conflict');
+    const overlap = await db.query(`select 1 from public.field_sales_sessions s
+      left join lateral(select c.proposed_in,c.proposed_out from public.field_sales_corrections c
+        where c.organization_id=s.organization_id and c.session_id=s.id and c.status='approved'
+        order by c.reviewed_at desc,c.id desc limit 1)c on true
+      where s.organization_id=$1 and s.employee_id=$2 and s.id<>$3
+        and coalesce(c.proposed_in,s.punched_in_at)<$5::timestamptz
+        and coalesce(c.proposed_out,s.punched_out_at,clock_timestamp())>$4::timestamptz limit 1`,
+    [org, target.employee_id, input.session_id, input.proposed_in, input.proposed_out]);
+    if (overlap.rowCount) throw new Error('field_session_overlap');
+    await db.query(`insert into public.field_sales_corrections
+      (organization_id,id,employee_id,session_id,proposed_in,proposed_out,reason,status,reviewed_by,review_note,reviewed_at)
+      values($1,$2,$3,$4,$5,$6,$7,'approved',$8,'Manager verified working hours',clock_timestamp())`,
+    [org, input.id, target.employee_id, input.session_id, input.proposed_in, input.proposed_out, input.reason, actor]);
+    await fieldAudit(db, org, actor, 'field_sales.manager_correct_shift', input.session_id, { reason: input.reason, correction_id: input.id });
+    return { saved: true, replayed: false };
   });
 }

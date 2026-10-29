@@ -46,13 +46,12 @@ public final class TrackingService extends Service implements LocationListener {
         JSONObject snapshot = state.optJSONObject("snapshot");
         JSONObject policy = snapshot == null ? null : snapshot.optJSONObject("settings");
         long start = state.optLong("session_start_ms", 0);
-        return start > 0 && System.currentTimeMillis() < start + Attendance.MAX_SHIFT_MS
+        return start > 0
             && WorkState.mayCollect(state.optString("status"), state.optBoolean("access_denied"), policy != null && policy.optBoolean("enabled"));
     }
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable sync = new Runnable() {
         public void run() {
-            try { Attendance.autoPunchOut(TrackingService.this); } catch (Exception ignored) { stopSelf(); }
             SyncEngine.sync(TrackingService.this, null); handler.postDelayed(this, 60000);
             try {
                 JSONObject state = SecureState.read(TrackingService.this);
@@ -70,10 +69,9 @@ public final class TrackingService extends Service implements LocationListener {
             } catch (Exception ignored) { }
         }
     };
-    private final Runnable cutoff = new Runnable() {
+    private final Runnable reminder = new Runnable() {
         public void run() {
-            stopSelf();
-            try { Attendance.autoPunchOut(TrackingService.this); } catch (Exception ignored) { }
+            try { ShiftReminder.notifyIfDue(TrackingService.this); } catch (Exception ignored) { }
         }
     };
     @Override public IBinder onBind(Intent intent) { return null; }
@@ -85,8 +83,6 @@ public final class TrackingService extends Service implements LocationListener {
         }
         try {
             JSONObject state = SecureState.read(this);
-            Attendance.autoPunchOut(this);
-            state = SecureState.read(this);
             if (!mayCollect(state)) { stopSelf(); return START_NOT_STICKY; }
             updatePolicy(state);
             if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
@@ -104,8 +100,10 @@ public final class TrackingService extends Service implements LocationListener {
             running = true;
             requestUpdates();
             SecureState.mutate(this, current -> current.remove("tracking_error"));
-            handler.removeCallbacks(cutoff);
-            handler.postDelayed(cutoff, Math.max(0, state.optLong("session_start_ms") + Attendance.MAX_SHIFT_MS - System.currentTimeMillis()));
+            handler.removeCallbacks(reminder);
+            long reminderAt = state.optLong("session_start_ms") + Attendance.SHIFT_REMINDER_MS;
+            if (!state.optString("session_id").equals(state.optString("shift_reminder_sent_for_session")))
+                handler.postDelayed(reminder, Math.max(0, reminderAt - System.currentTimeMillis()));
             handler.removeCallbacks(sync); handler.post(sync);
         } catch (Exception error) {
             running = false;
@@ -188,7 +186,6 @@ public final class TrackingService extends Service implements LocationListener {
             SecureState.mutate(this, state -> {
                 if (!mayCollect(state)) { stopSelf(); return; }
                 if (location.getTime() < state.optLong("session_start_ms", Long.MAX_VALUE) ||
-                    location.getTime() >= state.optLong("session_start_ms") + Attendance.MAX_SHIFT_MS ||
                     location.getTime() > System.currentTimeMillis() + 60000L) return;
                 if (state.getJSONArray("points").length() >= 5000) throw new IllegalStateException("Offline storage limit reached. Sync before resuming.");
                 long sequence = state.optLong("point_sequence", -1) + 1;

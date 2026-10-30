@@ -96,6 +96,41 @@ test.afterAll(async () => {
   }
 });
 
+test('manager creates an active Promoter without a link and opens Android pairing', async ({ page }) => {
+  const workerEmail = `promoter-${randomUUID()}@synthetic.test`;
+  await pool.query("update user_organizations set role='manager' where organization_id=$1 and user_id=$2", [org, actor]);
+  try {
+    await page.goto('/login');
+    await page.locator('#email').fill(email);
+    await page.locator('#password').fill(password);
+    await page.getByRole('button', { name: /entrar|sign in/i }).click();
+    await page.waitForURL(/\/app(?:\/|$)/);
+    await page.goto('/app/field-sales');
+    await page.getByRole('tab', { name: 'Team', exact: true }).click();
+    await page.getByRole('button', { name: 'Create field worker' }).click();
+    const form = page.getByRole('dialog');
+    await form.getByLabel('Employee name').fill('Synthetic promoter');
+    await form.getByLabel('Employee email').fill(workerEmail);
+    await form.getByLabel('Field role').selectOption('promoter');
+    await form.getByRole('button', { name: 'Create and activate' }).click();
+    await expect(page.getByRole('dialog', { name: /Android access/ })).toBeVisible();
+    const membership = (await pool.query(`select m.user_id,m.role,m.accepted_at,e.active from user_organizations m
+      join field_sales_employees e on e.organization_id=m.organization_id and e.user_id=m.user_id
+      join auth.users u on u.id=m.user_id where m.organization_id=$1 and u.email=$2`, [org, workerEmail])).rows[0];
+    expect(membership).toMatchObject({ role: 'promoter', active: true });
+    expect(membership.accepted_at).not.toBeNull();
+    await page.getByRole('dialog', { name: /Android access/ }).getByPlaceholder('Work phone').fill('Synthetic phone');
+    await page.getByRole('dialog', { name: /Android access/ }).getByRole('button', { name: 'Create pairing code' }).click();
+    await expect(page.getByRole('textbox', { name: 'Pairing code' })).toHaveValue(/^\d{6}$/);
+    await pool.query('delete from field_sales_devices where organization_id=$1 and employee_id=$2', [org, membership.user_id]);
+    await pool.query('delete from field_sales_employees where organization_id=$1 and user_id=$2', [org, membership.user_id]);
+    await pool.query('delete from user_organizations where organization_id=$1 and user_id=$2', [org, membership.user_id]);
+    await admin.auth.admin.deleteUser(membership.user_id);
+  } finally {
+    await pool.query("update user_organizations set role='admin' where organization_id=$1 and user_id=$2", [org, actor]);
+  }
+});
+
 test('admin edits and removes a Field Sales officer from the compact Team list without deleting history', async ({ page }, testInfo) => {
   const teammate = randomUUID(), session = randomUUID();
   await pool.query('insert into auth.users(id,email) values($1,$2)', [teammate, `${teammate}@synthetic.test`]);
@@ -331,7 +366,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
     start_time: null, end_time: null, repeat: 'weekly', weekdays: [1, 6] });
 
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Create team member' })).toHaveAttribute('href', '/app/team/invite');
+  await expect(page.getByRole('button', { name: 'Create field worker' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Invite other role' })).toHaveAttribute('href', '/app/team/invite');
   await page.getByRole('button', { name: 'Manage projects' }).click();
   const projectManager = page.getByRole('dialog');
   await expect(projectManager.getByText('Synthetic showroom')).toBeVisible();

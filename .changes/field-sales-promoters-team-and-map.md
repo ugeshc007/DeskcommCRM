@@ -4,4 +4,4 @@ secao: adicionado
 titulo: Equipe de campo
 ---
 
-Promotores, convites e mapa maior.
+Promotores, criação direta pela Equipe e mapa maior.

@@ -63,7 +63,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [start, setStart] = useState(() => mondayOfWeek(new Date().toISOString().slice(0, 10)));
   const calendarInitialized = useRef(false);
   const [view, setView] = useState<'day' | 'week'>('week');
-  const [dialog, setDialog] = useState<'project' | 'schedule' | 'employee' | 'rename' | 'manage' | 'customers' | null>(null);
+  const [dialog, setDialog] = useState<'project' | 'schedule' | 'employee' | 'create_member' | 'rename' | 'manage' | 'customers' | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [removingEmployee, setRemovingEmployee] = useState<Employee | null>(null);
   const [deviceEmployee, setDeviceEmployee] = useState<Employee | null>(null);
@@ -203,6 +203,23 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
     } catch (failure) { setActivityExportError(failure instanceof Error ? failure.message : 'Unable to export report.'); }
     finally { setActivityExporting(false); }
   }
+  async function createFieldMember(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (busy) return;
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/v1/field-sales/members', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: String(form.get('email') ?? ''), full_name: String(form.get('name') ?? ''), role: String(form.get('role') ?? '') }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? 'Could not create the team member.');
+      await Promise.all([cache.invalidateQueries({ queryKey: ['field-sales', organizationId, userId] }),
+        cache.invalidateQueries({ queryKey: ['field-sales-members', organizationId, userId] })]);
+      setDialog(null);
+      setDeviceEmployee({ user_id: body.data.user_id, display_name: body.data.display_name, active: true, route_style_index: 0 });
+      toast.success('Team member is active. Create their Android pairing code now.');
+    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not create the team member.'); }
+    finally { setBusy(false); }
+  }
   return <main className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="mb-1 text-sm text-muted-foreground">CRM / Field operations</p>
@@ -268,7 +285,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               date={teamDate} loading={teamPresence.isPending} error={Boolean(teamPresence.error)}/>
             {manager && <Button className="mt-3" variant="outline" onClick={() => { setError(''); setCustomerProjectId(p.id); setDialog('customers'); }}>Manage shops and due</Button>}</article>)}</div>
         </TabsContent>
-        <TabsContent value="team" className="space-y-4">{manager && <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/app/team/invite"><Plus aria-hidden/>Create team member</Link></Button><Button variant="outline" onClick={() => setDialog('employee')}>Enroll salesperson</Button></div>}
+        <TabsContent value="team" className="space-y-4">{manager && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setError(''); setDialog('create_member'); }}><Plus aria-hidden/>Create field worker</Button><Button asChild variant="outline"><Link href="/app/team/invite">Invite other role</Link></Button><Button variant="outline" onClick={() => setDialog('employee')}>Enroll existing member</Button></div>}
           <p className="text-sm text-muted-foreground">Enrollment does not start tracking. Staff must punch in from their authorized Android app.</p>
           <section className="space-y-3" aria-label="Field officer attendance">
             <div><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
@@ -325,8 +342,15 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         </form></TabsContent>}
       </Tabs>
     </>}
-    <Dialog open={dialog !== null} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent className="max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>{dialog === 'project' ? 'New project' : dialog === 'employee' ? 'Enroll salesperson' : dialog === 'rename' ? 'Edit field officer name' : dialog === 'manage' ? `Projects for ${people.find(p => p.user_id === managedEmployeeId)?.display_name ?? 'field officer'}` : dialog === 'customers' ? `Shops · ${projects.find(p => p.id === customerProjectId)?.name ?? 'project'}` : 'Assign project'}</DialogTitle></DialogHeader>
+    <Dialog open={dialog !== null} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent className="max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>{dialog === 'project' ? 'New project' : dialog === 'employee' ? 'Enroll salesperson' : dialog === 'create_member' ? 'Create field worker' : dialog === 'rename' ? 'Edit field officer name' : dialog === 'manage' ? `Projects for ${people.find(p => p.user_id === managedEmployeeId)?.display_name ?? 'field officer'}` : dialog === 'customers' ? `Shops · ${projects.find(p => p.id === customerProjectId)?.name ?? 'project'}` : 'Assign project'}</DialogTitle></DialogHeader>
       {error && <p role="alert">{error}</p>}
+      {dialog === 'create_member' && <form className="space-y-4" onSubmit={event => void createFieldMember(event)}>
+        <p className="text-sm text-muted-foreground">Creates an active Field Officer or Promoter without an invitation link. Verify the employee’s identity before creating the account. The Android pairing screen opens next.</p>
+        <Field label="Employee name"><Input name="name" required maxLength={160} autoComplete="name"/></Field>
+        <Field label="Employee email"><Input name="email" type="email" required autoComplete="email"/></Field>
+        <Field label="Field role"><select name="role" className={selectClass} defaultValue="field_officer"><option value="field_officer">Field Officer</option><option value="promoter">Promoter</option></select></Field>
+        <Button disabled={busy}>Create and activate</Button>
+      </form>}
       {dialog === 'customers' && customerProjectId && <div className="space-y-4">
         <p className="text-sm text-muted-foreground">The optional due balance uses your CRM currency. A negative balance is advance credit. A new CSV import replaces balances for matching shop codes; past collection records remain unchanged.</p>
         {message && <p role="status" className="text-sm">{message}</p>}

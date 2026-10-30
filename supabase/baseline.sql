@@ -25270,10 +25270,10 @@ grant execute on function public.fn_provision_field_sales_session_projects() to 
 -- 0319: Field Officer remains below viewer in both API and SQL RBAC.
 alter table public.user_organizations drop constraint if exists user_organizations_role_check;
 alter table public.user_organizations add constraint user_organizations_role_check
-  check (role in ('field_officer','viewer','agent','manager','admin'));
+  check (role in ('field_officer','promoter','viewer','agent','manager','admin'));
 alter table public.team_invites drop constraint if exists team_invites_role_check;
 alter table public.team_invites add constraint team_invites_role_check
-  check (role in ('field_officer','viewer','agent','manager','admin'));
+  check (role in ('field_officer','promoter','viewer','agent','manager','admin'));
 alter table public.team_invites add column if not exists archived_at timestamptz;
 
 create or replace function public.fn_user_org_ids()
@@ -26136,13 +26136,6 @@ do $installed$ begin
 end $installed$;
 
 -- 0695: Promoters share the Field Sales scope, without inheriting broad tenant RLS.
-alter table public.user_organizations drop constraint if exists user_organizations_role_check;
-alter table public.user_organizations add constraint user_organizations_role_check
-  check (role in ('field_officer','promoter','viewer','agent','manager','admin'));
-alter table public.team_invites drop constraint if exists team_invites_role_check;
-alter table public.team_invites add constraint team_invites_role_check
-  check (role in ('field_officer','promoter','viewer','agent','manager','admin'));
-
 create or replace function public.fn_user_org_ids()
 returns setof uuid language sql stable security definer set search_path = public as $f$
  select organization_id from public.user_organizations

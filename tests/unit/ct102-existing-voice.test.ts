@@ -20,7 +20,8 @@ describe.skipIf(process.platform === 'win32')('CT102 app correction preserves th
       const qualityMigration = join(release, '20260924180000_0388_field_sales_location_quality.sql');
       const attendanceMigration = join(release, '20260925120000_0389_field_sales_attendance_leave.sql');
       const stylesMigration = join(release, '20261018035000_0694_field_sales_route_styles.sql');
-      for (const file of [...migrations, qualityMigration, attendanceMigration, stylesMigration, join(release, 'app-release.override.yml'), join(release, 'field-voice.override.yml')]) put(file, '');
+      const promoterMigration = join(release, '20261030100000_0695_promoter_role.sql');
+      for (const file of [...migrations, qualityMigration, attendanceMigration, stylesMigration, promoterMigration, join(release, 'app-release.override.yml'), join(release, 'field-voice.override.yml')]) put(file, '');
       put(join(release, 'deploy.sh'), readFileSync('ops/ct102/deploy.sh', 'utf8').replaceAll('/opt/deskcommcrm', root));
       put(join(root, 'hostgator-setup-kit/_common.sh'), 'enter_project() { :; }\nurl_do_schema() { printf synthetic; }\n');
       put(join(root, 'hostgator-setup-kit/backup.sh'), 'mkdir -p "$BACKUP_DIR"; printf synthetic > "$BACKUP_DIR/db-test.sql.gz"\n');
@@ -38,7 +39,7 @@ case "$*" in
   *"Health"*) printf healthy ;;
 esac
 `, true);
-      const result = spawnSync('bash', [join(release, 'deploy.sh'), app, revision, ...migrations, voice, 'reuse-existing', qualityMigration, attendanceMigration, stylesMigration],
+      const result = spawnSync('bash', [join(release, 'deploy.sh'), app, revision, ...migrations, voice, 'reuse-existing', qualityMigration, attendanceMigration, stylesMigration, promoterMigration],
         { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEST_ROOT: root }, encoding: 'utf8', timeout: 10000 });
       return { status: result.status, error: result.stderr, log: readFileSync(join(root, 'docker.log'), 'utf8') };
     } finally { rmSync(root, { recursive: true, force: true }); }
@@ -49,6 +50,7 @@ esac
     expect(result.log).toContain('up -d --no-deps app');
     expect(result.log).toContain('attendance-migration.sql');
     expect(result.log).toContain('route-styles-migration.sql');
+    expect(result.log).toContain('promoter-role-migration.sql');
     expect(result.log).not.toContain('up -d --no-deps field-voice');
     expect(result.log).not.toContain(`pull ${voice}`);
   });

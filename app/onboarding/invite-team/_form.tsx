@@ -21,12 +21,12 @@ import { ROTULO_DO_PAPEL } from "@/lib/auth/types";
 
 // The onboarding shortcut does not persist invite rows; Field Officer requires
 // the Team flow so a revoked manual link always has a durable denial record.
-const ONBOARDING_ROLES = ROLES.filter((r): r is Exclude<Role, "field_officer"> => r !== "field_officer");
+const ONBOARDING_ROLES = ROLES.filter((r): r is Exclude<Role, "field_officer" | "promoter"> => r !== "field_officer" && r !== "promoter");
 
 export function InviteTeamForm() {
   const t = useT();
   const [emailsRaw, setEmailsRaw] = useState("");
-  const [role, setRole] = useState<Exclude<Role, "field_officer">>("agent");
+  const [role, setRole] = useState<Exclude<Role, "field_officer" | "promoter">>("agent");
   const [undelivered, setUndelivered] = useState<{ email: string; accept_url: string }[]>([]);
   const [pending, startTransition] = useTransition();
 
@@ -87,7 +87,7 @@ export function InviteTeamForm() {
 
       <div className="space-y-2">
         <Label htmlFor="role">{t("O que essas pessoas podem fazer")}</Label>
-        <Select value={role} onValueChange={(v) => setRole(v as Exclude<Role, "field_officer">)}>
+        <Select value={role} onValueChange={(v) => setRole(v as Exclude<Role, "field_officer" | "promoter">)}>
           <SelectTrigger id="role">
             <SelectValue />
           </SelectTrigger>

@@ -170,7 +170,8 @@ describe('optional field-sales foundation', () => {
       expect((await db.query('select count(*)::int n from public.contacts where organization_id=$1', [f.org])).rows[0].n).toBe(0);
     } finally { await db.query('rollback'); db.release(); }
     await expect(issueOfficerDevice(pool, other.org, other.actor, officer, 'Officer', 'Samsung')).rejects.toThrow('field_forbidden');
-    await expect(issueOfficerDevice(pool, f.org, f.manager, officer, 'Officer', 'Samsung')).rejects.toThrow('field_forbidden');
+    const managerIssued = await issueOfficerDevice(pool, f.org, f.manager, officer, 'Officer', 'Samsung');
+    expect(managerIssued.code).toMatch(/^\d{6}$/);
     const issued = await issueOfficerDevice(pool, f.org, admin, officer, 'Officer', 'Samsung');
     expect(issued.code).toMatch(/^\d{6}$/);
     await expect(authenticateFieldDevice(pool, `Bearer ${issued.code}`)).rejects.toThrow('field_device_unauthorized');
@@ -178,10 +179,31 @@ describe('optional field-sales foundation', () => {
     const identity = await authenticateFieldDevice(pool, `Bearer ${paired.token}`);
     expect(identity).toMatchObject({ org: f.org, actor: officer });
     await expect(redeemFieldPairingCode(pool, issued.code)).rejects.toThrow('field_pairing_invalid');
-    expect(await officerDevices(pool, f.org, admin, officer)).toHaveLength(1);
+    expect(await officerDevices(pool, f.org, admin, officer)).toHaveLength(2);
     await expect(officerDevices(pool, other.org, other.actor, officer)).rejects.toThrow('field_forbidden');
     await revokeOfficerDevice(pool, f.org, admin, officer, issued.id);
     await expect(authenticateFieldDevice(pool, `Bearer ${paired.token}`)).rejects.toThrow('field_device_unauthorized');
+  });
+  it('keeps promoters below viewer while permitting their field attendance and manager pairing', async () => {
+    const f = await fixture(), promoter = randomUUID();
+    await pool.query('insert into auth.users(id,email) values($1,$2)', [promoter, `${promoter}@synthetic.test`]);
+    await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'promoter',now())", [promoter, f.org]);
+    await manageFieldSales(pool, f.org, f.manager, { operation: 'employee', user_id: promoter, display_name: 'Promoter', active: true });
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claim.sub',$1,true)", [promoter]);
+      expect((await db.query("select public.fn_role_at_least($1,'viewer') allowed", [f.org])).rows[0].allowed).toBe(false);
+      expect((await db.query('select public.fn_user_org_ids() as organization_id')).rows).toEqual([]);
+    } finally { await db.query('rollback'); db.release(); }
+    const issued = await issueOfficerDevice(pool, f.org, f.manager, promoter, 'Promoter', 'Android');
+    const paired = await redeemFieldPairingCode(pool, issued.code);
+    expect(await authenticateFieldDevice(pool, `Bearer ${paired.token}`)).toMatchObject({ org: f.org, actor: promoter });
+    await recordAttendance(pool, f.org, promoter, { event_id: randomUUID(), session_id: randomUUID(), action: 'punch_in',
+      sequence: 0, captured_at: f.start, local_date: f.localDate });
+    const day = await readAttendanceDay(pool, f.org, f.manager, f.localDate, promoter);
+    expect(day).toBeTruthy();
   });
   it('accepts ordered offline visits after punch-out, rejects off-duty and break captures', async () => {
     const f = await fixture(), a = await assignment(f), visit = randomUUID();

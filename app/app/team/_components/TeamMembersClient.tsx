@@ -113,13 +113,13 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                       <SelectContent>
                         {ROLES.map((r) => (
                           <SelectItem key={r} value={r}>
-                            {r === "field_officer" ? "Field Officer" : r}
+                            {r === "field_officer" ? "Field Officer" : r === "promoter" ? "Promoter" : r}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Badge variant="secondary">{m.role === "field_officer" ? "Field Officer" : m.role}</Badge>
+                    <Badge variant="secondary">{m.role === "field_officer" ? "Field Officer" : m.role === "promoter" ? "Promoter" : m.role}</Badge>
                   )}
                 </TableCell>
                 <TableCell>
@@ -171,7 +171,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                   <TableCell>
                     {m.user_id !== currentUserId ? (
                       <div className="flex items-center gap-2">
-                      {m.role === "field_officer" && !m.revoked_at && m.accepted_at && (
+                      {(m.role === "field_officer" || m.role === "promoter") && !m.revoked_at && m.accepted_at && (
                         <Button variant="outline" size="sm" onClick={() => setDeviceMember(m)}>Android keys</Button>
                       )}
                       <DropdownMenu>

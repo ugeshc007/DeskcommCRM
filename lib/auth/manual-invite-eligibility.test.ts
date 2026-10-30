@@ -41,5 +41,6 @@ describe("manual staff enrollment eligibility", () => {
   });
   it("permits a matching Field Officer invite", () => {
     expect(manualInviteEligible({ ...row, role: "field_officer" }, { ...payload, role: "field_officer" }, now)).toBe(true);
+    expect(manualInviteEligible({ ...row, role: "promoter" }, { ...payload, role: "promoter" }, now)).toBe(true);
   });
 });

@@ -45,9 +45,9 @@ export async function issueOfficerDevice(pool: Pick<pg.Pool, 'connect'>, org: st
   z.string().trim().min(1).max(160).parse(displayName);
   z.string().trim().min(1).max(100).parse(label);
   return fieldTransaction(pool, org, admin, async (db, role) => {
-    if (role !== 'admin') throw new Error('field_forbidden');
+    if (role !== 'manager' && role !== 'admin') throw new Error('field_forbidden');
     const member = await db.query(`select user_id from public.user_organizations where organization_id=$1
-      and user_id=$2 and role='field_officer' and accepted_at is not null and revoked_at is null for share`, [org, employee]);
+      and user_id=$2 and role in ('field_officer','promoter') and accepted_at is not null and revoked_at is null for share`, [org, employee]);
     if (!member.rowCount) throw new Error('field_employee_unavailable');
     await db.query(`insert into public.field_sales_employees(organization_id,user_id,display_name,active)
       values($1,$2,$3,true) on conflict(organization_id,user_id)
@@ -71,7 +71,7 @@ export async function redeemFieldPairingCode(pool: Pick<pg.Pool, 'connect'>, cod
       join public.user_organizations m on m.organization_id=d.organization_id and m.user_id=d.employee_id
       where d.pairing_code_hash=$1 and d.pairing_expires_at>now() and d.expires_at>now() and d.revoked_at is null
         and d.token_hash is null and e.active and m.accepted_at is not null and m.revoked_at is null
-        and m.role in ('field_officer','agent','manager','admin') for update of d`, [hash])).rows[0];
+        and m.role in ('field_officer','promoter','agent','manager','admin') for update of d`, [hash])).rows[0];
     if (!row) throw new Error('field_pairing_invalid');
     const token = 'fld_' + randomBytes(32).toString('hex');
     await db.query(`update public.field_sales_devices set token_hash=$1,pairing_code_hash=null,
@@ -87,9 +87,9 @@ export async function redeemFieldPairingCode(pool: Pick<pg.Pool, 'connect'>, cod
 export async function officerDevices(pool: Pick<pg.Pool, 'connect'>, org: string, admin: string, employee: string) {
   z.uuid().parse(employee);
   return fieldTransaction(pool, org, admin, async (db, role) => {
-    if (role !== 'admin') throw new Error('field_forbidden');
+    if (role !== 'manager' && role !== 'admin') throw new Error('field_forbidden');
     const member = await db.query(`select user_id from public.user_organizations where organization_id=$1
-      and user_id=$2 and role='field_officer' and accepted_at is not null and revoked_at is null for share`, [org, employee]);
+      and user_id=$2 and role in ('field_officer','promoter') and accepted_at is not null and revoked_at is null for share`, [org, employee]);
     if (!member.rowCount) throw new Error('field_employee_unavailable');
     return (await db.query(`select id,label,created_at,expires_at,revoked_at,
       (token_hash is not null) as paired from public.field_sales_devices
@@ -100,7 +100,7 @@ export async function officerDevices(pool: Pick<pg.Pool, 'connect'>, org: string
 export async function revokeOfficerDevice(pool: Pick<pg.Pool, 'connect'>, org: string, admin: string, employee: string, id: string) {
   z.uuid().parse(employee); z.uuid().parse(id);
   return fieldTransaction(pool, org, admin, async (db, role) => {
-    if (role !== 'admin') throw new Error('field_forbidden');
+    if (role !== 'manager' && role !== 'admin') throw new Error('field_forbidden');
     const row = await db.query(`update public.field_sales_devices set revoked_at=coalesce(revoked_at,now())
       where organization_id=$1 and employee_id=$2 and id=$3 returning id`, [org, employee, id]);
     if (!row.rowCount) throw new Error('field_forbidden');
@@ -117,7 +117,7 @@ export async function authenticateFieldDevice(pool: Pick<pg.Pool, 'query'>, auth
     where d.token_hash=$1 and d.revoked_at is null and (d.expires_at is null or d.expires_at>now())
     and e.organization_id=d.organization_id and e.user_id=d.employee_id and e.active
     and m.organization_id=d.organization_id and m.user_id=d.employee_id
-    and m.revoked_at is null and m.accepted_at is not null and m.role in ('field_officer','agent','manager','admin')
+    and m.revoked_at is null and m.accepted_at is not null and m.role in ('field_officer','promoter','agent','manager','admin')
     returning d.id,d.organization_id,d.employee_id`, [deviceTokenHash(token)])).rows[0];
   if (!row) throw new Error('field_device_unauthorized');
   return { deviceId: row.id as string, org: row.organization_id as string, actor: row.employee_id as string };

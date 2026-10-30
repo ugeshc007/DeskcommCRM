@@ -199,7 +199,7 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
     {!data.map?.map_tile_path && <p className="rounded-lg border p-3 text-sm">Basemap not configured. This view plots recorded coordinates only; it does not show roads. No external map tiles are requested.</p>}
     {problem && <p role="alert">{problem}</p>}
     {data.map?.map_tile_path && !mapReady && !problem && <p role="status">Loading self-hosted map…</p>}
-    <div ref={container} data-map-ready={mapReady} className={fullscreen ? 'relative z-0 min-h-0 flex-1 overflow-hidden rounded-xl border' : 'relative h-[420px] overflow-hidden rounded-xl border'} aria-label="Recorded employee positions and selected work route"/>
+    <div ref={container} data-map-ready={mapReady} className={fullscreen ? 'relative z-0 min-h-0 flex-1 overflow-hidden rounded-xl border' : 'relative h-[min(65dvh,600px)] min-h-[380px] overflow-hidden rounded-xl border'} aria-label="Recorded employee positions and selected work route"/>
     {(selectedEmployeeIds?.length ? data.latest.filter(person => selectedEmployeeIds.includes(person.employee_id)) : routePerson ? [routePerson] : []).length > 0 && <div className="flex flex-wrap gap-1 text-sm" aria-label="Officer route colors">{(selectedEmployeeIds?.length ? data.latest.filter(person => selectedEmployeeIds.includes(person.employee_id)) : routePerson ? [routePerson] : []).map(person => <button key={person.employee_id} type="button" aria-label={`Route color for ${person.display_name}`} aria-pressed={focusedRoute === person.employee_id}
       onClick={() => focusRoute(focusedRoute === person.employee_id ? '' : person.employee_id)}
       className="flex items-center gap-2 rounded-md border px-2 py-1 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-primary/10">
@@ -232,17 +232,6 @@ export function FieldOperations({ organizationId, userId, date, onOpenRoute }: {
     } });
   const data = query.data;
   const time = (value: string | null) => value && data ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: data.region.timezone }).format(new Date(value)) : '—';
-  async function exportReport() {
-    if (busy) return; setBusy(true); setError('');
-    try {
-      const response = await fetch(`/api/v1/field-sales/operations?date=${date}&report=daily`, { cache: 'no-store' });
-      const body = await response.json(); if (!response.ok) throw new Error(body.error?.message ?? 'Unable to export report.');
-      const url = URL.createObjectURL(new Blob([body.data.csv], { type: 'text/csv;charset=utf-8' }));
-      const link = document.createElement('a'); link.href = url; link.download = body.data.filename; link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to export report.'); }
-    finally { setBusy(false); }
-  }
   async function submit(command: unknown, endpoint = '/api/v1/field-sales/operations') {
     if (busy) return; setBusy(true); setError('');
     try {
@@ -252,12 +241,10 @@ export function FieldOperations({ organizationId, userId, date, onOpenRoute }: {
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to save.'); }
     finally { setBusy(false); }
   }
-  return <section className="space-y-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Live team view · {date}</h2><p className="text-sm text-muted-foreground">Positions refresh every 15 seconds. Select a salesperson on the map to open their complete recorded route for this date.</p></div><Button variant="outline" onClick={() => void query.refetch()}>Refresh</Button></div>
+  return <section className="space-y-4">
     {(error || query.error || (showRouteHistory && routeHistory.error)) && <p role="alert">{error || query.error?.message || routeHistory.error?.message}</p>}
     {query.isPending && <p role="status">Loading authorized field activity…</p>}
     {data && <>
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-semibold">Daily attendance and visit report</h2><p className="text-sm text-muted-foreground">Includes breaks; not a payroll calculation. GPS coordinates and visit notes are excluded.</p></div><Button variant="outline" disabled={busy} onClick={() => void exportReport()}>Export daily CSV</Button></section>
       <label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-medium"><input type="checkbox" checked={showRouteHistory} onChange={event => setShowRouteHistory(event.target.checked)}/>Route history · show all employees&apos; travel paths</label>
       {showRouteHistory && routeHistory.isPending && <p role="status">Loading route history for all employees…</p>}
       {showRouteHistory && routeHistory.data && <p className="text-xs text-muted-foreground">Recorded GPS for {date}; each employee has a distinct color. Gaps and uncertain fixes are not joined. Routes are available only within the location retention period.</p>}

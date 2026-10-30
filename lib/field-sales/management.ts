@@ -42,7 +42,7 @@ export const fieldManagementSchema = z.discriminatedUnion('operation', [
 export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, raw: unknown) {
   const input = fieldManagementSchema.parse(raw);
   return fieldTransaction(pool, org, actor, async (db, role) => {
-    if (role === 'agent' || role === 'field_officer') throw new Error('field_forbidden');
+    if (role !== 'manager' && role !== 'admin') throw new Error('field_forbidden');
     // Serializes schedule changes for conflict/revision checks. Does not lock GPS ingestion.
     await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`field-calendar:${org}`]);
     let result: { id?: string; revision?: number } = {};
@@ -71,11 +71,12 @@ export async function manageFieldSales(pool: Pick<pg.Pool, 'connect'>, org: stri
         input.plausible_speed_m_s ?? old?.plausible_speed_m_s ?? 55]);
       result = { revision: input.revision + 1 };
     } else if (input.operation === 'employee') {
-      if (role !== 'admin') throw new Error('field_forbidden');
+      if (role !== 'manager' && role !== 'admin') throw new Error('field_forbidden');
       const member = await db.query(`select user_id from public.user_organizations where organization_id=$1
-        and user_id=$2 and accepted_at is not null and revoked_at is null and role in ('field_officer','agent','manager','admin') for share`, [org, input.user_id]);
+        and user_id=$2 and accepted_at is not null and revoked_at is null and role in ('field_officer','promoter','agent','manager','admin') for share`, [org, input.user_id]);
       if (!member.rowCount) throw new Error('field_employee_unavailable');
       if (!input.active) {
+        if (role !== 'admin') throw new Error('field_forbidden');
         const enrolled = await db.query(`select user_id from public.field_sales_employees
           where organization_id=$1 and user_id=$2 and active for update`, [org, input.user_id]);
         if (!enrolled.rowCount) throw new Error('field_employee_unavailable');

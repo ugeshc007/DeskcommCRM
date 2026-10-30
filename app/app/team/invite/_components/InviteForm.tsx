@@ -105,7 +105,7 @@ export function InviteForm() {
             <SelectContent>
               {ROLES.map((r) => (
                 <SelectItem key={r} value={r}>
-                  {r === "field_officer" ? "Field Officer" : r}
+                  {r === "field_officer" ? "Field Officer" : r === "promoter" ? "Promoter" : r}
                 </SelectItem>
               ))}
             </SelectContent>

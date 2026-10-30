@@ -27,7 +27,7 @@ type Occurrence = { occurrence_key: string; employee_id: string; date: string; s
   employee_name: string; project_name: string; site_name: string; revision: number; schedule: FieldSchedule; timezone: string; untimed: boolean };
 type Assignment = { id: string; employee_id: string; project_id: string; project_name: string; employee_name: string;
   revision: number; schedule: FieldSchedule };
-type CalendarData = { installed: boolean; role?: 'field_officer' | 'agent' | 'manager' | 'admin';
+type CalendarData = { installed: boolean; role?: 'field_officer' | 'promoter' | 'agent' | 'manager' | 'admin';
   region?: { country_code: string; timezone: string } | null;
   settings?: { revision: number; enabled: boolean; retention_days: number; notice_text: string;
     moving_interval_ms: number; stationary_interval_ms: number; position_accuracy_m: number;
@@ -77,6 +77,8 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [activeTab, setActiveTab] = useState('calendar');
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('all');
   const [activityDate, setActivityDate] = useState('');
+  const [activityExporting, setActivityExporting] = useState(false);
+  const [activityExportError, setActivityExportError] = useState('');
   const [routeSelection, setRouteSelection] = useState<{ employeeId: string; date: string } | null>(null);
   const [routeExpanded, setRouteExpanded] = useState(false);
   const [routeMapExpanded, setRouteMapExpanded] = useState(false);
@@ -86,7 +88,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const end = addCalendarDays(start, view === 'week' ? 6 : 0);
   const query = useQuery({ queryKey: ['field-sales', organizationId, userId, start, end], queryFn: () => readJson<CalendarData>(`/api/v1/field-sales?from=${start}&through=${end}`), gcTime: 0 });
   const data = query.data;
-  const members = useQuery({ queryKey: ['field-sales-members', organizationId, userId], queryFn: () => readJson<Member[]>('/api/v1/team/assignable'), enabled: data?.role === 'admin', gcTime: 0 });
+  const members = useQuery({ queryKey: ['field-sales-members', organizationId, userId], queryFn: () => readJson<Member[]>('/api/v1/team/assignable'), enabled: data?.role === 'admin' || data?.role === 'manager', gcTime: 0 });
   const manager = data?.role === 'admin' || data?.role === 'manager';
   const administrator = data?.role === 'admin';
   const timezone = data?.region?.timezone;
@@ -110,7 +112,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   }, [timezone]);
   const days = Array.from({ length: view === 'week' ? 7 : 1 }, (_, i) => addCalendarDays(start, i));
   const people = data?.employees ?? [], projects = data?.projects ?? [];
-  const fieldOfficerIds = new Set((members.data ?? []).filter(member => member.role === 'field_officer').map(member => member.user_id));
+  const fieldWorkerIds = new Set((members.data ?? []).filter(member => member.role === 'field_officer' || member.role === 'promoter').map(member => member.user_id));
   const onlineEmployeeIds = new Set(teamPresence.data?.latest.filter(person => person.online).map(person => person.employee_id) ?? []);
   const teamPeople = people.filter(person => person.active).sort((a, b) => Number(onlineEmployeeIds.has(b.user_id)) - Number(onlineEmployeeIds.has(a.user_id))
     || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' }) || a.user_id.localeCompare(b.user_id));
@@ -188,6 +190,19 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Shops could not be saved.'); }
     finally { setBusy(false); }
   }
+  async function exportDailyActivity() {
+    if (activityExporting) return;
+    setActivityExporting(true); setActivityExportError('');
+    try {
+      const response = await fetch(`/api/v1/field-sales/operations?date=${activityDate || teamDate}&report=daily`, { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? 'Unable to export report.');
+      const url = URL.createObjectURL(new Blob([body.data.csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = body.data.filename; link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (failure) { setActivityExportError(failure instanceof Error ? failure.message : 'Unable to export report.'); }
+    finally { setActivityExporting(false); }
+  }
   return <main className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><p className="mb-1 text-sm text-muted-foreground">CRM / Field operations</p>
@@ -211,9 +226,13 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       </section>
       {!timezone && <p role="alert" className="rounded-lg border p-4">Configure the organization country and time zone before scheduling.</p>}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger><TabsTrigger value="attendance" onClick={() => setAttendanceEmployeeId('all')}>Attendance</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 pr-2">
+          <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="calendar">Calendar</TabsTrigger><TabsTrigger value="activity">Live view</TabsTrigger><TabsTrigger value="projects">Projects</TabsTrigger><TabsTrigger value="team">Team</TabsTrigger><TabsTrigger value="attendance" onClick={() => setAttendanceEmployeeId('all')}>Attendance</TabsTrigger>{administrator && <TabsTrigger value="policy">Tracking policy</TabsTrigger>}</TabsList>
+          {activeTab === 'activity' && <div className="flex flex-wrap gap-2 py-1"><Button variant="outline" size="sm" onClick={() => { void cache.invalidateQueries({ queryKey: ['field-operations', organizationId, userId] }); void cache.invalidateQueries({ queryKey: ['field-operations-all-routes', organizationId, userId] }); }}>Refresh</Button><Button variant="outline" size="sm" disabled={activityExporting} onClick={() => void exportDailyActivity()}>Export daily CSV</Button></div>}
+        </div>
         <TabsContent value="attendance"><AttendanceView organizationId={organizationId} userId={userId} initialDate={teamDate} selectedEmployeeId={attendanceEmployeeId} onSelectEmployee={setAttendanceEmployeeId}/></TabsContent>
         <TabsContent value="activity" className="space-y-4">
+          {activityExportError && <p role="alert">{activityExportError}</p>}
           <div className="flex flex-wrap items-end gap-3"><Field label="Activity date"><Input type="date" value={activityDate || teamDate} onChange={event => { if (event.target.value) setActivityDate(event.target.value); }}/></Field>
             <Button variant="outline" onClick={() => setActivityDate('')}>Today</Button></div>
           <FieldOperations organizationId={organizationId} userId={userId} date={activityDate || teamDate} onOpenRoute={employeeId => setRouteSelection({ employeeId, date: activityDate || teamDate })}/>
@@ -249,7 +268,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               date={teamDate} loading={teamPresence.isPending} error={Boolean(teamPresence.error)}/>
             {manager && <Button className="mt-3" variant="outline" onClick={() => { setError(''); setCustomerProjectId(p.id); setDialog('customers'); }}>Manage shops and due</Button>}</article>)}</div>
         </TabsContent>
-        <TabsContent value="team" className="space-y-4">{administrator && <Button variant="outline" onClick={() => setDialog('employee')}><Plus aria-hidden/>Enroll salesperson</Button>}
+        <TabsContent value="team" className="space-y-4">{manager && <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/app/team/invite"><Plus aria-hidden/>Create team member</Link></Button><Button variant="outline" onClick={() => setDialog('employee')}>Enroll salesperson</Button></div>}
           <p className="text-sm text-muted-foreground">Enrollment does not start tracking. Staff must punch in from their authorized Android app.</p>
           <section className="space-y-3" aria-label="Field officer attendance">
             <div><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
@@ -274,7 +293,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
                   {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
                   <Button variant="outline" onClick={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</Button>
                   {manager && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setEditingEmployee(person); setDialog('rename'); }}>Edit name</Button>}
-                  {administrator && fieldOfficerIds.has(person.user_id) && <Button variant="outline" onClick={() => setDeviceEmployee(person)}>Android keys</Button>}
+                  {manager && fieldWorkerIds.has(person.user_id) && <Button variant="outline" onClick={() => setDeviceEmployee(person)}>Android keys</Button>}
                   {administrator && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setRemovingEmployee(person); }}>Remove</Button>}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>

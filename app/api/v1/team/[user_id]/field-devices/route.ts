@@ -12,7 +12,7 @@ const headers = { 'Cache-Control': 'private, no-store' };
 type Context = { params: Promise<{ user_id: string }> };
 
 export async function GET(_req: Request, ctx: Context) {
-  const auth = await requireRole('admin'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('manager'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Device keys require your own organization account.', 403);
   try { return ok(await officerDevices(getRequestPool(), auth.org.orgId, auth.user.id, (await ctx.params).user_id), { headers }); }
   catch (error) { return fieldError(error); }
@@ -20,7 +20,7 @@ export async function GET(_req: Request, ctx: Context) {
 
 export async function POST(req: Request, ctx: Context) {
   const denied = await requireSupportWrite(); if (denied) return denied;
-  const auth = await requireRole('admin'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('manager'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Device keys require your own organization account.', 403);
   try {
     const input = z.strictObject({ label: z.string().trim().min(1).max(100), display_name: z.string().trim().min(1).max(160) }).parse(await readIntegrationJson(req));
@@ -30,7 +30,7 @@ export async function POST(req: Request, ctx: Context) {
 
 export async function DELETE(req: Request, ctx: Context) {
   const denied = await requireSupportWrite(); if (denied) return denied;
-  const auth = await requireRole('admin'); if (!auth.ok) return auth.response;
+  const auth = await requireRole('manager'); if (!auth.ok) return auth.response;
   if (auth.user.support) return fail('forbidden', 'Device keys require your own organization account.', 403);
   try {
     const input = z.strictObject({ id: z.uuid() }).parse(await readIntegrationJson(req));

@@ -32,7 +32,7 @@ it("replay usa identidade/prazo estáveis e não reenvia", async () => {
   expect(h.send).not.toHaveBeenCalled();
   expect(h.audit).not.toHaveBeenCalled();
 });
-it.each(["field_officer", "viewer", "agent", "manager", "admin"] as const)(
+it.each(["field_officer", "promoter", "viewer", "agent", "manager", "admin"] as const)(
   "issues every %s invitation for the same 24-hour window",
   async (role) => {
     const issuedAt = Math.floor(Date.now() / 1000);

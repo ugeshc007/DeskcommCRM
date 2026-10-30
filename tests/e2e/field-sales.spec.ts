@@ -29,6 +29,7 @@ test.beforeAll(async () => {
   await pool.query(readFileSync('supabase/migrations/20260924180000_0388_field_sales_location_quality.sql', 'utf8'));
   await pool.query(readFileSync('supabase/migrations/20260925120000_0389_field_sales_attendance_leave.sql', 'utf8'));
   await pool.query(readFileSync('supabase/migrations/20261018035000_0694_field_sales_route_styles.sql', 'utf8'));
+  await pool.query(readFileSync('supabase/migrations/20261030100000_0695_promoter_role.sql', 'utf8'));
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: 'Synthetic field administrator' } });
   if (created.error || !created.data.user) throw new Error('Synthetic field account creation failed');
   actor = created.data.user.id;
@@ -223,6 +224,8 @@ test('organization region and shop template are usable in the manager UI', async
   await page.screenshot({ path: testInfo.outputPath('shops-and-due.png'), fullPage: true });
   await shops.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+  await expect(page.getByText('Daily attendance and visit report')).toHaveCount(0);
   await expect(page.getByText('Configure country and time zone in the CRM organization settings first.')).toHaveCount(0);
   await expect(page.getByText('Live team view', { exact: false })).toBeVisible();
 });
@@ -328,6 +331,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
     start_time: null, end_time: null, repeat: 'weekly', weekdays: [1, 6] });
 
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Create team member' })).toHaveAttribute('href', '/app/team/invite');
   await page.getByRole('button', { name: 'Manage projects' }).click();
   const projectManager = page.getByRole('dialog');
   await expect(projectManager.getByText('Synthetic showroom')).toBeVisible();

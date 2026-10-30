@@ -262,7 +262,7 @@ test('organization region and shop template are usable in the manager UI', async
   await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
   await expect(page.getByText('Daily attendance and visit report')).toHaveCount(0);
   await expect(page.getByText('Configure country and time zone in the CRM organization settings first.')).toHaveCount(0);
-  await expect(page.getByText('Live team view', { exact: false })).toBeVisible();
+  await expect(page.getByText('Live team view', { exact: false })).toHaveCount(0);
 });
 
 test('weekly project assignment, scoped activity and narrow-screen layout', async ({ page }, testInfo) => {

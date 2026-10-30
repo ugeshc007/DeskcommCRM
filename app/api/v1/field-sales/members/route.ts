@@ -9,6 +9,8 @@ import { isExistingAccountError } from '@/lib/auth/existing-account-error';
 import { assertSaasCapacity, SaasCapacityError } from '@/lib/saas/capacity';
 import { audit, hashEmail } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import { getRequestPool } from '@/lib/agent-engine/db/request-pool';
+import { manageFieldSales } from '@/lib/field-sales/management';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,10 +60,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     await rollback();
     return fail('internal_error', 'Could not activate the team member.', 500, { requestId });
   }
-  const employee = await admin.from('field_sales_employees').insert({
-    organization_id: org.orgId, user_id: newUserId, display_name: fullName, active: true,
-  });
-  if (employee.error) {
+  try {
+    await manageFieldSales(getRequestPool(), org.orgId, user.id, {
+      operation: 'employee', user_id: newUserId, display_name: fullName, active: true,
+    });
+  } catch (error) {
+    logger.error('field member enrollment failed', { organization_id: org.orgId,
+      user_id: newUserId, error: error instanceof Error ? error.message : 'unknown' });
     await rollback();
     return fail('internal_error', 'Could not enroll the team member in Field Sales.', 500, { requestId });
   }

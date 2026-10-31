@@ -20,7 +20,8 @@
  * esperado é o português — o espanhol é coberto por i18n-espanhol-cobre-a-tela.
  */
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 
 import { MessageBubble } from "./MessageBubble";
 import type { Message } from "@/lib/types/messaging";

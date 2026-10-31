@@ -8,6 +8,22 @@ está documentado no fim.
 
 ## 1. O comando
 
+Para uma release versionada **numa instalação com checkout Git**, prefira o comando guardado, que exige backup, aplica migrations,
+executa o smoke e volta o aplicativo para a versão anterior se a validação falhar:
+
+```bash
+cd /var/www/crm
+bash hostgator-setup-kit/release-safe.sh --to vX.Y.Z
+```
+
+O `postgres:17-alpine` é puxado antes da troca e fica no cache local como ferramenta de
+backup/migration. O script não restaura banco automaticamente: DDL aditiva deve ser
+retrocompatível e o dump é preservado para uma restauração humana deliberada.
+CT102 atualmente é um snapshot sem `.git` com override próprio; **não rode este comando lá**
+até existir um adaptador por digest testado para essa topologia.
+
+O comando Compose abaixo continua sendo a operação de baixo nível para recriar somente o app.
+
 ```bash
 cd /var/www/crm
 docker compose -f docker-compose.prod.yml -f docker-compose.traefik.yml --env-file .env up -d app

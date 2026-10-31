@@ -13,7 +13,8 @@
  * Achado de @KIRAzinx566, com um cliente real travado nessa tela.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import userEvent from "@testing-library/user-event";
 
 import { SignupForm } from "@/components/auth/SignupForm";
@@ -90,6 +91,19 @@ describe("cadastro quando o provedor já abriu a sessão", () => {
 
     const link = await screen.findByRole("link", { name: /entrar e continuar/i });
     expect(link.getAttribute("href")).toBe("/login?next=%2Fget-started");
+    expect(screen.queryByText(/Tente novamente/i)).toBeNull();
+  });
+
+  it("convite para e-mail existente oferece login e preserva o aceite", async () => {
+    signUp.mockResolvedValue({ ok: false, error: "conta_ja_existe" });
+    render(<SignupForm convite={{ token: "tok-123", email: "convidado@plata.test" }} />);
+    await preencherEEnviar(false);
+
+    expect(await screen.findByText(/já tem uma conta com este e-mail/i)).toBeTruthy();
+    const link = screen.getByRole("link", { name: /entrar e aceitar o convite/i });
+    expect(link.getAttribute("href")).toBe(
+      "/login?next=%2Fteam%2Faccept-invite%2Ftok-123",
+    );
     expect(screen.queryByText(/Tente novamente/i)).toBeNull();
   });
 });

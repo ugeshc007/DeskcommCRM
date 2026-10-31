@@ -4,7 +4,7 @@ name: Publicar imagem Docker (GHCR)
 # Container Registry. O leigo puxa no VPS (não builda lá). Roda nos runners do
 # GitHub, então o build pesado nunca cai no VPS do usuário.
 #
-# São TRÊS imagens, e a razão de o worker e o scheduler estarem aqui é um defeito
+# São quatro imagens (a de voz é opcional), e a razão de o worker e o scheduler estarem aqui é um defeito
 # real: o serviço `worker` não tinha `image:` no compose de produção, só `build:`.
 # Serviço build-only é pulado por `docker compose pull` e imune a `up -d` sem
 # `--build` — ele era construído na VPS de cada cliente, no install, e NENHUM
@@ -14,7 +14,7 @@ name: Publicar imagem Docker (GHCR)
 on:
   push:
     tags: ["v*"]
-    branches: ["main"]
+    branches: ["main", "codex/field-sales-tracking", "codex/ct102-release-speed"]
   # NÃO acrescente `release: types: [published]` aqui. Ele já esteve, e o efeito
   # foi medido na v1.3.0: `gh release create` empurra a tag E publica a release,
   # então o MESMO commit foi construído DUAS vezes, com 5 minutos de diferença.
@@ -110,13 +110,20 @@ jobs:
         include:
           - name: deskcommcrm
             dockerfile: Dockerfile
+            context: .
             title: DeskcommCRM
           - name: deskcomm-worker
             dockerfile: Dockerfile.worker
+            context: .
             title: DeskcommCRM worker
           - name: deskcomm-scheduler
             dockerfile: Dockerfile.scheduler
+            context: .
             title: DeskcommCRM scheduler
+          - name: deskcomm-field-voice
+            dockerfile: services/field-voice/Dockerfile
+            context: services/field-voice
+            title: Field Sales private speech
 
     steps:
       - uses: actions/checkout@v7
@@ -148,6 +155,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}
           tags: |
             type=ref,event=branch
+            # CT102 pins the exact commit before pulling, never a moving branch tag.
+            type=sha,format=long
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             # `enable={{is_default_branch}}` NÃO basta: o metadata-action o
@@ -187,7 +196,7 @@ jobs:
       - name: Build e push (imagem genérica — sem segredos)
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           # linux/amd64: o VPS HostGator e a imagem do WAHA são amd64.
           platforms: linux/amd64
@@ -351,14 +360,14 @@ jobs:
           # canal deixaria de ser o mesmo manifesto que a versão.
           dono=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           numero="${VERSAO#v}"
-          for img in deskcommcrm deskcomm-worker deskcomm-scheduler; do
+          for img in deskcommcrm deskcomm-worker deskcomm-scheduler deskcomm-field-voice; do
             echo "::group::${img}"
             docker buildx imagetools create \
               --tag "${REGISTRY}/${dono}/${img}:stable" \
               "${REGISTRY}/${dono}/${img}:${numero}"
             echo "::endgroup::"
           done
-          echo "stable agora aponta para ${numero} nas três imagens"
+          echo "stable agora aponta para ${numero} nas quatro imagens"
 
   # Job de fachada: dá UM nome estável para a branch protection exigir. Sem ele,
   # o required check teria que listar as três instâncias da matriz pelo nome

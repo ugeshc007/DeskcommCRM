@@ -101,7 +101,7 @@ describe("montarLembrete", () => {
       timezone: "America/Sao_Paulo",
       local: null,
     });
-    expect(texto.startsWith("Oi!")).toBe(true);
+    expect(texto.startsWith("Hi!")).toBe(true);
     expect(texto).not.toContain("null");
     expect(texto).not.toContain("undefined");
   });

@@ -1,6 +1,7 @@
 import type { FlowGraph, FlowEdge, FlowNode } from './graph-schema';
 import { branchIdForCondition, nodeBranches } from './graph-schema';
 import { rotuloDoRamo } from './rotulo-do-ramo';
+import { choiceBranches } from './choice-presets';
 
 /**
  * Structural publish validator for follow-up flow graphs.
@@ -8,6 +9,10 @@ import { rotuloDoRamo } from './rotulo-do-ramo';
  */
 
 export const PUBLISH_ERROR_CODES = [
+  'choice_source_invalid',
+  'media_missing',
+  'integration_connection_missing',
+  'integration_branch_missing',
   'no_trigger',
   'multiple_triggers',
   'unreachable_node',
@@ -214,8 +219,7 @@ function analyzeCondensedPaths(
       if (
         node &&
         node.type === 'action' &&
-        node.config.mode === 'ai_message' &&
-        !node.config.fallback_template_id &&
+        ((node.config.mode === 'ai_message' && !node.config.fallback_template_id) || node.config.mode === 'media' || node.config.mode === 'interactive') &&
         totalWait >= LONG_WAIT_THRESHOLD_MS
       ) {
         longWaitNodeIds.add(id);
@@ -271,6 +275,24 @@ function cobrirRamos(
 export function validateFlowForPublish(graph: FlowGraph): PublishValidationResult {
   const { nodes, edges } = graph;
   const errors: PublishValidationError[] = [];
+  for (const node of graph.nodes) {
+    if (node.type === 'match_reply' && node.config.choice_source_node_id) {
+      const source = nodes.find(n => n.id === node.config.choice_source_node_id);
+      const expected = source?.type === 'action' && source.config.mode === 'interactive' ? choiceBranches(source.config.interactive) : null;
+      const inbound = edges.filter(e => e.target === node.id);
+      if (!expected || JSON.stringify(expected) !== JSON.stringify(node.config.branches) || inbound.length !== 1 || inbound[0]?.source !== source?.id) {
+        errors.push({ node_id: node.id, code: 'choice_source_invalid', message: 'Reconnect the reply block to its matching buttons/list message.' });
+      }
+    }
+    if(node.type==='action' && node.config.mode==='integration'){
+      if(!node.config.connection_id||!node.config.connection_revision)errors.push({node_id:node.id,code:'integration_connection_missing',message:'Select a tested connection before publishing.'});
+      for(const branch of ['success','error'])if(!edges.some(e=>e.source===node.id&&e.condition.type==='branch'&&e.condition.branch_id===branch))
+        errors.push({node_id:node.id,code:'integration_branch_missing',message:'Connect both Success and Error outputs.'});
+    }
+    if (node.type === 'action' && node.config.mode === 'media' && node.config.assets.length === 0) {
+      errors.push({ node_id: node.id, code: 'media_missing', message: 'Upload a file before publishing this media block.' });
+    }
+  }
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
   const outEdges = buildOutEdges(edges);
   const inEdges = buildOutEdges(edges.map((e) => ({ ...e, source: e.target, target: e.source })));

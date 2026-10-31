@@ -7,10 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { FlowNode } from "@/lib/followup/graph-schema";
 import type { RFNode, RFNodeData } from "@/lib/followup/graph-mappers";
-import { Trash } from "@/lib/ui/icons";
+import { Trash, ImageIcon, MonitorPlay, MusicNote, FileText, PlugsConnected } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 
 import { ActionForm } from "./forms/ActionForm";
+import { IntegrationForm } from './forms/IntegrationForm';
+import { MediaForm } from "./forms/MediaForm";
+import { InteractiveForm } from './forms/InteractiveForm';
+import { VariableForm } from './forms/VariableForm';
+import type { FlowMediaConfig } from "@/lib/messaging/media/flow-media";
 import { ClassifyForm } from "./forms/ClassifyForm";
 import { ConditionForm } from "./forms/ConditionForm";
 import { EndForm } from "./forms/EndForm";
@@ -21,6 +26,7 @@ import type { ConfigOf } from "./forms/shared";
 import { NODE_VISUALS } from "./nodes/nodeVisuals";
 
 interface Props {
+  flowId?: string;
   node: RFNode;
   onChange: (patch: Partial<RFNodeData>) => void;
   onDelete: () => void;
@@ -37,11 +43,13 @@ interface Props {
  * quando o candidato passa no schema — senão mostra erro inline e o canvas
  * mantém a última config válida (nunca um valor pela metade rio acima).
  */
-export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados }: Props) {
+export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados, flowId }: Props) {
   const t = useT();
   const type = node.type as FlowNode["type"];
   const visual = NODE_VISUALS[type];
-  const Icon = visual.icon;
+  const actionConfig = type === "action" ? node.data.config as ConfigOf<"action"> : null;
+  const mediaConfig = actionConfig?.mode === "media" ? actionConfig : null;
+  const Icon = mediaConfig ? { image: ImageIcon, video: MonitorPlay, audio: MusicNote, document: FileText }[mediaConfig.media_kind] : actionConfig?.mode==='integration' ? PlugsConnected : visual.icon;
   const [label, setLabel] = useState(node.data.label);
   const [labelError, setLabelError] = useState<string | null>(null);
 
@@ -62,7 +70,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados }: Prop
           <span className={`flex h-6 w-6 items-center justify-center rounded-full ${visual.chipClassName}`}>
             <Icon size={14} aria-hidden />
           </span>
-          {t(visual.paletteLabel)}
+          {actionConfig?.mode==='integration' ? 'Integration settings' : mediaConfig ? t("Media settings") : type === "action" ? t("Message settings") : t(visual.paletteLabel)}
         </h2>
         <p className="text-sm text-text-muted">
           {t("Alterações aplicam no rascunho ao digitar — salve na barra de publicação.")}
@@ -116,7 +124,9 @@ export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados }: Prop
             onChange={(config) => onChange({ config })}
           />
         )}
-        {type === "action" && (
+        {actionConfig?.mode === 'integration' ? <IntegrationForm config={actionConfig} onChange={config=>onChange({config})}/> : actionConfig?.mode === 'set_variable' ? <VariableForm config={actionConfig} onChange={config => onChange({ config })} /> : actionConfig?.mode === 'interactive' ? <InteractiveForm config={actionConfig} onChange={config => onChange({ config })} /> : type === "action" && (node.data.config as ConfigOf<"action">).mode === "media" ? (
+          <MediaForm flowId={flowId} config={node.data.config as FlowMediaConfig} onChange={(config) => onChange({ config })} />
+        ) : type === "action" && (
           <ActionForm config={node.data.config as ConfigOf<"action">} onChange={(config) => onChange({ config })} />
         )}
         {type === "end" && (

@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
+import { createClient } from '@supabase/supabase-js';
 
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
@@ -36,12 +37,50 @@ function loadCreds(): Creds {
     return !c.users?.manager;
   };
   if (needsSeed()) {
-    execFileSync("npx", ["tsx", "scripts/seed-e2e-credentials.ts"], { stdio: "inherit" });
+    execFileSync(process.execPath, ["--import=tsx", "scripts/seed-e2e-credentials.ts"], { stdio: "inherit" });
   }
   return JSON.parse(fs.readFileSync(CREDS_PATH, "utf8")) as Creds;
 }
 
 let creds = loadCreds();
+
+test('Native store catalogue persists with tenant authorization and mobile layout', async ({ page }) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname)) throw new Error('Store fixture requires local Supabase');
+  const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  const provision = await admin.rpc('fn_provision_checkout_module');
+  expect(provision.error).toBeNull();
+  expect(creds.admin_totp).toBeDefined();
+  await loginWithTotp(page, creds.users.admin!.email, creds.admin_totp!.secret);
+  await page.goto('/app/store');
+  await expect(page.getByRole('heading', { name: '2. Product catalogue' })).toBeVisible();
+  const sku = 'E2E-' + Date.now();
+  let saved: { revision: number; product: Record<string, unknown> } | undefined;
+  try {
+    await page.locator('#store-product-sku').fill(sku);
+    await page.locator('#store-product-name').fill('Synthetic catalogue item');
+    await page.locator('#store-product-category').fill('Test items');
+    await page.getByLabel('Price in minor units', { exact: true }).fill('1250');
+    await page.getByLabel('Stock on hand (blank means unknown)').fill('5');
+    await page.getByRole('button', { name: 'Add product', exact: true }).click();
+    await expect(page.getByText('Product saved.', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('cell', { name: new RegExp(sku) })).toBeVisible();
+    const result = await page.request.get('/api/v1/ecommerce-store');
+    expect(result.status()).toBe(200);
+    saved = (await result.json()).data.products.find((p: { sku: string }) => p.sku === sku);
+    expect(saved?.product).toMatchObject({ sku, price_cents: 1250, stock: 5 });
+    await page.screenshot({ path: 'e2e-artifacts/native-store-desktop.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: 'e2e-artifacts/native-store-mobile.png', fullPage: true });
+  } finally {
+    if (saved) {
+      const archived = await page.request.post('/api/v1/ecommerce-store', { data: { operation: 'product', revision: saved.revision, active: false, product: saved.product } });
+      expect(archived.status()).toBe(200);
+    }
+  }
+});
 
 // ── Precondição de identidade ────────────────────────────────────────────────
 // Esta spec dirige o produto como ADMIN DE TENANT (`creds.users.admin`), o
@@ -62,7 +101,8 @@ async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  // Sem sessão, vale o idioma configurado nesta instalação de teste.
+  await page.getByRole("button", { name: /^(Sign in|Entrar)$/i }).click();
   await page.waitForURL(/\/app\//);
 }
 
@@ -76,7 +116,7 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: /^(Sign in|Entrar)$/i }).click();
   await page.waitForURL(/\/login\/mfa/);
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -84,11 +124,11 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
       await page.waitForTimeout(msUntilNextTotpWindow() + 200);
     }
     const code = generateTotp(secret);
-    const firstDigit = page.locator('input[aria-label="Dígito 1"]');
+    const firstDigit = page.locator('input[aria-label="Digit 1"], input[aria-label="Dígito 1"]');
     await firstDigit.click();
     await page.keyboard.type(code, { delay: 40 });
     try {
-      await page.waitForURL(/\/app\//, { timeout: 8_000 });
+      await page.waitForURL(/\/(?:app|admin)\//, { timeout: 8_000 });
       return;
     } catch {
       await page.waitForTimeout(msUntilNextTotpWindow() + 200);
@@ -96,6 +136,44 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
   }
   throw new Error("MFA challenge failed after 2 TOTP attempts");
 }
+
+test("integrações: administrador salva, rotaciona e desconecta sem expor credencial", async ({ page }) => {
+  test.setTimeout(60_000);
+  const secret = "synthetic-e2e-signing-secret-not-a-real-key";
+  const label = `E2E isolated connection ${Date.now()}`;
+  await loginWithTotp(page, creds.users.admin!.email, creds.admin_totp!.secret);
+  await page.goto("/app/integrations");
+  await expect(page.getByRole("heading", { name: "Integrations", exact: true })).toBeVisible();
+  const provider = page.locator("article").filter({ has: page.getByRole("heading", { name: "Signed webhook", exact: true }) });
+  await provider.getByRole("button", { name: "Add connection", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Connection name", { exact: true }).fill(label);
+  await dialog.getByLabel("HTTPS endpoint").fill("https://example.com/synthetic-e2e");
+  await dialog.getByLabel("Signing secret").fill(secret);
+  await expect(dialog.getByLabel("Signing secret")).toHaveAttribute("type", "password");
+  await dialog.getByRole("button", { name: "Save securely" }).click();
+  await expect(dialog).not.toBeVisible();
+  const connection = page.locator("article").filter({ has: page.getByRole("heading", { name: label, exact: true }) });
+  await expect(connection.getByText("Test required", { exact: true })).toBeVisible();
+  const listing = await page.request.get("/api/v1/integration-connections");
+  expect(listing.status()).toBe(200);
+  expect(await listing.text()).not.toContain(secret);
+  await page.reload();
+  await expect(connection).toBeVisible();
+  await connection.getByRole("button", { name: "Rotate / reconnect" }).click();
+  await expect(dialog.getByLabel("Signing secret")).toHaveValue("");
+  await dialog.getByLabel("HTTPS endpoint").fill("https://example.com/synthetic-e2e");
+  await dialog.getByLabel("Signing secret").fill(`${secret}-rotated`);
+  await dialog.getByRole("button", { name: "Save securely" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(connection).toContainText("Revision 2");
+  await connection.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "Disconnect this account?" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect(connection.getByText("Disconnected", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/integration-credential-lifecycle.png", fullPage: true });
+  // Não clicamos Test: nenhum request é enviado ao destino externo.
+});
 
 test.describe("followup flows — lista + criação (Task 6.1)", () => {
   test("manager cria um fluxo e ele aparece na lista com badge Rascunho", async ({ page }) => {
@@ -156,6 +234,11 @@ async function connectHandles(
   targetNodeId: string,
   sourceHandleId?: string,
 ): Promise<void> {
+  // O painel lateral muda a largura útil. Reenquadre antes de medir os handles,
+  // como na UI, para não arrastar coordenadas encobertas pela paleta/painel.
+  await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+  await page.locator(".react-flow__controls-fitview").click();
+  await page.waitForTimeout(350);
   // Um nó que ramifica tem AGORA uma bolinha por saída, então `.source` sozinho
   // casa várias e o modo estrito do Playwright recusa. Quem arrasta de um nó
   // desses diz de qual saída — que é exatamente o ponto da funcionalidade.
@@ -262,7 +345,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     // fitView pode chegar ao maxZoom (2x) com poucos nós — zoom out garante
     // que todos os handles fiquem dentro do viewport pros drags de conexão.
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    for (let i = 0; i < 5 && await zoomOut.isEnabled(); i++) await zoomOut.click();
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -306,7 +389,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await page.getByTestId("palette-add-end").click();
 
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    for (let i = 0; i < 5 && await zoomOut.isEnabled(); i++) await zoomOut.click();
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -435,7 +518,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await page.getByTestId("palette-add-end").click();
 
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    for (let i = 0; i < 5 && await zoomOut.isEnabled(); i++) await zoomOut.click();
 
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
@@ -572,18 +655,20 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await expect(page.getByTestId("node-config-panel")).toBeVisible();
     await expect(page.getByTestId("delete-selection")).toHaveText("Excluir nó");
     await page.getByTestId("delete-node").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page.locator('[data-testid^="node-card-wait-"]')).toHaveCount(0);
     await expect(page.getByTestId("node-config-sheet")).toHaveCount(0);
 
     await page.locator('[data-testid^="node-card-end-"]').click();
     await expect(page.getByTestId("delete-selection")).toHaveText("Excluir nó");
     await page.getByTestId("delete-selection").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page.locator('[data-testid^="node-card-end-"]')).toHaveCount(0);
 
     await page.getByTestId("palette-add-trigger").click();
     await page.getByTestId("palette-add-end").click();
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    for (let i = 0; i < 5 && await zoomOut.isEnabled(); i++) await zoomOut.click();
     const triggerId = await page
       .locator('.react-flow__node[data-id^="trigger-"]')
       .getAttribute("data-id");
@@ -607,6 +692,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     await expect(page.getByTestId("edge-config-panel")).toBeVisible();
     await expect(page.getByTestId("delete-selection")).toHaveText("Excluir aresta");
     await page.getByTestId("delete-edge").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page.locator(".react-flow__edge")).toHaveCount(0);
     await expect(page.getByTestId("edge-config-sheet")).toHaveCount(0);
   });
@@ -636,7 +722,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     const box = await card.boundingBox();
     if (!box) throw new Error(`nó ${nodeId} sem bounding box`);
     const startX = box.x + box.width / 2;
-    const startY = box.y + 20; // inside the header, clear of the Top handle
+    const startY = box.y + Math.min(8, box.height / 3); // header mesmo com zoom reduzido
     await page.mouse.move(startX, startY);
     await page.mouse.down();
     await page.mouse.move((startX + targetX) / 2, (startY + targetY) / 2, { steps: 5 });
@@ -652,7 +738,23 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
    * on the curved path the bounding-box center lands.
    */
   async function clickEdge(page: Page, edgeId: string): Promise<void> {
-    await page.locator(`[data-testid="rf__edge-${edgeId}"] .react-flow__edge-textbg`).click();
+    // Em ramificações, outro caminho pode cobrir o rótulo. Clique num trecho
+    // realmente exposto da própria aresta, sem force/dispatchEvent.
+    const point = await page.locator(`[data-testid="rf__edge-${edgeId}"] .react-flow__edge-interaction`).evaluate((element) => {
+      const path = element as SVGPathElement;
+      const matrix = path.getScreenCTM();
+      if (!matrix) return null;
+      for (let step = 1; step < 20; step++) {
+        const local = path.getPointAtLength(path.getTotalLength() * step / 20);
+        const screen = new DOMPoint(local.x, local.y).matrixTransform(matrix);
+        if (document.elementFromPoint(screen.x, screen.y)?.closest(".react-flow__edge") === path.closest(".react-flow__edge")) {
+          return { x: screen.x, y: screen.y };
+        }
+      }
+      return null;
+    });
+    if (!point) throw new Error(`aresta sem trecho clicável: ${edgeId}`);
+    await page.mouse.click(point.x, point.y);
   }
 
   async function setEdgeCondition(page: Page, edgeId: string, optionLabel: string): Promise<void> {
@@ -717,19 +819,25 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     // any screen-space math below, or the 6 sequential palette adds keep moving the
     // goalposts mid-repositioning (see the 6.2 canvas test for the same caveat).
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 6; i++) await zoomOut.click();
+    for (let i = 0; i < 6 && await zoomOut.isEnabled(); i++) await zoomOut.click();
     await page.waitForTimeout(300);
 
     // 1b. Spread the 6 nodes into a real branching layout (source above target, siblings
     // apart on X) — see `moveNodeTo` for why the default add-grid can't be used here.
+    await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+    await page.locator(".react-flow__controls-fitview").click();
+    await page.waitForTimeout(350);
     const canvasBox = await page.getByTestId("flow-canvas").boundingBox();
     if (!canvasBox) throw new Error("flow-canvas sem bounding box");
-    const at = (dx: number, dy: number): [number, number] => [canvasBox.x + dx, canvasBox.y + dy];
+    const at = (dx: number, dy: number): [number, number] => [
+      canvasBox.x + 50 + dx / 750 * (canvasBox.width - 150),
+      canvasBox.y + 30 + dy / 700 * (canvasBox.height - 110),
+    ];
     await moveNodeTo(page, triggerId, ...at(150, 60));
     await moveNodeTo(page, classifyId, ...at(150, 220));
-    await moveNodeTo(page, action1Id, ...at(50, 420));
-    await moveNodeTo(page, action2Id, ...at(400, 420));
-    await moveNodeTo(page, end1Id, ...at(225, 620));
+    await moveNodeTo(page, action1Id, ...at(400, 220));
+    await moveNodeTo(page, action2Id, ...at(400, 540));
+    await moveNodeTo(page, end1Id, ...at(650, 540));
     await moveNodeTo(page, end2Id, ...at(650, 220));
 
     // 2. Configure ai_classify classes = positivo, objecao (replacing the hot/cold default).
@@ -785,7 +893,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     const classifyErrorText = await page
       .locator(`[data-testid="node-error-${classifyId}"]`)
       .textContent();
-    expect(classifyErrorText).toMatch(/class_match|no_reply/i);
+    expect(classifyErrorText).toBe("Conecte todas as classificações deste nó a uma próxima etapa.");
     await page.screenshot({
       path: "test-results/followup-6.3-02-publish-422-all-always.png",
       fullPage: true,
@@ -844,7 +952,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
  */
 test.describe("followup flow selector no editor do agente (Task 7.2)", () => {
   test.beforeAll(() => {
-    execFileSync("npx", ["tsx", "scripts/seed-e2e-followup-agent.ts"], { stdio: "inherit" });
+    execFileSync(process.execPath, ["--import=tsx", "scripts/seed-e2e-followup-agent.ts"], { stdio: "inherit" });
     // O seed ESCREVE em .e2e-creds.json, e `creds` foi lido no carregamento do
     // módulo — sem reler, o objeto em memória nunca vê o bloco que o seed
     // acabou de gravar. Foi por isto que esta spec ficou fora do CI: a mensagem
@@ -1058,7 +1166,7 @@ test.describe("followup flow builder — controle de gatilho na PublishBar (Task
       });
       await saveButton.click();
 
-      await expect(page.getByText("Gatilho atualizado.")).toBeVisible();
+      await expect(page.getByText("Trigger updated.", { exact: true })).toBeVisible();
       await expect(triggerButton).toHaveText("Gatilho: Silêncio (45 min)");
       await page.screenshot({
         path: "e2e-artifacts/followup-8.5-03-trigger-saved.png",

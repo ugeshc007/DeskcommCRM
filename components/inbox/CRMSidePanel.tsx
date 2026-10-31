@@ -558,9 +558,9 @@ export function CRMSidePanel({ conversation }: Props) {
           )}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {tags.map((t) => (
-                <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                  {t}
+              {tags.map((tag) => (
+                <Badge key={tag} variant="secondary" className="h-4 px-1.5 text-[10px]">
+                  {t(tag)}
                 </Badge>
               ))}
             </div>

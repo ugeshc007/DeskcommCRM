@@ -16,7 +16,8 @@
  *    falha que produziu este bug (o TypeScript não enxerga o CHECK).
  */
 import { describe, expect, it } from "vitest";
-import { render, within } from "@testing-library/react";
+import { within } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 
 import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";

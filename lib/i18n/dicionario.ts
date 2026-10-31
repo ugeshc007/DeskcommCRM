@@ -33,11 +33,15 @@
  */
 import type { Idioma } from "./idiomas";
 import { DICIONARIO_EN } from "./dicionario.en";
+import { BUILDER_ES } from "./builder";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 const DICIONARIO_BASE: Traducoes = {
+  "Store": { es: "Tienda" },
+  "Manage your product catalogue, delivery charges and reviewed orders.": { es: "Administra tu catálogo de productos, gastos de envío y pedidos revisados." },
+  "Texto fixo": { es: "Texto fijo" },
   "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.": {
     es: "Meta validó el número, pero no pudo activar la entrega de mensajes para esta cuenta.",
   },
@@ -488,6 +492,15 @@ const DICIONARIO_BASE: Traducoes = {
   "Sem pedidos.": { es: "Sin pedidos." },
   "Sem atividade.": { es: "Sin actividad." },
   "Nova tag…": { es: "Nueva etiqueta…" },
+  // Rótulos de apresentação do vocabulário canônico; o valor salvo segue em português.
+  "dúvida": { es: "duda" },
+  "reclamação": { es: "queja" },
+  "troca": { es: "cambio" },
+  "devolução": { es: "devolución" },
+  "elogio": { es: "elogio" },
+  "orçamento": { es: "presupuesto" },
+  "pós-venda": { es: "posventa" },
+  "urgente": { es: "urgente" },
   "Sem próximo passo definido": { es: "Sin próximo paso definido" },
   "Marcar próximo passo": { es: "Marcar próximo paso" },
   Lead: { es: "Lead" },
@@ -5486,6 +5499,23 @@ const DICIONARIO_BASE: Traducoes = {
   "Mudou de estágio": { es: "Cambió de etapa" },
   "Correção do que o assistente tinha feito": { es: "Corrección de lo que había hecho el asistente" },
   "Anotação": { es: "Anotación" },
+  "Nota recente": { es: "Nota reciente" },
+  "Autor não identificado": { es: "Autor no identificado" },
+  "Adicionar nota": { es: "Agregar nota" },
+  "Registre a conversa ou o próximo passo": { es: "Registra la conversación o el próximo paso" },
+  "Salvar nota": { es: "Guardar nota" },
+  "Nota adicionada": { es: "Nota agregada" },
+  "Não foi possível salvar a nota.": { es: "No se pudo guardar la nota." },
+  "Envelhecimento de leads": { es: "Antigüedad de leads" },
+  "Leads abertos que permanecem numa etapa além do prazo escolhido.": { es: "Leads abiertos que permanecen en una etapa más allá del plazo elegido." },
+  "Leads abertos que permanecem na etapa atual além do prazo escolhido.": { es: "Leads abiertos que permanecen en su etapa actual más allá del plazo elegido." },
+  "Dias na etapa": { es: "Días en la etapa" },
+  "Mostrar leads": { es: "Mostrar leads" },
+  "Não foi possível carregar o relatório de envelhecimento.": { es: "No se pudo cargar el informe de antigüedad." },
+  "leads abertos acima de": { es: "leads abiertos superan" },
+  "dias. Mostrando os 100 mais antigos.": { es: "días. Se muestran los 100 más antiguos." },
+  "Na etapa desde": { es: "En la etapa desde" },
+  "Nenhum lead ultrapassa este prazo.": { es: "Ningún lead supera este plazo." },
   "Atendimento da IA": { es: "Atención de la IA" },
   "Envio bloqueado": { es: "Envío bloqueado" },
   "Passou para humano": { es: "Pasó a humano" },
@@ -5931,6 +5961,7 @@ const DICIONARIO_BASE: Traducoes = {
   "Você foi convidado": { es: "Fuiste invitado" },
   "Para aceitar o convite como": { es: "Para aceptar la invitación como" },
   "faça login com o email": { es: "inicia sesión con el correo" },
+  "crie sua conta ou entre com o email": { es: "crea una cuenta o inicia sesión con el correo" },
   "Fazer login": { es: "Iniciar sesión" },
   "Ainda não tenho conta": { es: "Todavía no tengo cuenta" },
   "Email não corresponde": { es: "El correo no coincide" },
@@ -6061,6 +6092,7 @@ const DICIONARIO_BASE: Traducoes = {
   "Adicione ao menos um email.": { es: "Agrega al menos un correo." },
   "Máximo 20 emails por convite.": { es: "Máximo 20 correos por invitación." },
   "convite(s) enviado(s)": { es: "invitación(es) enviada(s)" },
+  "convite(s) criado(s)": { es: "invitación(es) creada(s)" },
   "falha(s).": { es: "falla(s)." },
   "Enviando…": { es: "Enviando…" },
   "Enviar convites": { es: "Enviar invitaciones" },
@@ -6068,6 +6100,24 @@ const DICIONARIO_BASE: Traducoes = {
   "Email enviado.": { es: "Correo enviado." },
   "Resend não configurado — link copiável abaixo (DEV).": {
     es: "Resend no configurado — enlace copiable abajo (DEV).",
+  },
+  "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.": {
+    es: "¿Sin servicio de correo? Crea la invitación y comparte su enlace privado. Cada persona establece su propia contraseña al abrirlo.",
+  },
+  "Convites criados": { es: "Invitaciones creadas" },
+  "Email não enviado. Compartilhe este link somente com a pessoa convidada.": {
+    es: "Correo no enviado. Comparte este enlace solo con la persona invitada.",
+  },
+  "Email não enviado. Confirme a identidade da pessoa antes de entregar o link em particular. Quem tiver o link pode criar uma conta de gerente ou administrador nas próximas 24 horas.": {
+    es: "Correo no enviado. Confirma la identidad de la persona antes de entregarle el enlace en privado. Quien tenga el enlace puede crear una cuenta de gerente o administrador durante las próximas 24 horas.",
+  },
+  "Copiar link de acesso": { es: "Copiar enlace de acceso" },
+  "Link de acesso copiado.": { es: "Enlace de acceso copiado." },
+  "Não foi possível copiar. Selecione o link abaixo e copie manualmente.": {
+    es: "No se pudo copiar. Selecciona el enlace de abajo y cópialo manualmente.",
+  },
+  "Expira em 24 horas. Quem receber o link deve usar o email acima e definir a própria senha.": {
+    es: "Caduca en 24 horas. La persona destinataria debe usar el correo anterior y establecer su propia contraseña.",
   },
   "Falhas": { es: "Fallas" },
   "Resultados aparecerão aqui após o envio.": { es: "Los resultados aparecerán aquí después del envío." },
@@ -8670,14 +8720,40 @@ const DICIONARIO_BASE: Traducoes = {
     es: "Es el valor predeterminado de la empresa. Cada negocio puede usar una moneda diferente.",
   },
   "Valor do negócio": { es: "Valor del negocio" },
+  "Retail leads": { es: "Clientes potenciales de tiendas" },
+  "Create Event IDs with customer details, store assignment and a required follow-up.": {
+    es: "Crea ID de evento con datos del cliente, asignación de tienda y seguimiento obligatorio.",
+  },
+  "Field Sales": { es: "Ventas de campo" },
+  "Field team live map": { es: "Mapa en vivo del equipo de campo" },
+  "Monitor on-duty field officers and review each recorded route by date.": {
+    es: "Supervisa al personal de campo en servicio y revisa cada ruta registrada por fecha.",
+  },
+  "Schedule project visits and coordinate on-duty field teams.": {
+    es: "Programa visitas a proyectos y coordina los equipos de campo en servicio.",
+  },
+  "Inherited from CRM organization settings": {
+    es: "Heredado de la configuración de la organización en el CRM",
+  },
+  "Convites manuais valem por 24 horas para todos os papéis. Para gerente ou administrador, confirme a identidade da pessoa antes de entregar o link em particular.": {
+    es: "Las invitaciones manuales son válidas durante 24 horas para todos los roles. Para gerente o administrador, confirma la identidad de la persona antes de entregarle el enlace en privado.",
+  },
+  "Remove from list": { es: "Quitar de la lista" },
+  "Remove revoked invitation?": { es: "¿Quitar la invitación revocada?" },
+  "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.": {
+    es: "Esto la quita de la lista. La invitación revocada sigue siendo inválida y se conserva su registro de auditoría.",
+  },
+  "Invitation removed from the list.": { es: "Invitación quitada de la lista." },
+  "Remove": { es: "Quitar" },
 };
 
-export const DICIONARIO: Traducoes = Object.fromEntries(
-  Object.entries(DICIONARIO_BASE).map(([texto, traducoes]) => [
+export const DICIONARIO: Traducoes = Object.fromEntries([
+  ...Object.entries(DICIONARIO_BASE).map(([texto, traducoes]) => [
     texto,
     { ...traducoes, en: DICIONARIO_EN[texto] },
   ]),
-);
+  ...Object.entries(BUILDER_ES).map(([texto, es]) => [texto, { es, en: texto }]),
+]);
 
 /**
  * Traduz, ou devolve o próprio texto.

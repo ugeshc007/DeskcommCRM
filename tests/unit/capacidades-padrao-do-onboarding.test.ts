@@ -61,12 +61,16 @@ describe("capacidades padrão do onboarding", () => {
     expect(estadoDoPacote(IDS, CATALOGO, PACOTE_PADRAO_DO_ONBOARDING)).toBe("ligado");
   });
 
+  it("não ativa módulos opcionais no primeiro agente", () => {
+    expect(IDS.filter((id) => porNome.get(id)?.opt_in_only)).toEqual([]);
+  });
+
   it("acompanha o catálogo em vez de congelar uma cópia", () => {
     // Guarda contra alguém trocar a derivação por uma lista fixa: o conjunto
     // tem de ser exatamente o que o pacote diz hoje, não o que ele dizia quando
     // isto foi escrito.
     const doPacote = CATALOGO.filter(
-      (c) => c.pacotes.includes(PACOTE_PADRAO_DO_ONBOARDING) && c.risco !== "critico",
+      (c) => c.pacotes.includes(PACOTE_PADRAO_DO_ONBOARDING) && c.risco !== "critico" && !c.opt_in_only,
     ).map((c) => c.name);
     expect([...IDS].sort()).toEqual([...doPacote].sort());
   });

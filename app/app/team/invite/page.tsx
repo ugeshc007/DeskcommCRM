@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function TeamInvitePage() {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
-  if (!activeOrg || ROLE_RANK[activeOrg.role] < ROLE_RANK.admin) {
+  if (!activeOrg || ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
     redirect("/403");
   }
   const idioma = user.idioma;

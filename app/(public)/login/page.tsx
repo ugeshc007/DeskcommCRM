@@ -5,6 +5,7 @@ import { branding } from "@/lib/branding";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { metadataNoIdiomaDaInstalacao } from "@/lib/i18n/metadata";
 import { env } from "@/lib/env";
 
@@ -16,6 +17,10 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; reset?: string; error?: string }>;
 }) {
   const { next, reset, error } = await searchParams;
+  const pendingInvite = next?.startsWith("/team/accept-invite/")
+    ? next.slice("/team/accept-invite/".length)
+    : null;
+  const validInvite = pendingInvite && verifyInviteToken(pendingInvite) ? pendingInvite : null;
   // Fora da árvore de `app/app/layout.tsx` — sem `IdiomaProvider` do lado do
   // servidor (o cliente já tem o seu, montado em `app/(public)/layout.tsx`).
   // Quase nunca há sessão aqui (é a própria tela de entrar), mas resolve do
@@ -103,7 +108,7 @@ export default async function LoginPage({
         <p className="text-muted-foreground">
           {t("Não tem conta?")}{" "}
           <Link
-            href="/signup"
+            href={validInvite ? `/signup?invite=${encodeURIComponent(validInvite)}` : "/signup"}
             className="font-medium text-foreground underline underline-offset-4"
           >
             {t("Criar conta")}

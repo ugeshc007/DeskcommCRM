@@ -16,6 +16,7 @@ interface OrgRow {
   legal_name: string;
   cnpj: string | null;
   timezone: string;
+  onboarding_state: { welcome?: { country_code?: string } } | null;
   locale: string;
   currency: string;
   media_retention_days: number;
@@ -36,7 +37,7 @@ export default async function TenantSettingsPage() {
   const { data } = await supabase
     .from("organizations")
     .select(
-      "display_name, legal_name, cnpj, timezone, locale, currency, media_retention_days, dpo_email, privacy_policy_url, settings",
+      "display_name, legal_name, cnpj, timezone, onboarding_state, locale, currency, media_retention_days, dpo_email, privacy_policy_url, settings",
     )
     .eq("id", activeOrg.orgId)
     .maybeSingle();
@@ -65,6 +66,7 @@ export default async function TenantSettingsPage() {
             legal_name: row.legal_name,
             cnpj: row.cnpj,
             timezone: row.timezone,
+            country_code: row.onboarding_state?.welcome?.country_code,
             locale: normalizarIdioma(row.locale),
             currency: moedaServidaOu(row.currency),
             media_retention_days: row.media_retention_days,

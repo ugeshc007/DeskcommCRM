@@ -2,6 +2,7 @@
 import { Draggable } from "@hello-pangea/dnd";
 import type { MouseEvent } from "react";
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import { resolveCardState, stageAgeLabel, type CardInput } from "@/lib/kanban/card-state";
@@ -74,6 +75,7 @@ export function KanbanCard({
   onOpen,
 }: KanbanCardProps) {
   const t = useT();
+  const dateLocale = useTagDeIdioma();
   const value = formatValue(card.valueCents, card.currency);
   const state = resolveCardState(card, t);
   const age = stageAgeLabel(card.hoursInStage, t);
@@ -286,6 +288,19 @@ export function KanbanCard({
               de dono/tempo porque é conteúdo do negócio, não metadado do card —
               e some por inteiro quando não há conversa. */}
           <ConversaSlot conversa={lead.conversa} />
+
+          {lead.recent_note && (
+            <div className="mt-2 min-w-0 border-t border-border pt-2 text-xs" data-testid="lead-recent-note">
+              <p className="font-medium text-text-muted">{t("Nota recente")}</p>
+              <p className="line-clamp-2 whitespace-pre-wrap text-text" title={lead.recent_note.text}>
+                {lead.recent_note.text}
+              </p>
+              <p className="mt-1 truncate text-[11px] text-text-muted">
+                {lead.recent_note.by ?? t("Autor não identificado")} ·{" "}
+                {new Date(lead.recent_note.at).toLocaleString(dateLocale)}
+              </p>
+            </div>
+          )}
 
           {/* ④ dono · ⑤ tempo no estágio */}
           <div className="mt-1 flex h-6 items-center justify-between gap-2">

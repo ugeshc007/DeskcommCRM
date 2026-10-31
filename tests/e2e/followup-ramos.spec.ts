@@ -156,7 +156,10 @@ test.describe("condição com várias regras — uma bolinha por regra", () => {
     // Estabiliza o zoom antes de qualquer conta em pixels: o fitView re-ajusta a
     // cada nó medido pela primeira vez e move o alvo no meio do caminho.
     const zoomOut = page.locator(".react-flow__controls-zoomout");
-    for (let i = 0; i < 5; i++) await zoomOut.click();
+    for (let i = 0; i < 5; i++) {
+      if (await zoomOut.isDisabled()) break;
+      await zoomOut.click();
+    }
     await page.waitForTimeout(300);
 
     const canvas = await page.getByTestId("flow-canvas").boundingBox();

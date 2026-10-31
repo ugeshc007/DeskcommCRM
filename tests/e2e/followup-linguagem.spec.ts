@@ -140,7 +140,11 @@ test.describe("construtor de follow-up — a tela não fala em código (W2-LINGU
 
         const { texto, valoresDeCampo } = await oQuePainelMostra(painel);
         for (const valor of VALORES_DE_WIRE_NA_TELA_PROIBIDOS) {
-          if (apareceComoPalavra(texto, valor)) vazamentos.push(`${tipo}: mostra o valor de wire "${valor}"`);
+          // English prose uses and/or naturally; a raw control label still fails.
+          const aparece = valor === "and" || valor === "or"
+            ? await painel.getByText(valor, { exact: true }).count() > 0
+            : apareceComoPalavra(texto, valor);
+          if (aparece) vazamentos.push(`${tipo}: mostra o valor de wire "${valor}"`);
         }
         for (const escrito of valoresDeCampo) {
           if (UUID.test(escrito)) vazamentos.push(`${tipo}: campo de texto com UUID (${escrito})`);

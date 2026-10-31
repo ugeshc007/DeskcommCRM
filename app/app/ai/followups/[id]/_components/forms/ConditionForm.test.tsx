@@ -8,7 +8,8 @@
  * Estes testes guardam COMPORTAMENTO (o que desce no onChange), não o texto do
  * arquivo — trocar a implementação sem perder a propriedade continua verde.
  */
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it } from "vitest";
 

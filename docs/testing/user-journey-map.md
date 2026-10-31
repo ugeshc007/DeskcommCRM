@@ -1985,6 +1985,97 @@ Testes: `tests/e2e/agenda-google-meet.spec.ts`, `tests/invariants/agenda-meet.te
 
 ## Comunidade 360 — aceite integrado de 2026-09-06
 
+### Field Sales development journey — 2026-09-19
+
+- [P0] `field-sales.spec.ts`: synthetic organization/admin, English Field Sales workspace,
+  inherited AE/Asia-Dubai region, weekly project assignment saved through the frontend,
+  activity tab with no off-duty location, and narrow-screen overflow check. Local production
+  build plus real local Supabase; no API mocks, employee GPS or external map tiles.
+- First runs found a mislabeled native dropdown and missing organization lifecycle foreign
+  keys in the optional module. Labels now have explicit association; migration 0315 preserves
+  organization cleanup while blocking individual employee history deletion. Journey rerun
+  passed; responsive card-width hardening also passed on the latest production build.
+- Screenshots: `.superpowers/evidence/field-sales-20260919/`.
+  Artifact data is synthetic. This is not proof of real GPS, offline Android drain or a pilot.
+
+### Field Sales simplified mobile and Live view — 2026-09-20
+
+- [P0] No-email staff setup: the team invitation screen exposes a private, copyable link and
+  explains that the recipient sets their own password. A pending, persisted, undelivered human-role
+  invitation now completes account creation and membership without a mail gateway; the login page's
+  Create account link retains the invitation. Revoked/expired/used invitations must not create accounts.
+  For manager/admin, the inviting administrator must verify the recipient offline and privately
+  deliver the link; possession of that link is the manual verification for its 24-hour lifetime.
+  A manager no-email signup is covered by `team-manual-setup.spec.ts` and role/expiry unit tests.
+  The Field Sales device dialog exposes a
+  one-time copy action for the Android key. Component tests cover both copy actions without
+  putting credentials in toast messages. `team-manual-setup.spec.ts` passed against a local
+  production build and synthetic organization, including actual clipboard contents; screenshots
+  mask the bearer values. The real Android app's entry screen remains a separate pilot check.
+
+- [P0] Android fresh connection remains device-key based. Connected home shows only today's real
+  assignment selector and Punch In/Out, with notification/profile icons and server-first sign-out.
+- [P0] Punch-in submits the chosen project/schedule/date; a foreign, canceled or nonexistent
+  occurrence must be rejected without opening a session.
+- [P0] Live view lists only explicitly scoped employees. Selecting a marker or employee loads that
+  person's route for the selected organization-local date; separate sessions are not bridged.
+- [P0] Sign-out while working or with queued attendance/GPS is rejected. Successful sign-out
+  revokes only the current device before encrypted local state is removed.
+- Current evidence: Android debug and test APK compile, unit tests and lint pass; focused contracts
+  and baseline final-security-guard tests pass. Database/E2E and fresh real-device visual proof are
+  still required before release.
+
+### Field Sales six-digit pairing — 2026-09-21 (development)
+
+- [P0] Team administrator creates a code for an accepted Field Officer. The code is exactly six
+  digits, visible only once, expires after five minutes and can be revoked before use. Android's
+  fresh screen asks only for that code; the compiled APK supplies the HTTPS CRM origin.
+- [P0] Redeeming a code atomically creates a random 256-bit employee-bound bearer. The code
+  cannot authenticate mobile API requests, be redeemed twice, or cross organization boundaries.
+  Expired codes and revoked/inactive memberships are rejected. Browser and database tests must
+  prove the full journey; Android instrumentation must prove the address field is absent.
+- [P0] Fifty attempts per five minutes globally and six per IP limit anonymous guessing.
+  A six-digit code is never stored or logged as plaintext by the server. The strong bearer is
+  stored only as SHA-256 on the server and encrypted on the phone.
+
+### Field Sales flexible shifts — 2026-09-21 (development)
+
+- [P0] The CRM administrator leaves date and both times blank, checks Mon and Sat, and saves.
+  The assignment begins on today's organization-local date and is available on each selected
+  weekday without imposing 9–5 hours. Browser proof: `field-sales.spec.ts` in a synthetic
+  local organization; screenshot in `.superpowers/evidence/field-sales-flexible-shifts-20260921/`.
+- [P0] An employee's paired Android phone stays signed in until explicit sign-out. Punch in
+  starts work time and GPS before project choice; today's scheduled projects appear first,
+  followed by other projects explicitly assigned to that officer. Punch out stops GPS immediately.
+- [P0] Current source: at 14 hours, the Android app reminds the officer but leaves attendance
+  and GPS running. Daily attendance flags the open shift for manager follow-up. A manager/admin
+  may end it manually and approve a working-hours correction with a reason; queued offline
+  events are acknowledged without reopening a remotely closed shift. Database proof:
+  `tests/invariants/field-sales.test.ts`. Browser proof is required before release.
+- Android build/unit, focused contracts, TypeScript, lint, local baseline INSTALL/UPDATE and
+  focused browser E2E pass. A real-device locked-screen/battery pilot is still needed before
+  claiming field reliability; no production deployment is implied by these local tests.
+
+### Field Sales shops, collections and optional voice — 2026-09-22 (local development)
+
+- [P0] Team card can assign a project with repeating weekdays, reschedule future occurrences,
+  or end the rule without rewriting past attendance or visits. Calendar shows the actual days.
+- [P0] Admin imports/adds a project shop; an assigned officer records a visit or received
+  payment offline. Replay is idempotent, due decreases, overpayment becomes an advance,
+  and a different manager can void a mistaken receipt with a reason. Other organizations,
+  unassigned officers and expired sessions cannot read or write it.
+- [P1] Officer card shows recent shop, time and collection; individual route page includes
+  date-scoped shop history and distinct shop pins. No precise marker is shown without a
+  sufficiently accurate, retained GPS sample.
+- [P1] Profile → Voice settings is off by default. Enabling it speaks a private prebuilt
+  prompt after punch-in; the officer must tap to record a short reply. Transcription may
+  propose only an assigned project and requires confirmation. Disabled/unavailable voice
+  leaves all touch controls available and never starts background microphone capture.
+- Local evidence: Android assemble/unit/lint, speech sidecar image and AAC request, focused
+  database invariants, focused unit tests, and synthetic browser Field Sales E2E passed.
+  Production image publication, full regression gates and real-device voice usability remain
+  separate release checks. Nothing in this entry asserts a deployment.
+
 ### Managed SaaS control plane
 
 - [P0] Platform owner creates a tenant, records a manual subscription, and sees the revision.
@@ -2000,3 +2091,66 @@ Produto `7f1d0f3e`, integrado à main `ca895850`: as dez specs de organizações
 Evidência local preservada em `.superpowers/evidence/comunidade-360/final-qa-targeted-r4/` e log `.superpowers/sdd/comunidade-360/final-qa-targeted-r4.log`. A rodada inclui atualização concorrente da interface sem perder formulário, sugestão obsoleta sem confirmação antiga de sucesso e encerramento de suporte com retorno ao contexto original.
 
 Validação integral do mesmo produto: 733 arquivos unitários / 7.911 casos aprovados + 1 falha esperada; 184 arquivos de banco / 1.466 casos aprovados + 1 falha esperada e 1 ignorado, com INSTALL e UPDATE; tipos, lint (0 erros, 344 avisos) e build aprovados. `lint:channels`, validadores shell e conferência de release também passaram. Os checks remotos continuam sendo condição do merge pelo revisor da PR #613.
+
+### Field Sales delayed attendance synchronization — 2026-09-22
+
+- Confirmed code defect: an in-flight mobile snapshot could overwrite a newer local punch-out,
+  restoring a closed session as working. The mobile snapshot now checks queued attendance and
+  the session/sequence/status captured before the request; a confirmed closure stops tracking.
+- Synthetic Android instrumentation covers pending and already-acknowledged punch-out races,
+  a new shift, changed project, confirmed closure with retained GPS, and initial session restore.
+- Database regression covers an ordered repeated punch-out: preserve original closure and raw
+  event time, audit once per event, reject late GPS and invalid breaks, and accept the next shift.
+- Connected officers without a confirmed open session remain visible in Live view, with an
+  attendance-sync explanation. This does not mark them on duty or create a location.
+
+### Field Sales map-first officer display — 2026-10-14 (local development)
+
+- [P1] `field-sales.spec.ts`: on the Live view tab, confirm the map precedes officer status,
+  confirm List is the default, switch to Grid and back, and capture the map-first list state.
+  Team and Attendance previously offered the same switch; see the newer list-only journey below.
+- `officer-cards.test.tsx`: both layouts preserve officer identities and route/visit actions.
+
+### Field Sales compact team and multi-officer route view — 2026-10-16 (local development)
+
+- [P1] `field-sales.spec.ts`: Team and Attendance show compact list rows only, preserving
+  status, punch times, shop details and actions. Route and visits can fill the viewport; the
+  map has its own full-screen control. The officer chooser lists the whole authorized team,
+  can select all or several, and identifies their routes with distinct color swatches.
+- `tests/invariants/field-sales.test.ts`: a multi-officer route response attributes each GPS
+  point to the right employee and rejects foreign-tenant or out-of-scope selections.
+- Multi-officer route history uses 30-second samples to bound display volume. Raw GPS remains
+  unchanged. Browser screenshots and the full E2E gate are required before live release.
+- The first full browser gate for commit `7e161e581` caught two regressions: at 1280×900 the
+  sidebar needed 744px in 738.5px of available height, and the full-screen map canvas blocked
+  its own exit button. This revision reduces only inter-group/outer nav spacing and layers the
+  map control above its canvas. The existing browser assertions remain in force; this fix is
+  pending a fresh full gate and is not evidence of deployment.
+
+### Field Sales stable route identities — 2026-10-18 (local development)
+
+- [P1] `field-sales.spec.ts`: historical multi-officer paths show a distinct persisted route
+  color and patterned legend for each officer; clicking a legend entry highlights that path
+  without changing the stored GPS or selecting another officer.
+- `tests/invariants/field-sales.test.ts`: new enrollment uses a unique index within an
+  organization, while renaming or adding colleagues does not change an existing officer's
+  index. The selected officer's historical response returns the same index.
+- The optional 0694 migration backfills existing employees and remains safe on repeat and
+  fresh opt-in installation. The CT102 adapter backs up before applying it; production
+  behavior requires the exact-commit CI gate and guarded release.
+
+### Field Sales Team roster maintenance — 2026-10-22 (local development)
+
+- [P1] `field-sales.spec.ts`: tenant admin edits an officer's Field Sales display name in the compact Team list and removes that officer after confirmation. The test waits for server-backed success and dialog close before checking the active list and stored inactive state; recorded shifts remain. It captures before/after screenshots as CI artifacts.
+- [P1] `field-sales.spec.ts`: tenant admin opens Android keys from a Field Officer's compact Team row, issues a one-use code through the existing dialog, verifies the pending device belongs to that officer and tenant, then closes the dialog. A manager does not see that control.
+- [P1] `tests/invariants/field-sales.test.ts`: role and tenant isolation, stale-name rejection, removal refused during an open shift, audit entries, preserved session, and loss of active Field Sales access.
+
+### Field Sales team monthly Excel — 2026-10-21 (local development)
+
+- [P1] `field-sales.spec.ts`: a manager reaches monthly exports from Attendance and downloads
+  one workbook for all enrolled officers. The test opens the downloaded file and checks that
+  two officers appear on separate worksheets with their own attendance rows. The individual
+  officer download remains available.
+- `attendance-month.test.ts`: a field officer cannot request the team workbook; the bounded
+  tenant-scoped query, overnight hours, project attribution and Excel-safe duplicate sheet
+  names are verified. The full browser gate is still required before CT102 deployment.

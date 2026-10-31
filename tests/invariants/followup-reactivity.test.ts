@@ -171,10 +171,10 @@ function engineDb(): AdminClient {
     async loadLastInboundBody() {
       return null;
     },
-    async loadEnrollmentEvents(enrollmentId): Promise<EnrollmentEventRef[]> {
+    async loadEnrollmentEvents(enrollmentId, organizationId): Promise<EnrollmentEventRef[]> {
       const { rows } = await pool.query<EnrollmentEventRef>(
-        `select node_id, idempotency_key, event_type, payload from followup_enrollment_events where enrollment_id = $1 order by created_at asc`,
-        [enrollmentId],
+        `select node_id, idempotency_key, event_type, payload from followup_enrollment_events where enrollment_id = $1 and organization_id = $2 order by created_at asc`,
+        [enrollmentId, organizationId],
       );
       return rows;
     },

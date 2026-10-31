@@ -231,7 +231,9 @@ export async function readFieldCalendar(pool: Pick<pg.Pool, 'connect'>, org: str
   if (Date.parse(through) < Date.parse(from) || Date.parse(through) - Date.parse(from) > 92 * 86400000)
     throw new Error('field_calendar_window_too_large');
   return fieldTransaction(pool, org, actor, async (db, role) => {
-    const employees = (await db.query(`select e.user_id,e.display_name,e.active,e.route_style_index from public.field_sales_employees e
+    const employees = (await db.query(`select e.user_id,e.display_name,e.active,e.route_style_index,m.role as team_role
+      from public.field_sales_employees e
+      left join public.user_organizations m on m.organization_id=e.organization_id and m.user_id=e.user_id
       where e.organization_id=$1 and ($3 in ('admin','manager') or e.user_id=$2)
       order by e.display_name`, [org, actor, role])).rows;
     const ids = employees.map(e => e.user_id);

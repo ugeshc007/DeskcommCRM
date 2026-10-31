@@ -122,6 +122,18 @@ test('manager creates an active Promoter without a link and opens Android pairin
     await page.getByRole('dialog', { name: /Android access/ }).getByPlaceholder('Work phone').fill('Synthetic phone');
     await page.getByRole('dialog', { name: /Android access/ }).getByRole('button', { name: 'Create pairing code' }).click();
     await expect(page.getByRole('textbox', { name: 'Pairing code' })).toHaveValue(/^\d{6}$/);
+    await page.keyboard.press('Escape');
+    const roster = page.getByRole('region', { name: 'Promoter attendance' });
+    await page.getByRole('button', { name: 'Promoters (1)' }).click();
+    await expect(roster.getByRole('heading', { name: 'Synthetic promoter' })).toBeVisible();
+    await expect(roster.getByRole('heading', { name: 'Synthetic salesperson' })).toHaveCount(0);
+    await page.getByRole('button', { name: /Field Officers \(/ }).click();
+    const officers = page.getByRole('region', { name: 'Field officer attendance' });
+    await expect(officers.getByRole('heading', { name: 'Synthetic promoter' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Other staff (1)' }).click();
+    const otherStaff = page.getByRole('region', { name: 'Other staff attendance' });
+    await expect(otherStaff.getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
+    await expect(otherStaff.getByRole('heading', { name: 'Synthetic promoter' })).toHaveCount(0);
     await pool.query('delete from field_sales_devices where organization_id=$1 and employee_id=$2', [org, membership.user_id]);
     await pool.query('delete from field_sales_employees where organization_id=$1 and user_id=$2', [org, membership.user_id]);
     await pool.query('delete from user_organizations where organization_id=$1 and user_id=$2', [org, membership.user_id]);
@@ -191,6 +203,7 @@ test('manager can edit a Field Sales name but cannot remove or enroll an officer
     await page.waitForURL(/\/app(?:\/|$)/);
     await page.goto('/app/field-sales');
     await page.getByRole('tab', { name: 'Team', exact: true }).click();
+    await page.getByRole('button', { name: /Other staff \(/ }).click();
     const row = page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Synthetic salesperson' });
     await expect(row.getByRole('button', { name: 'Edit name' })).toBeVisible();
     await expect(row.getByRole('button', { name: 'Android keys' })).toHaveCount(0);
@@ -368,6 +381,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Create field worker' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Invite other role' })).toHaveAttribute('href', '/app/team/invite');
+  await page.getByRole('button', { name: /Other staff \(/ }).click();
   await page.getByRole('button', { name: 'Manage projects' }).click();
   const projectManager = page.getByRole('dialog');
   await expect(projectManager.getByText('Synthetic showroom')).toBeVisible();
@@ -456,7 +470,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
-  const team = page.getByRole('region', { name: 'Field officer attendance' });
+  await page.getByRole('button', { name: /Other staff \(/ }).click();
+  const team = page.getByRole('region', { name: 'Other staff attendance' });
   await expect(team.locator('[data-layout="list"]')).toBeVisible();
   await expect(team.getByRole('button', { name: 'Grid' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Manager visibility' })).toHaveCount(0);
@@ -516,6 +531,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   // after enrolling a new officer so the Team tab reads the current roster.
   await page.reload();
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await page.getByRole('button', { name: /Other staff \(/ }).click();
   await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
   const [teamDownload] = await Promise.all([
     page.waitForEvent('download'), monthly.getByRole('button', { name: 'Export all employees Excel' }).click(),

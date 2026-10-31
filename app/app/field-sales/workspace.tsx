@@ -21,7 +21,7 @@ import { OfficerDevicesDialog } from '@/app/app/team/_components/OfficerDevicesD
 import type { FieldSchedule } from '@/lib/field-sales/contracts';
 import { useT } from '@/hooks/i18n/useT';
 
-type Employee = { user_id: string; display_name: string; active: boolean; route_style_index: number };
+type Employee = { user_id: string; display_name: string; active: boolean; route_style_index: number; team_role: string | null };
 type Project = { id: string; name: string; site_name: string; active: boolean };
 type Occurrence = { occurrence_key: string; employee_id: string; date: string; starts_at: string; ends_at: string;
   employee_name: string; project_name: string; site_name: string; revision: number; schedule: FieldSchedule; timezone: string; untimed: boolean };
@@ -76,6 +76,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('calendar');
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('all');
+  const [teamRoleView, setTeamRoleView] = useState<'field_officer' | 'promoter' | 'other'>('field_officer');
   const [activityDate, setActivityDate] = useState('');
   const [activityExporting, setActivityExporting] = useState(false);
   const [activityExportError, setActivityExportError] = useState('');
@@ -88,6 +89,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const end = addCalendarDays(start, view === 'week' ? 6 : 0);
   const query = useQuery({ queryKey: ['field-sales', organizationId, userId, start, end], queryFn: () => readJson<CalendarData>(`/api/v1/field-sales?from=${start}&through=${end}`), gcTime: 0 });
   const data = query.data;
+  const selectedTeamRoleView = data?.role === 'promoter' ? 'promoter' : data?.role === 'agent' ? 'other' : teamRoleView;
   const members = useQuery({ queryKey: ['field-sales-members', organizationId, userId], queryFn: () => readJson<Member[]>('/api/v1/team/assignable'), enabled: data?.role === 'admin' || data?.role === 'manager', gcTime: 0 });
   const manager = data?.role === 'admin' || data?.role === 'manager';
   const administrator = data?.role === 'admin';
@@ -116,6 +118,10 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const onlineEmployeeIds = new Set(teamPresence.data?.latest.filter(person => person.online).map(person => person.employee_id) ?? []);
   const teamPeople = people.filter(person => person.active).sort((a, b) => Number(onlineEmployeeIds.has(b.user_id)) - Number(onlineEmployeeIds.has(a.user_id))
     || a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' }) || a.user_id.localeCompare(b.user_id));
+  const fieldOfficers = teamPeople.filter(person => person.team_role === 'field_officer');
+  const promoters = teamPeople.filter(person => person.team_role === 'promoter');
+  const otherStaff = teamPeople.filter(person => person.team_role !== 'field_officer' && person.team_role !== 'promoter');
+  const visibleTeamPeople = selectedTeamRoleView === 'promoter' ? promoters : selectedTeamRoleView === 'other' ? otherStaff : fieldOfficers;
   const clashes = new Set((data?.overlaps ?? []).flat());
 
   async function save(input: unknown, closeDialog = true): Promise<boolean> {
@@ -214,8 +220,9 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       if (!response.ok) throw new Error(body.error?.message ?? 'Could not create the team member.');
       await Promise.all([cache.invalidateQueries({ queryKey: ['field-sales', organizationId, userId] }),
         cache.invalidateQueries({ queryKey: ['field-sales-members', organizationId, userId] })]);
+      setTeamRoleView(body.data.role === 'promoter' ? 'promoter' : 'field_officer');
       setDialog(null);
-      setDeviceEmployee({ user_id: body.data.user_id, display_name: body.data.display_name, active: true, route_style_index: 0 });
+      setDeviceEmployee({ user_id: body.data.user_id, display_name: body.data.display_name, active: true, route_style_index: 0, team_role: body.data.role });
       toast.success('Team member is active. Create their Android pairing code now.');
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not create the team member.'); }
     finally { setBusy(false); }
@@ -287,12 +294,13 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
         </TabsContent>
         <TabsContent value="team" className="space-y-4">{manager && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setError(''); setDialog('create_member'); }}><Plus aria-hidden/>Create field worker</Button><Button asChild variant="outline"><Link href="/app/team/invite">Invite other role</Link></Button><Button variant="outline" onClick={() => setDialog('employee')}>Enroll existing member</Button></div>}
           <p className="text-sm text-muted-foreground">Enrollment does not start tracking. Staff must punch in from their authorized Android app.</p>
-          <section className="space-y-3" aria-label="Field officer attendance">
-            <div><h2 className="font-semibold">Field officers · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
+          <section className="space-y-3" aria-label={selectedTeamRoleView === 'promoter' ? 'Promoter attendance' : selectedTeamRoleView === 'other' ? 'Other staff attendance' : 'Field officer attendance'}>
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">{selectedTeamRoleView === 'promoter' ? 'Promoters' : selectedTeamRoleView === 'other' ? 'Other enrolled staff' : 'Field officers'} · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
+              {manager && <div role="group" aria-label="Team role view" className="flex flex-wrap gap-1 rounded-md border p-1"><Button size="sm" variant={selectedTeamRoleView === 'field_officer' ? 'secondary' : 'ghost'} aria-pressed={selectedTeamRoleView === 'field_officer'} onClick={() => setTeamRoleView('field_officer')}>Field Officers ({fieldOfficers.length})</Button><Button size="sm" variant={selectedTeamRoleView === 'promoter' ? 'secondary' : 'ghost'} aria-pressed={selectedTeamRoleView === 'promoter'} onClick={() => setTeamRoleView('promoter')}>Promoters ({promoters.length})</Button>{otherStaff.length > 0 && <Button size="sm" variant={selectedTeamRoleView === 'other' ? 'secondary' : 'ghost'} aria-pressed={selectedTeamRoleView === 'other'} onClick={() => setTeamRoleView('other')}>Other staff ({otherStaff.length})</Button>}</div>}</div>
             {teamPresence.isPending && <p role="status">Loading team attendance…</p>}
             {teamPresence.error && <p role="alert">{teamPresence.error.message} <Button variant="outline" onClick={() => void teamPresence.refetch()}>Retry</Button></p>}
-            {!teamPeople.length && <p className="rounded-xl border p-4">No active field officers enrolled yet.</p>}
-            <div data-layout="list" className="divide-y rounded-lg border bg-card">{teamPeople.map(person => {
+            {!visibleTeamPeople.length && <p className="rounded-xl border p-4">{selectedTeamRoleView === 'promoter' ? 'No active promoters enrolled yet.' : selectedTeamRoleView === 'other' ? 'No other active staff enrolled yet.' : 'No active field officers enrolled yet.'}</p>}
+            <div data-layout="list" className="divide-y rounded-lg border bg-card">{visibleTeamPeople.map(person => {
               const position = teamPresence.data?.latest.find(item => item.employee_id === person.user_id);
               const sessions = teamPresence.data?.sessions.filter(item => item.employee_id === person.user_id) ?? [];
               const openSession = sessions.find(item => !item.punched_out_at);

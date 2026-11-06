@@ -202,7 +202,7 @@ async function loginComTotp(page: Page, email: string, secret: string): Promise<
     await page.keyboard.type(generateTotp(secret), { delay: 40 });
 
     const desfecho = await Promise.race([
-      page.waitForURL(/\/app\//, { timeout: 60_000 }).then(
+      page.waitForURL(/\/(?:app|admin)(?:\/|$)/, { timeout: 60_000 }).then(
         () => "entrou" as const,
         () => "sem-desfecho" as const,
       ),
@@ -260,10 +260,10 @@ async function removerLogoSeHouver(page: Page, tela: string, escopo: Escopo): Pr
   await page.goto(tela);
   const remover = page
     .locator(`[data-campo-de-logo='${escopo}']`)
-    .getByRole("button", { name: /^remover$/i });
+    .getByRole("button", { name: /^(remover|remove)$/i });
   if ((await remover.count()) === 0) return;
   await remover.click();
-  await expect(page.getByText(/logo removido/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/logo removido|logo removed/i)).toBeVisible({ timeout: 15_000 });
 }
 
 /** O que um `<img>` do produto mostra, medido por ferramenta. */
@@ -487,7 +487,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
       mime: "image/png",
       bytes: PNG_DA_PLATAFORMA,
     });
-    await expect(page.getByText(/logo atualizado/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo atualizado|logo updated/i)).toBeVisible({ timeout: 15_000 });
 
     // A prévia sobre as DUAS superfícies mostra a imagem real — é o que
     // substituiu o analisador de luminância no servidor.
@@ -563,7 +563,7 @@ test.describe("o logo subido pela tela chega à tela", () => {
       mime: "image/png",
       bytes: PNG_DA_ORGANIZACAO,
     });
-    await expect(page.getByText(/logo atualizado/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo atualizado|logo updated/i)).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/app/inbox");
     const barra = await logoDaBarra(page);
@@ -652,11 +652,11 @@ test.describe("o logo subido pela tela chega à tela", () => {
     // a asserção nomeia a precondição em vez de deixá-la sair como um clique que
     // esperou até o timeout.
     const remover = page.locator("[data-campo-de-logo='organizacao']").getByRole("button", {
-      name: /^remover$/i,
+      name: /^(remover|remove)$/i,
     });
     await expect(remover, "precondição: a empresa precisa entrar neste caso COM logo próprio").toBeVisible();
     await remover.click();
-    await expect(page.getByText(/logo removido/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo removido|logo removed/i)).toBeVisible({ timeout: 15_000 });
 
     await page.goto("/app/inbox");
     const barra = await logoDaBarra(page);
@@ -675,14 +675,14 @@ test.describe("o logo subido pela tela chega à tela", () => {
     await loginComTotp(page, creds.users.dono!.email, creds.dono_totp!.secret);
     await page.goto("/admin/marca");
     const remover = page.locator("[data-campo-de-logo='instalacao']").getByRole("button", {
-      name: /^remover$/i,
+      name: /^(remover|remove)$/i,
     });
     await expect(
       remover,
       "precondição: a instalação precisa entrar neste caso COM logo próprio",
     ).toBeVisible();
     await remover.click();
-    await expect(page.getByText(/logo removido/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/logo removido|logo removed/i)).toBeVisible({ timeout: 15_000 });
 
     const noLogin = await logoDoLogin(browser);
     // `null` (nenhuma imagem) ou uma URL que não é do bucket (o `APP_LOGO_URL`

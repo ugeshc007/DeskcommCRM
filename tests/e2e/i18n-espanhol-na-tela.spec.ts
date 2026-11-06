@@ -116,6 +116,10 @@ function rotulosDeInterface(textos: string[]): string {
 
 /** Todo texto que a pessoa consegue LER nesta tela, normalizado. */
 async function textosVisiveis(page: Page): Promise<string[]> {
+  if (new URL(page.url()).pathname === "/app/metrics") {
+    await expect(page.getByRole("heading", { name: /^(Atrito|Fricción)$/ })).toBeVisible({ timeout: PRAZO });
+    await expect(page.getByText(/^(Carregando…|Cargando…|Loading…)$/)).toHaveCount(0, { timeout: PRAZO });
+  }
   return page.evaluate(() => {
     const saida: string[] = [];
     const anda = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -129,6 +133,9 @@ async function textosVisiveis(page: Page): Promise<string[]> {
       // de mentira. O que não conta é o que está escondido de TODO mundo.
       const estilo = getComputedStyle(pai);
       if (estilo.display === "none" || estilo.visibility === "hidden") continue;
+      // Ancestral display:none também esconde o texto; sr-only continua com
+      // caixa de 1px e permanece na medição de acessibilidade.
+      if (pai.getClientRects().length === 0) continue;
       if (pai.closest("script,style,noscript")) continue;
       saida.push(texto);
     }

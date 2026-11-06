@@ -39,6 +39,7 @@ export type ActivityType =
   | "reactivation_dismissed"
   | "reactivation_expired"
   | "followup_scheduled"
+  | "retail_followup_done"
   // DECISÃO 22 — a agenda na timeline do lead. `appointment_completed` e
   // `appointment_no_show` são o PAR que a DECISÃO 17 exige: sem os dois,
   // "aconteceu" e "faltou" não chegam à timeline, e o Radar não distingue lead
@@ -192,6 +193,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // quê — e é justamente o cancelamento que o agente precisa enxergar ao
   // retomar, para não repropor o que uma pessoa já desmarcou.
   followup_scheduled: "Retorno agendado",
+  retail_followup_done: "Retorno comercial concluído",
   // ⚠️ "Agendamento", não "Consulta". O produto é MULTI-NICHO por design:
   // imobiliária faz visita, agência faz call, obra faz vistoria. "Consulta
   // marcada" seria o vocabulário de UM nicho imposto aos outros quatro, que é o

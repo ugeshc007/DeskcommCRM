@@ -1,5 +1,12 @@
 # Migration Manifest — DeskcommCRM
 
+## Local development — not deployed
+
+| Timestamp | Migration | Purpose |
+|---|---|---|
+| `20260918020000` | `0278_integration_connection_management` | Atomic actor-checked connection save/test/disconnect, revision CAS and one-use browser-bound OAuth state. |
+| `20260918002000` | `0275_integration_execution_ledger` | Shared organization-scoped connection metadata, server-only credential vault and atomic execution ledger. No provider enabled. Number follows upstream maximum 0274 checked on 2026-09-17. |
+
 Migrations applied to Supabase project `rrydmwnporysaiysiztn` (sa-east-1, Postgres 17) via Supabase MCP on 2026-04-28.
 
 ## Nota — renomeação de 4 prefixos em 2026-08-05 (issue #143)
@@ -45,6 +52,7 @@ aplica.
 
 | Version | Name | Description |
 |---|---|---|
+| `20260918001000` | `0265_followup_session_variables` | Variáveis tipadas por enrollment; escrita server-only, limitada, org-scoped, atômica com avanço e evento sem valores pessoais. |
 | `20260428195354` | `0001_platform_base` | organizations, user_organizations, platform_admins, api_tokens, api_audit_log, user_recovery_codes, idempotency_keys + RLS helpers (fn_user_org_ids, fn_is_platform_admin, fn_user_role_in_org, fn_role_at_least) |
 | `20260428195513` | `0002_event_log_and_compat` | event_log + emit_event/fn_log_event helpers + compat aliases (fn_set_updated_at, fn_user_role_in returning int) |
 | `20260428195708` | `0003_customer_360` | contacts (CPF encrypted), crm_pipelines, crm_stages, crm_leads, crm_lead_activities, crm_lead_links, merge_queue + 5 domain triggers |
@@ -299,3 +307,30 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20260912160000` | `0241_saas_provider_events` | Recibo global mínimo + RPC service-only aplicam eventos normalizados por referência externa confiável; duplicados, desconhecidos e fora de ordem não regridem a assinatura. |
 | `20260914113000` | `0242_english_e_usd_defaults` | Novas organizações começam em inglês, UTC e USD; onboarding escolhe país, fuso e moeda sem alterar tenants existentes. |
 | `20260914170000` | `0243_meta_app_secret_pela_tela` | App Secret do webhook oficial em singleton server-only, cifrado e configurável na aba Conexões apenas pelo administrador da plataforma; banco primeiro e ambiente como rollback. |
+| `20260918140000` | `0279_native_page_channel` | Identidade de Page por organização, vínculo de credencial revisionado, ingestão atômica/deduplicada e suspensão ao rotacionar. RPCs service-only; não ativa bots. |
+| `20260918150000` | `0280_checkout_module_provisioner` | Provisionador fixo service-only do módulo opcional de loja. Entregar a função não cria tabelas nem ativa organizações; reserva e pagamentos usam registros escopados. |
+| `20260918170000` | `0281_native_inbound_recovery` | Mensagem, mídia e pós-entrada duráveis no mesmo commit; despacho idempotente após reinício, sem repetir resposta. |
+| `20260918180000` | `0282_bot_checkout_provisioner` | Extensão opt-in do provisionador: propostas por mensagem, confirmação vinculada ao cliente e ativação explícita do checkout automático. |
+| `20260918190000` | `0283_native_channel_store_privacy` | Redige identidade de canal e dados opcionais do checkout; tombstone impede recriar o contato apagado por reentrega. |
+| `20260918200000` | `0284_inbound_dispatch_receipts` | Recibo de despacho independente de metadata mutável, preservando deduplicação durante persistência de mídia. |
+| `20260918223000` | `0311_field_sales_module` | Optional field-sales provisioner: isolated projects, weekly schedules, attendance and location records. No tables or tracking activated until explicit installation; server-only access. |
+| `20260918230000` | `0312_field_sales_devices` | Employee-scoped Android credentials: hash-only, expiring and revocable. Optional provisioning; no automatic enrollment. |
+| `20260918233000` | `0313_field_sales_retention` | Bounded service-only raw GPS retention, per-organization policy and transactionally audited counts; no-op when optional module is absent. |
+| `20260919001000` | `0314_field_sales_operations` | Optional visits, append-only operation receipts, reviewed attendance corrections and self-hosted map configuration; server-scoped access only. |
+| `20260919010000` | `0315_field_sales_lifecycle` | Optional lifecycle upgrade: organization-owned cascading cleanup while retaining individual employee/history foreign-key protection. |
+| `20260919020000` | `0316_field_sales_followups` | Optional next-action completion records and due-action index; preserves text and dates, keeps reminders employee/manager scoped. |
+| `20260919030000` | `0317_field_sales_photos` | Optional private, bounded visit photos with ownership/cascade lifecycle; no public object links. |
+| `20260920090000` | `0318_field_sales_session_projects` | New mobile work sessions must persist the selected assigned project occurrence; legacy sessions remain readable. Adds organization-scoped project/schedule FKs and the employee/date route index through the optional provisioner. |
+| `20260921120000` | `0319_field_officer_and_invite_archive` | Least-privilege Field Officer membership and invitation role; archive revoked invitations without deleting token-denial history. |
+| `20260921150000` | `0320_field_sales_short_pairing` | Optional, five-minute six-digit pairing code for Field Sales devices; exchange once for the existing strong 30-day bearer. Existing devices remain valid. Fresh installations provision the optional columns only when the module is installed. |
+| `20260921190000` | `0381_field_sales_flexible_shifts` | Optional Field Sales: clock in before selecting a project, allow organization-scoped project overrides, and keep paired devices valid until revocation. Existing history remains intact. |
+| `20260921200000` | `0382_field_sales_provisioner_consistency` | Forward-fix: make the migration chain's final Field Sales provisioners match the idempotent baseline. One final assignment constraint permits punch-in before project selection. |
+| `20260921210000` | `0383_field_sales_device_presence` | Optional, organization-scoped Android last-seen heartbeat for a truthful short-lived online badge; never treats a paired key alone as online. |
+| `20260922113000` | `0384_field_sales_project_customers` | Optional project-specific shop roster and immutable received-payment/visit ledger. Signed due balances allow advance credit; independently voided mistakes retain their original receipt and compensate the current balance. Authenticated table access remains denied. |
+| `20260922160000` | `0385_field_sales_activity_notes` | Optional, organization-isolated and officer-confirmed voice/typed activity notes linked to work sessions, projects and optionally shops; direct authenticated table access remains denied. |
+| `20260923123000` | `0386_lead_stage_aging` | Tenant-scoped, caller-RLS stage aging report using the existing stage_changed_at timestamp and a bounded list. |
+| `20260924010000` | `0387_retail_lead_foundation` | Optional retail Event ID profile, one open event per organization and phone, required next follow-up, staff-to-store mapping, manager overdue flag after one working day, and guarded cross-organization move retaining the Event ID and activity history. Three tenant-scoped tables, RLS, guarded functions, baseline mirror and linked-record conflict checks. |
+| `20260924180000` | `0388_field_sales_location_quality` | Optional Field Sales raw GPS quality metadata and device-monotonic fix age. Existing mobile payloads stay valid; provisioning upgrades installed organizations and fresh opt-in installs. |
+| `20260925120000` | `0389_field_sales_attendance_leave` | Optional organization-scoped approved leave calendar for daily Field Sales attendance. Existing sessions remain immutable; direct authenticated table access stays denied. |
+| `20261018035000` | `0694_field_sales_route_styles` | Assign a permanent unique route-style index to every existing and newly enrolled officer per organization; historical GPS records use the same identity without modification. |
+| `20261030100000` | `0695_promoter_role` | Add the Promoter team role with Field Sales attendance, routes, visits, and device pairing while retaining the same restricted tenant RLS scope as Field Officers. |

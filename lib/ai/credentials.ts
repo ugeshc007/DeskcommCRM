@@ -62,10 +62,12 @@ export async function loadCredential(
       "id, organization_id, provider, label, api_key_encrypted, api_key_iv, api_key_tag, is_active, validated_at",
     )
     .eq("id", id)
+    .eq("organization_id", organizationId)
     .maybeSingle<CredentialRow>();
 
   if (error) {
-    throw new CredentialUnavailableError("not_found", `query_error: ${error.message}`);
+    // Diagnóstico do driver não atravessa a fronteira de credenciais.
+    throw new CredentialUnavailableError("not_found", "credential lookup failed");
   }
   if (!data) {
     throw new CredentialUnavailableError("not_found", "credential não encontrada");
@@ -90,10 +92,10 @@ export async function loadCredential(
       iv: byteaToBuffer(data.api_key_iv),
       tag: byteaToBuffer(data.api_key_tag),
     });
-  } catch (err) {
+  } catch {
     throw new CredentialUnavailableError(
       "decrypt_failed",
-      err instanceof Error ? err.message : "decrypt_failed",
+      "credential decryption failed",
     );
   }
 

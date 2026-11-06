@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Draft simulator", "subtitle": "Isolated local routing preview", "output": "flow-simulator.html", "quality_profile": "standard" },
+  "lanes": [{ "id": "ui", "label": "Builder" }, { "id": "pure", "label": "Pure logic" }],
+  "mainPath": ["draft", "simulation", "trace"],
+  "nodes": [
+    { "id": "draft", "lane": "ui", "col": 0, "type": "service", "label": "FlowCanvas draft", "sublabel": "Explicit Test flow entry" },
+    { "id": "simulation", "lane": "pure", "col": 1, "type": "lib", "label": "simulator.ts", "sublabel": "Pure routing; bounded in-memory variables; no external adapters" },
+    { "id": "trace", "lane": "ui", "col": 2, "type": "service", "label": "FlowSimulator panel", "sublabel": "Step history, variables and failure feedback" }
+  ],
+  "edges": [
+    { "id": "snapshot", "from": "draft", "to": "simulation", "label": "Graph snapshot and synthetic input" },
+    { "id": "result", "from": "simulation", "to": "trace", "label": "Preview only; no jobs, database or credentials" },
+    { "id": "feedback", "from": "trace", "to": "draft", "label": "Operator corrects blocks and restarts" }
+  ]
+}

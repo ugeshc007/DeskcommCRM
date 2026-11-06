@@ -112,6 +112,9 @@ export async function enrollFollowupFlow(
   }
 
   const boundary = input.resolveServiceBoundary ? await input.resolveServiceBoundary() : await beginServiceAtOrigin(supabase, organizationId, contactId);
+  if (boundary.organization_id !== organizationId || boundary.contact_id !== contactId) {
+    return { ok: false, code: "not_found", message: "Conversation not found.", status: 404 };
+  }
   if (input.resolveServiceBoundary) await assertServiceBoundarySupabase(supabase, boundary);
   const { data: created, error: insErr } = await supabase
     .from("followup_enrollments")

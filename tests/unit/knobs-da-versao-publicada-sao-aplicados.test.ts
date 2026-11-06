@@ -55,17 +55,25 @@ function camposDaConfig(): string[] {
 }
 
 /** Arquivos que leem o campo, fora do próprio módulo que o carrega. */
+let fontesConsumidoras: Array<{ arquivo: string; fonte: string }> | undefined;
 function consumidoresDe(campo: string): string[] {
+  if (fontesConsumidoras) return fontesConsumidoras.filter(({ fonte }) =>
+    fonte.includes(`agentConfig.${campo}`) || fonte.includes(`agentConfig?.${campo}`)).map(({ arquivo }) => arquivo);
   try {
     const saida = execFileSync(
       "git",
-      ["grep", "-l", "-e", `agentConfig.${campo}`, "-e", `agentConfig?.${campo}`, "--", "lib", "workers", "app"],
+      ["grep", "-l", "-F", "-e", "agentConfig.", "-e", "agentConfig?.", "--", "lib", "workers", "app"],
       { cwd: RAIZ, encoding: "utf8" },
     );
-    return saida.split("\n").filter((f) => f !== "" && !f.includes("agent-config"));
-  } catch {
+    // Uma única varredura: abrir git por campo tornava a sonda mais lenta que
+    // o timeout em Windows. O conjunto e a comparação continuam os mesmos.
+    fontesConsumidoras = saida.split(/\r?\n/).filter((f) => f !== "" && !f.includes("agent-config"))
+      .map(arquivo => ({ arquivo, fonte: readFileSync(path.join(RAIZ, arquivo), 'utf8') }));
+    return consumidoresDe(campo);
+  } catch (error) {
     // `git grep` sai com 1 quando não encontra nada — ausência, não falha.
-    return [];
+    if (error && typeof error === 'object' && 'status' in error && error.status === 1) return [];
+    throw error;
   }
 }
 

@@ -238,7 +238,14 @@ test.describe("IA 360 W3 — o agente para, a pessoa continua, o agente retoma s
     // ---------------------------------------------------------------------
     // (4) A pessoa devolve o atendimento — e as TRÊS travas têm de sair.
     // ---------------------------------------------------------------------
+    // A assinatura Realtime pode atualizar a conversa antes de a rota gravar
+    // a atividade e o checkpoint. Aguarda a operação inteira, não só as travas.
+    const retomada = page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `/api/v1/conversations/${e.conversation_id}/reactivate-bot`,
+    );
     await botaoDevolver.click();
+    expect((await retomada).status()).toBe(200);
 
     await expect
       .poll(

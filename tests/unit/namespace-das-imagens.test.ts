@@ -229,10 +229,9 @@ describe("o kit aponta para o que o CI realmente publica", () => {
     );
   });
 
-  it("as três imagens do kit são exatamente as três que o workflow constrói", () => {
+  it("as três imagens do kit estão na matriz, junto da imagem opcional de voz", () => {
     const naMatriz = [...PUBLICA.matchAll(/^\s{10}- name: (\S+)$/gm)].map((m) => m[1]);
-    expect(naMatriz.length, "a matriz de publish-image.yml não tem mais três imagens").toBe(3);
-    expect([...naMatriz].sort()).toEqual([...reposDoKit()].sort());
+    expect([...naMatriz].sort()).toEqual([...reposDoKit(), "deskcomm-field-voice"].sort());
   });
 });
 

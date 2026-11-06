@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Optional native checkout", "subtitle": "Explicit activation; customer confirmation; no automatic bot publication", "output": "native-store-checkout.html", "quality_profile": "standard" },
+  "lanes": [
+    { "id": "control", "label": "Organization controls" },
+    { "id": "runtime", "label": "Trusted runtime" },
+    { "id": "storage", "label": "Durable state" }
+  ],
+  "mainPath": ["settings", "quote", "reserve", "payment"],
+  "nodes": [
+    { "id": "settings", "lane": "control", "col": 0, "type": "service", "label": "Store settings / catalogue", "sublabel": "Current admin; optional provisioner; disabled by default" },
+    { "id": "quote", "lane": "runtime", "col": 1, "type": "service", "label": "Native inbound quote tool", "sublabel": "Current job claim + service boundary + AI eligibility" },
+    { "id": "proposal", "lane": "storage", "col": 1, "type": "database", "label": "Customer-bound proposal", "sublabel": "Server prices; exact confirmation; expiry; source message dedup" },
+    { "id": "reserve", "lane": "runtime", "col": 2, "type": "service", "label": "Verify real customer reply", "sublabel": "Reprice + stock locks + one order per proposal" },
+    { "id": "payment", "lane": "storage", "col": 3, "type": "database", "label": "Order / payment attempt", "sublabel": "Durable before network; organization connection revision" },
+    { "id": "reconcile", "lane": "runtime", "col": 4, "type": "service", "label": "Signed events / authenticated reconciliation", "sublabel": "Exact session, owner, amount and currency; one stock settlement" },
+    { "id": "review", "lane": "control", "col": 4, "type": "service", "label": "Order review / worker failures", "sublabel": "Unknown payment holds stock; never creates a replacement" },
+    { "id": "privacy", "lane": "storage", "col": 5, "type": "service", "label": "Privacy export and redaction", "sublabel": "Scoped details; remove proposals and payable URLs" }
+  ],
+  "edges": [
+    { "id": "s-q", "from": "settings", "to": "quote", "label": "Explicit opt-in" },
+    { "id": "q-p", "from": "quote", "to": "proposal", "label": "Persist quote before asking customer" },
+    { "id": "p-r", "from": "proposal", "to": "reserve", "label": "Exact later inbound confirmation" },
+    { "id": "r-p", "from": "reserve", "to": "payment", "label": "Atomic stock reservation and recovery event" },
+    { "id": "p-c", "from": "payment", "to": "reconcile", "label": "Provider idempotency key belongs to order" },
+    { "id": "c-p", "from": "reconcile", "to": "payment", "label": "Verified paid/expired only" },
+    { "id": "c-r", "from": "reconcile", "to": "review", "label": "Backoff and explicit failure" },
+    { "id": "p-x", "from": "payment", "to": "privacy", "label": "Organization/contact ownership" }
+  ]
+}

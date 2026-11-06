@@ -30,7 +30,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { replace, urlDaTela, toastFalso } = vi.hoisted(() => ({

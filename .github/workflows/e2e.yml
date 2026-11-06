@@ -9,9 +9,9 @@ name: e2e
 # é a quarta fonte da mesma verdade, e as três anteriores já divergiram — este
 # cabeçalho dizia "29 de 33" quando o disco tinha 45 e o job rodava 44.
 #
-# A execução é dividida em DUAS invocações do playwright de propósito: o
-# limitador de login do produto é por IP (60/300s) e no CI todos os specs vêm do
-# mesmo 127.0.0.1. Ver o comentário do passo "E2E — parte 1 de 3".
+# A execução é dividida em três partes e quatro shards por parte: o limitador
+# de login do produto é por IP (60/300s), e cada runner tem seu próprio banco.
+# Ver o comentário do passo "E2E — parte 1 de 3".
 #
 # É CHECK OBRIGATÓRIO. A régua, para reconferir em vez de acreditar nesta linha:
 #   $ gh api repos/melgarafael/DeskcommCRM/branches/main/protection \
@@ -35,7 +35,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, codex/field-sales-tracking, codex/ct102-release-speed]
 
 # O GITHUB_TOKEN deste job serve a `actions/checkout` (clone) e a
 # `actions/setup-node` (manifest de `actions/node-versions`, repo público).
@@ -57,7 +57,7 @@ permissions:
   contents: read
 
 jobs:
-  # AS DUAS PARTES RODAM EM PARALELO, e o motivo é medido, não estético.
+  # AS PARTES E SHARDS RODAM EM PARALELO, e o motivo é medido, não estético.
   #
   # Elas rodavam como dois passos do MESMO job, então somavam contra um único
   # teto de 30 min. Medido no run 33125422531, o último verde antes deste
@@ -88,12 +88,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # Supabase pulls several GHCR images per runner. Starting all twelve shards
+      # together hit the registry rate limit before any browser test could run.
+      max-parallel: 2
       # Sem fail-fast: se a parte 1 quebrar, ainda quero saber se a 2 também.
       # Com ele ligado, o primeiro vermelho esconde o outro e o conserto vira
       # uma rodada por parte.
       fail-fast: false
       matrix:
         parte: [1, 2, 3]
+        # Each runner still has one Playwright worker (shared MFA account), but
+        # four shards use isolated local databases and run concurrently. The
+        # two-shard release run timed out in every part at the 30-minute gate.
+        shard: [1, 2, 3, 4]
     # ─────────────────────────────────────────────────────────────────────────
     # A COBERTURA DEIXA DE SER PROSA DIGITADA À MÃO.
     #
@@ -571,6 +578,8 @@ jobs:
       # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
       # eles são justamente o fim da fila.
       SPECS_PARTE_3: >-
+        field-sales.spec.ts
+        team-manual-setup.spec.ts
         autonomia-assistida.spec.ts
         roteamento-por-canal.spec.ts
         central-avisos-destino.spec.ts
@@ -626,10 +635,22 @@ jobs:
       # CI. O que o self-hoster aplica é o `baseline.sql`, então é ele que o
       # e2e aplica: o banco do teste fica igual ao de quem instalou o produto.
       - name: Subir Supabase local (sem a cadeia de migrations)
+        # setup-cli defaults to GHCR; its shared-runner limit blocked every
+        # shard before Playwright started. Use Supabase's published Docker Hub
+        # images with the same version tags while keeping the real local stack.
+        env:
+          SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
         run: |
           mv supabase/migrations /tmp/migrations-off
           mkdir -p supabase/migrations
           supabase start
+
+      # O CLI precisa da pasta vazia apenas durante o start. Os specs podem
+      # ler migrations individuais para preparar cenários no banco efêmero.
+      - name: Restaurar migrations para os testes
+        run: |
+          rmdir supabase/migrations
+          mv /tmp/migrations-off supabase/migrations
 
       # O baseline é um dump `--schema-only`: ele USA os tipos das extensões
       # (public.vector, citext, gin_trgm_ops) mas não as cria. O stack local do
@@ -837,7 +858,7 @@ jobs:
       # workers, dois specs gerando o mesmo código no mesmo intervalo de 30s
       # fazem o segundo ser recusado como replay. Foi o que derrubava a
       # `reset-password-mfa` (issue #80): ela passa sozinha e falha em paralelo.
-      - name: E2E — parte ${{ matrix.parte }} de 3
+      - name: E2E — parte ${{ matrix.parte }} de 3, shard ${{ matrix.shard }} de 4
         run: |
           set -euo pipefail
           # A lista sai da matrix, e as duas variáveis continuam existindo no
@@ -872,7 +893,7 @@ jobs:
           # (`✓ 12 [chromium] › tests/e2e/x.spec.ts:9:5 › título (3.4s)`), e a
           # soma por arquivo sai de um `gh run view <id> --log`. Custo medido:
           # ~240 linhas a mais de log, zero segundo de execução.
-          pnpm exec playwright test --workers=1 $LISTA --reporter=list
+          pnpm exec playwright test --workers=1 --shard=${{ matrix.shard }}/4 $LISTA --reporter=list
         env:
           # Só o que NÃO vem do `.env.e2e`: isto é ajuste de CI, não config do
           # produto. CI = 1 IP para todos os specs, e o teto de produção
@@ -885,7 +906,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: playwright-report-parte-${{ matrix.parte }}
+          name: playwright-report-parte-${{ matrix.parte }}-shard-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/

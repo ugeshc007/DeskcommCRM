@@ -5,6 +5,7 @@
 import { metaCloudAdapter } from "./adapters/meta-cloud";
 import { wahaAdapter } from "./adapters/waha";
 import { zernioAdapter } from "./adapters/zernio";
+import { messengerAdapter } from "./adapters/messenger";
 import type { ChannelAdapter, ChannelProvider, ProviderDeMensagem } from "./types";
 
 /**
@@ -12,6 +13,7 @@ import type { ChannelAdapter, ChannelProvider, ProviderDeMensagem } from "./type
  * destinatário nem envia envelope — ver `ProviderDeMensagem` em `./types`.
  */
 const ADAPTERS: Record<ProviderDeMensagem, ChannelAdapter | null> = {
+  messenger: messengerAdapter,
   waha: wahaAdapter,
   meta_cloud: metaCloudAdapter,
   zernio: zernioAdapter,

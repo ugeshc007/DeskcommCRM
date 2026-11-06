@@ -1,0 +1,25 @@
+import { z } from 'zod';
+import { ConnectorRejected,type ConnectorAction } from './execution';
+import { providerHttp } from './provider-http';
+import { apiCredentialSchemas } from './provider-credentials';
+const text=z.string().min(1).max(2000),id=z.string().min(1).max(200);
+const idOutput=z.strictObject({id});
+const contact=z.strictObject({email:z.email(),first_name:text,last_name:text});
+const deal=z.strictObject({name:text,pipeline_id:id,stage_id:id});
+const link=z.strictObject({price_id:z.string().regex(/^price_[A-Za-z0-9]+$/),quantity:z.number().int().min(1).max(999)});
+const notification=z.strictObject({text});
+const mail=z.strictObject({subject:z.string().min(1).max(200),text});
+async function send(url:string,token:string,body:unknown,headers:Record<string,string>={}){
+ const r=await providerHttp(url,'POST',{Authorization:'Bearer '+token,'Content-Type':'application/json',...headers},typeof body==='string'?body:JSON.stringify(body));
+ if(r.status<200||r.status>=300)throw new Error('integration_delivery_uncertain');return r.data;
+}
+export const salesActions:readonly ConnectorAction[]=[
+ {provider:'hubspot',action:'create_contact',retry:'never',input:contact,output:idOutput,async execute(raw,c){const i=contact.parse(raw),s=apiCredentialSchemas.hubspot.parse(JSON.parse(c.credential));const r=z.object({id}).parse(await send('https://api.hubapi.com/crm/v3/objects/contacts',s.token,{properties:{email:i.email,firstname:i.first_name,lastname:i.last_name}}));return {id:r.id};}},
+ {provider:'salesforce',action:'create_contact',retry:'never',input:contact,output:idOutput,async execute(raw,c){const i=contact.parse(raw),s=apiCredentialSchemas.salesforce.parse(JSON.parse(c.credential));const r=z.object({id,success:z.literal(true)}).parse(await send(new URL('/services/data/v66.0/sobjects/Contact/',s.instance_url).toString(),s.token,{Email:i.email,FirstName:i.first_name,LastName:i.last_name}));return {id:r.id};}},
+ {provider:'salesforce',action:'create_opportunity',retry:'never',input:z.strictObject({name:text,stage:text,close_date:z.iso.date()}),output:idOutput,async execute(raw,c){const i=z.object({name:text,stage:text,close_date:z.iso.date()}).parse(raw),s=apiCredentialSchemas.salesforce.parse(JSON.parse(c.credential));const r=z.object({id,success:z.literal(true)}).parse(await send(new URL('/services/data/v66.0/sobjects/Opportunity/',s.instance_url).toString(),s.token,{Name:i.name,StageName:i.stage,CloseDate:i.close_date}));return {id:r.id};}},
+ {provider:'calendly',action:'create_booking_link',retry:'never',input:z.strictObject({}),output:z.strictObject({url:z.url().max(2000)}),async execute(_raw,c){const s=apiCredentialSchemas.calendly.parse(JSON.parse(c.credential));const r=z.object({resource:z.object({booking_url:z.url().max(2000)})}).parse(await send('https://api.calendly.com/scheduling_links',s.token,{max_event_count:1,owner_type:'EventType',owner:'https://api.calendly.com/event_types/'+s.event_type_id}));if(new URL(r.resource.booking_url).origin!=='https://calendly.com')throw new Error('integration_response_invalid');return {url:r.resource.booking_url};}},
+ {provider:'hubspot',action:'create_deal',retry:'never',input:deal,output:idOutput,async execute(raw,c){const i=deal.parse(raw),s=apiCredentialSchemas.hubspot.parse(JSON.parse(c.credential));const r=z.object({id}).parse(await send('https://api.hubapi.com/crm/v3/objects/deals',s.token,{properties:{dealname:i.name,pipeline:i.pipeline_id,dealstage:i.stage_id}}));return {id:r.id};}},
+ {provider:'stripe',action:'create_payment_link',retry:'provider_idempotent',input:link,output:z.strictObject({id,url:z.url().max(2000)}),async execute(raw,c){const i=link.parse(raw),s=apiCredentialSchemas.stripe.parse(JSON.parse(c.credential));const r=z.object({id,url:z.url().max(2000)}).parse(await send('https://api.stripe.com/v1/payment_links',s.token,new URLSearchParams({'line_items[0][price]':i.price_id,'line_items[0][quantity]':String(i.quantity)}).toString(),{'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':c.idempotencyKey}));if(new URL(r.url).origin!=='https://buy.stripe.com')throw new Error('integration_response_invalid');return {id:r.id,url:r.url};}},
+ {provider:'slack',action:'notify_staff',retry:'never',input:notification,output:idOutput,async execute(raw,c){const i=notification.parse(raw),s=apiCredentialSchemas.slack.parse(JSON.parse(c.credential));const r=z.object({ok:z.boolean(),ts:id.optional()}).parse(await send('https://slack.com/api/chat.postMessage',s.token,{channel:s.channel_id,text:i.text,mrkdwn:false,parse:'none',unfurl_links:false,unfurl_media:false}));if(!r.ok)throw new ConnectorRejected();return {id:r.ts};}},
+ {provider:'sendgrid',action:'notify_staff',retry:'never',input:mail,output:z.strictObject({accepted:z.literal(true)}),async execute(raw,c){const i=mail.parse(raw),s=apiCredentialSchemas.sendgrid.parse(JSON.parse(c.credential));await send('https://api.sendgrid.com/v3/mail/send',s.token,{personalizations:[{to:[{email:s.staff_email}]}],from:{email:s.from_email},subject:i.subject,content:[{type:'text/plain',value:i.text}]});return {accepted:true};}},
+];

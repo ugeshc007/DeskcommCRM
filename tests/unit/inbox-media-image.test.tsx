@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { describe, expect, it } from "vitest";
 
 import { ImageMedia } from "@/components/inbox/media/ImageMedia";

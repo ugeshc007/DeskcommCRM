@@ -90,23 +90,24 @@ test.describe("conectar a agenda do Google", () => {
 
   test("sem chave do Google, a Agenda abre e explica o que falta", async () => {
     await page.goto("/app/agenda");
+    const activePage = page.getByRole("main");
 
     // 1. A TELA ABRE INTEIRA. Env opcional ausente degrada com explicação, não
     //    derruba o módulo — é o que `configuracaoDoGoogle()` devolvendo `null`
     //    existe para permitir.
-    await expect(page.getByTestId("tela-agenda")).toBeVisible({ timeout: ESPERA });
+    await expect(activePage.getByTestId("tela-agenda")).toBeVisible({ timeout: ESPERA });
     // `exact` porque o nome casa por SUBSTRING: com a agenda vazia, o aviso
     // "Sua agenda está livre esta semana" é um segundo heading, e os dois
     // coexistem desde que o vazio deixou de esconder a grade. Sem `exact`, dois
     // elementos → strict mode → vermelho. A spec irmã já tinha pago isto.
-    await expect(page.getByRole("heading", { name: "Agenda", exact: true })).toBeVisible();
+    await expect(activePage.getByRole("heading", { name: "Agenda", exact: true })).toBeVisible();
 
     // 2. O BOTÃO NÃO APARECE — e não é "aparece desabilitado". Desabilitado
     //    diria "você não pode"; o certo é "esta instalação ainda não tem".
-    await expect(page.getByTestId("conectar-google")).toHaveCount(0);
+    await expect(activePage.getByTestId("conectar-google")).toHaveCount(0);
 
     // 3. E NO LUGAR DELE há explicação, com três propriedades que importam:
-    const explicacao = page.getByTestId("google-nao-configurado");
+    const explicacao = activePage.getByTestId("google-nao-configurado");
     await expect(explicacao).toBeVisible();
     //    (a) não culpa quem está lendo
     await expect(explicacao).toContainText(/não é nada que você tenha feito/i);
@@ -119,7 +120,7 @@ test.describe("conectar a agenda do Google", () => {
     //    no meio da frase para quem não programa. A exceção é o bloco `o-que-falta`,
     //    que é deliberadamente o nome técnico da chave — quem instalou precisa dele.
     const corpo = await explicacao.innerText();
-    const semOBloco = corpo.replace((await page.getByTestId("o-que-falta").innerText().catch(() => "")) || "\u0000", "");
+    const semOBloco = corpo.replace((await activePage.getByTestId("o-que-falta").innerText().catch(() => "")) || "\u0000", "");
     expect(semOBloco, `código cru na frase: ${semOBloco}`).not.toMatch(/[a-z]+_[a-z]+_[a-z]+/);
   });
 

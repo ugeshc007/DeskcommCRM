@@ -280,8 +280,15 @@ describe("o prompt do turno carrega a data de hoje", () => {
     // (São Paulo, o default do pacing) e este caso é o único que reprova.
     await rodaTurno(montaHandler(modeloQueGravaOPrompt(), INSTANTE));
 
-    expect(promptsVistos[0]).not.toContain(HORA_DO_PACING);
-    expect(promptsVistos[0]).not.toContain("America/Sao_Paulo");
+    // O histórico do cliente pode conter 14:30 legitimamente. Verificamos apenas
+    // o bloco do relógio gerado, que é o comportamento protegido pelo invariante.
+    const prompt = JSON.parse(promptsVistos[0]!) as Array<{ role: string; content: string | Array<{ type: string; text?: string }> }>;
+    const user = prompt.find(message => message.role === 'user');
+    const content = typeof user?.content === 'string' ? user.content : user?.content.find(part => part.type === 'text')?.text;
+    const nowBlock = content?.split('## Agora\n').at(-1);
+    expect(nowBlock).toContain(ESPERADO_MANAUS);
+    expect(nowBlock).not.toContain(HORA_DO_PACING);
+    expect(nowBlock).not.toContain('America/Sao_Paulo');
   });
 
   it("o instante absoluto vai junto — é o formato que as ferramentas de agenda exigem", async () => {

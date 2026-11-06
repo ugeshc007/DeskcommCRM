@@ -28,6 +28,7 @@ export interface HandlerDeclarado {
 /** snake_case no wire, conforme a convenção da API (`CLAUDE.md`). */
 export interface CapacidadeServida {
   id: string;
+  opt_in_only?: boolean;
   description: string;
   category: string;
   requires_role: string;
@@ -64,6 +65,7 @@ export function juntarCatalogoComHandlers(
       o_que_toca: entrada.oQueToca,
       risco: entrada.risco,
       pacotes: entrada.pacotes,
+      ...(entrada.opt_in_only ? { opt_in_only: true } : {}),
     };
   });
 }

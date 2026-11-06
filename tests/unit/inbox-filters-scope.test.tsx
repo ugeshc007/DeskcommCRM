@@ -14,7 +14,8 @@
  * valendo — inbox filtrado, às vezes vazio, sem nada na tela dizendo por quê.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 
 import { InboxFilters, visibleInboxTabs, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
 import type * as CanaisModule from "@/hooks/channels/useChannelSessions";

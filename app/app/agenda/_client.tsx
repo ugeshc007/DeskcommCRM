@@ -6,7 +6,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, endOfMonth, format, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, format, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import * as React from "react";
 
 import { AvisoDaConexaoGoogle } from "./_components/AvisoDaConexaoGoogle";
@@ -199,17 +199,20 @@ export function AgendaClient({
   // hook assume dali: `useMarcarAgendamento` já invalida `["agenda"]`, então
   // marcar pela tela repinta a grade sozinho.
   // O recorte acompanha o que a grade DESENHA — mesma visão, mesma âncora.
+  // A visão Mês desenha seis semanas inteiras, inclusive dias do mês anterior
+  // e do seguinte. Consultar só os dias do mês deixaria essas células vazias
+  // mesmo quando há ocupação nelas.
   // Instante ISO, nunca o filtro `dia`: o cabeçalho do hook mede por que
   // (`dia=` corta em UTC e some com o compromisso das 22h no fuso de São Paulo).
   const recorteDaGrade = React.useMemo(() => {
     const inicio =
       visao === "mes"
-        ? startOfMonth(ancora)
+        ? startOfWeek(startOfMonth(ancora), { weekStartsOn: 0 })
         : visao === "semana"
           ? startOfWeek(ancora, { weekStartsOn: 0 })
           : startOfDay(ancora);
     const fim =
-      visao === "mes" ? addDays(endOfMonth(ancora), 1) : addDays(inicio, visao === "semana" ? 7 : 1);
+      addDays(inicio, visao === "mes" ? 42 : visao === "semana" ? 7 : 1);
     return { de: inicio.toISOString(), ate: fim.toISOString() };
   }, [visao, ancora]);
 

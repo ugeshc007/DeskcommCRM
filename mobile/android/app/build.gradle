@@ -1,0 +1,13 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.fieldcrm.sales'
+    compileSdk 35
+    defaultConfig { applicationId 'com.fieldcrm.sales'; minSdk 26; targetSdk 35; versionCode 4; versionName '0.1.3-pilot'; testInstrumentationRunner 'com.fieldcrm.sales.SmokeInstrumentation'; buildConfigField 'String', 'CRM_BASE_URL', '"https://crm.techspothub.com"' }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { release { minifyEnabled false } }
+}
+dependencies {
+    implementation 'com.google.android.gms:play-services-location:21.4.0'
+    testImplementation 'junit:junit:4.13.2'
+}

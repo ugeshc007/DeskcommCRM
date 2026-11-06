@@ -46,7 +46,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const authz = await requireRole("admin", { requestId, resource: "team" });
+  const authz = await requireRole("manager", { requestId, resource: "team" });
   if (!authz.ok) return authz.response;
   const { user: authUser, org: activeOrg } = authz;
 

@@ -69,6 +69,7 @@ import {
   type ResultadoDaVarredura,
 } from "@/lib/lgpd/cascata";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sweepFieldLocations } from "@/lib/field-sales/retention";
 
 export const dynamic = "force-dynamic";
 
@@ -229,6 +230,7 @@ async function handle(req: NextRequest): Promise<Response> {
   }
 
   let resultado: ResultadoDaRetencao;
+  let fieldLocations = { deleted: 0, has_more: false };
   let varredura: ResultadoDaVarredura = {
     examinados: 0,
     comResiduo: 0,
@@ -250,6 +252,12 @@ async function handle(req: NextRequest): Promise<Response> {
     resultado = await podarHistorico(db, {
       JOB_QUEUE_RETENTION_DAYS: env.JOB_QUEUE_RETENTION_DAYS,
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
+    });
+    // Opcional: sem tabelas instaladas retorna zero. Audita por organização no mesmo commit.
+    fieldLocations = await sweepFieldLocations(async limit => {
+      const { data, error } = await admin.rpc('fn_expurgar_field_sales_locations' as never, { p_limite: limit } as never);
+      if (error || typeof data !== 'number') throw new Error('field_sales_retention_failed');
+      return data;
     });
     // ── A cascata de anonimização que ficou pela metade ──────────────────
     //
@@ -344,6 +352,8 @@ async function handle(req: NextRequest): Promise<Response> {
   return ok(
     {
       ...resultado,
+      field_locations_deleted: fieldLocations.deleted,
+      field_locations_have_more: fieldLocations.has_more,
       anonimizacoes_examinadas: varredura.examinados,
       anonimizacoes_completadas: varredura.completados.length,
       anonimizacoes_tem_resto: varredura.temResto,

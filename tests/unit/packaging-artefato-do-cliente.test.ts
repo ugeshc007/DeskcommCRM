@@ -77,10 +77,10 @@ function lerServicos(yaml: string): Map<string, string> {
 const servicos = lerServicos(compose);
 
 /** Só as imagens que NÓS publicamos. Upstream tem regra própria, mais abaixo. */
-const NOSSOS = ["app", "worker", "scheduler"] as const;
+const NOSSOS = ["app", "worker", "scheduler", "field-voice"] as const;
 
 describe("packaging — o artefato que o cliente instala", () => {
-  it("o parser enxerga os 8 serviços de produção", () => {
+  it("o parser enxerga os 9 serviços de produção", () => {
     // Guarda do próprio instrumento: se o parser parar de enxergar os serviços,
     // todos os testes abaixo passariam vazios — verde por não ter medido nada.
     //
@@ -92,7 +92,7 @@ describe("packaging — o artefato que o cliente instala", () => {
     // Movê-lo para `NOSSOS` seria assumir o build de um binário de terceiro
     // dentro de uma imagem nossa.
     expect([...servicos.keys()].sort()).toEqual(
-      ["app", "caddy", "redis", "scheduler", "srh", "wacalls", "waha", "worker"].sort(),
+      ["app", "caddy", "field-voice", "redis", "scheduler", "srh", "wacalls", "waha", "worker"].sort(),
     );
   });
 
@@ -229,9 +229,9 @@ describe("packaging — o artefato que o cliente instala", () => {
     }
   });
 
-  it("o workflow publica as três imagens e injeta APP_VERSION", () => {
+  it("o workflow publica as quatro imagens e injeta APP_VERSION", () => {
     const wf = fs.readFileSync(path.join(RAIZ, ".github/workflows/publish-image.yml"), "utf8");
-    for (const imagem of ["deskcommcrm", "deskcomm-worker", "deskcomm-scheduler"]) {
+    for (const imagem of ["deskcommcrm", "deskcomm-worker", "deskcomm-scheduler", "deskcomm-field-voice"]) {
       expect(wf, `publish-image.yml não publica '${imagem}'`).toContain(`name: ${imagem}`);
     }
     expect(wf, "publish-image.yml não passa APP_VERSION como build-arg").toContain(

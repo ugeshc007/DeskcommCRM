@@ -46,6 +46,8 @@ const NAV_ITEMS: NavItem[] = [
   // A porta da tela do app OAuth do Google — mesma razão da de cima: é
   // configuração da INSTALAÇÃO, e /admin tem navegação própria.
   { href: "/admin/google", label: "Google Agenda", icon: CalendarBlank },
+  { href: "/admin/store-module", label: "Store module", icon: Buildings },
+  { href: "/admin/field-sales-module", label: "Field Sales module", icon: CalendarBlank },
 ];
 
 interface AdminSidebarProps {

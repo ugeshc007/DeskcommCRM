@@ -21,6 +21,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
+import { flowGraphSchema } from "@/lib/followup/graph-schema";
+import { flowMediaIsOwned } from "@/lib/followup/media-ownership";
+import { loadConnection } from '@/lib/integrations/management';
+import { integrationActions } from '@/lib/integrations/providers';
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -137,7 +141,20 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     });
   }
 
-  const graph = pointer.draft_graph as unknown as FlowGraph;
+  const parsedGraph = flowGraphSchema.safeParse(pointer.draft_graph);
+  if (!parsedGraph.success || !flowMediaIsOwned(parsedGraph.data, activeOrg.orgId, id)) {
+    return fail("validation_failed", "Invalid graph or media ownership. Review the draft before publishing.", 422, { requestId });
+  }
+  const graph: FlowGraph = parsedGraph.data;
+  for(const node of graph.nodes){
+    if(node.type!=='action'||node.config.mode!=='integration')continue;
+    const config=node.config;
+    let connection;
+    try { connection=config.connection_id?await loadConnection(admin,activeOrg.orgId,config.connection_id):null; }
+    catch { return fail('internal_error','Unable to verify the integration connection. Please retry.',503,{requestId}); }
+    if(!connection?.active||!connection.validated_at||connection.failure_code||connection.revision!==config.connection_revision||!integrationActions.some(a=>a.provider===connection.provider&&a.action===config.action))
+      return fail('validation_failed','Select a tested, current organization connection for each integration block.',422,{requestId,details:{errors:[{node_id:node.id,code:'integration_connection_unavailable',message:'Connection unavailable, changed or not tested.'}]}});
+  }
   const validation = validateFlowForPublish(graph);
   if (!validation.ok) {
     return fail("validation_failed", t("Fluxo reprovado na validação de publish."), 422, {

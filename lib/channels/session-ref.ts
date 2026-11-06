@@ -12,6 +12,7 @@
  * a garantia é do CHECK, não de otimismo.
  */
 export type ChannelSessionRef =
+  | { provider: "messenger"; provider_account_id: string }
   | { provider: "waha"; waha_session_name: string }
   | { provider: "meta_cloud"; meta_phone_number_id: string }
   | { provider: "zernio"; zernio_account_id: string };
@@ -22,10 +23,12 @@ export type ChannelSessionRef =
  * nomeia coluna de provider, e ela some da feature junto com a decisão.
  */
 export const CHANNEL_SESSION_REF_COLUMNS =
-  "provider, waha_session_name, meta_phone_number_id, zernio_account_id";
+  "provider, waha_session_name, meta_phone_number_id, zernio_account_id, provider_account_id";
 
 export function resolveSessionRef(session: ChannelSessionRef): string {
   switch (session.provider) {
+    case "messenger":
+      return session.provider_account_id;
     case "meta_cloud":
       return session.meta_phone_number_id;
     case "waha":

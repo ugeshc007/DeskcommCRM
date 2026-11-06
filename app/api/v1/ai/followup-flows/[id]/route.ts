@@ -17,6 +17,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { patchFollowupFlowSchema } from "@/lib/followup/api-schemas";
+import { flowMediaIsOwned } from "@/lib/followup/media-ownership";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -124,6 +125,9 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (!existing) return fail("not_found", t("Fluxo não encontrado."), 404, { requestId });
 
   const patch = parsed.data;
+  if (patch.draft_graph && !flowMediaIsOwned(patch.draft_graph, activeOrg.orgId, id)) {
+    return fail("validation_failed", "Media must belong to this flow and organization.", 422, { requestId });
+  }
   if (Object.keys(patch).length === 0) {
     const { data: unchanged, error: reloadErr } = await supabase
       .from("followup_flow_pointers")

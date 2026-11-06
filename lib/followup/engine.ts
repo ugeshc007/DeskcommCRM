@@ -1,4 +1,5 @@
 import type { JobClaim } from "@/lib/agent-engine/queue/claim";
+import type { FlowMediaAsset } from "@/lib/messaging/media/flow-media";
 import { assertAgendaEffectSupabase } from "@/lib/agenda/efeito";
 import { AgendaDeferredError } from "@/lib/agenda/protecao-followup";
 import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
@@ -46,7 +47,18 @@ import {
   type AvisoRecuperacaoEsgotada,
 } from "./no-show-recuperacao-esgotada";
 import { interpolarDestino, persistirRespostaFollowupSupabase } from "./persistir-resposta";
+import { validateAnswer } from "./answer-validation";
+import { choiceForPrompt } from './choice-reply';
+import { evaluateExpression, type ExpressionValue } from './expression';
+import { sessionVariableValues, type VariableType } from './session-variables';
+import { renderSessionText } from './render-session-text';
+import { attachmentAnswerId, ATTACHMENT_ANSWER_COLUMNS } from './attachment-answer';
+import { executeIntegration, type ExecutionResult } from '@/lib/integrations/execution';
+import { createSupabaseIntegrationStore } from '@/lib/integrations/supabase-store';
+import { integrationActions } from '@/lib/integrations/providers';
+import type { IntegrationFlowConfig } from '@/lib/integrations/flow-config';
 
+import type { InteractiveMessage } from '@/lib/messaging/interactive';
 const MAX_STEPS = 80;
 const CLAIM_LEASE_SECONDS = 120;
 const DEFAULT_CLAIM_LIMIT = 20;
@@ -81,6 +93,8 @@ export interface FollowupJobRequest {
     prompt_hint?: string;
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
+    media_assets?: FlowMediaAsset[];
+    interactive?: InteractiveMessage;
     /** action (mode 'template') — id em `message_templates`; o turno carrega o corpo e envia sem modelo. */
     template_id?: string;
     volta_index?: number;
@@ -97,6 +111,7 @@ export interface FollowupJobRequest {
 
 /** DB surface the engine needs — see file header for why this isn't `SupabaseClient` directly. */
 export interface AdminClient {
+  executeIntegration?(enrollment:EnrollmentRow,config:IntegrationFlowConfig,input:Record<string,unknown>):Promise<ExecutionResult>;
   assertServiceBoundary?(enrollment: EnrollmentRow): Promise<void>;
   assertAgenda?(enrollment:EnrollmentRow):Promise<void>;
   claimDueEnrollments(limit: number, leaseSeconds: number): Promise<EnrollmentRow[]>;
@@ -107,7 +122,10 @@ export interface AdminClient {
     contact_name?: string | null;
     custom_fields?: Record<string, unknown>;
   }>;
-  loadEnrollmentEvents(enrollmentId: string): Promise<EnrollmentEventRef[]>;
+  loadEnrollmentEvents(enrollmentId: string, organizationId: string): Promise<EnrollmentEventRef[]>;
+  loadSelectedChoice?(enrollment: EnrollmentRow, sourceNodeId: string): Promise<string | null>;
+  loadAttachmentAnswer?(enrollment: EnrollmentRow): Promise<string | null>;
+  setVariableStep?(enrollment: EnrollmentRow, nextNodeId: string, key: string, type: VariableType, value: ExpressionValue): Promise<void>;
   /** Latest inbound `messages.body` for the contact (optionally scoped to the enrollment conversation). */
   loadLastInboundBody(
     orgId: string,
@@ -239,12 +257,19 @@ function turnPayloadExtras(
   node: FlowNode,
   smartWaits: EsperaAdaptativa[],
   events: EnrollmentEventRef[] = [],
+  variables: unknown = {},
 ): Partial<FollowupJobRequest["payload"]> {
   if (node.type === "action" && node.config.mode === "ai_message") {
     return { prompt_hint: interpolarVolta(node.config.prompt_hint, events) };
   }
   if (node.type === "action" && node.config.mode === "text") {
-    return { fixed_body: interpolarVolta(node.config.body, events) };
+    return { fixed_body: renderSessionText(interpolarVolta(node.config.body, events), variables, 4000) };
+  }
+  if (node.type === 'action' && node.config.mode === 'interactive') {
+    return { fixed_body: renderSessionText(interpolarVolta(node.config.body, events), variables, 1024), interactive: node.config.interactive };
+  }
+  if (node.type === "action" && node.config.mode === "media") {
+    return { media_assets: node.config.assets.map(asset => ({ ...asset, caption: renderSessionText(asset.caption, variables, 1024) })) };
   }
   if (node.type === "action" && node.config.mode === "template") {
     const volta = latestRepeatIndex(events);
@@ -343,6 +368,7 @@ async function applyResult(
   smartWaits: EsperaAdaptativa[] = [],
   events: EnrollmentEventRef[] = [],
   respostaParaGravar: string | null = null,
+  attachmentMessageId?: string | null,
 ): Promise<void> {
   const { db, clock, enqueueJob } = deps;
   await db.assertServiceBoundary?.(enrollment);
@@ -378,7 +404,7 @@ async function applyResult(
   // perde o insert (replay) e AINDA assim reescrevia current_node_id pro action.
   // Se o evento que já existe é de OUTRO tipo, não aplicar o patch deste result.
   if (isReplay) {
-    const frescos = await db.loadEnrollmentEvents(enrollment.id);
+    const frescos = await db.loadEnrollmentEvents(enrollment.id, enrollment.organization_id);
     const prior = frescos.find((e) => e.idempotency_key === idemKey);
     if (prior?.event_type && prior.event_type !== wantedType) {
       if (result.kind === "advance" && prior.event_type === "action_sent") {
@@ -443,7 +469,7 @@ async function applyResult(
             node_id: node.id,
             source_step_key: idemKey,
             purpose: result.purpose,
-            ...turnPayloadExtras(node, smartWaits, events),
+            ...turnPayloadExtras(node, smartWaits, events, enrollment.variables),
             ...(result.fixed_body ? { fixed_body: result.fixed_body } : {}),
           },
         });
@@ -482,12 +508,20 @@ async function applyResult(
     !((node.config.if_exists ?? "overwrite") === "confirm" && ehConfirmacao(respostaParaGravar))
   ) {
     try {
+      const answer = node.config.answer_format
+        ? validateAnswer(node.config.answer_format, respostaParaGravar, attachmentMessageId)
+        : { valid: true as const, value: respostaParaGravar };
+      // O avanço pode ser pelo ramo inválido: isso jamais autoriza gravar o valor.
+      if (!answer.valid) {
+        if (!isReplay) tallyOutcome(result, summary);
+        return;
+      }
       await db.assertServiceBoundary?.(enrollment);
       await db.persistirRespostaFollowup({
         organization_id: enrollment.organization_id,
         contact_id: enrollment.contact_id,
         save_to: interpolarDestino(node.config.save_to, events),
-        value: respostaParaGravar,
+        value: answer.value,
       });
     } catch (err) {
       logger.warn("followup: gravar resposta falhou; o fluxo já avançou", {
@@ -565,7 +599,47 @@ async function processEnrollment(
     last_outcome: null,
     contact_name: leadRow.contact_name ?? null,
     custom_fields: leadRow.custom_fields,
+    variables: sessionVariableValues(enrollment.variables),
   };
+
+  if (node.type === 'action' && node.config.mode === 'integration') {
+    const input:Record<string,unknown>={};
+    for(const [key,expression] of Object.entries(node.config.mappings)){
+      const evaluated=evaluateExpression(expression,lead.custom_fields??{},lead.variables);
+      if(!evaluated.ok){await applyHandlerFailure(deps,enrollment,'integration_mapping_invalid',summary);return;}
+      input[key]=evaluated.value;
+    }
+    await db.assertServiceBoundary?.(enrollment);
+    if(!db.executeIntegration){await applyHandlerFailure(deps,enrollment,'integration_unavailable',summary);return;}
+    const result=await db.executeIntegration(enrollment,node.config,input);
+    // Ambiguous effects require an operator, not another action or a blind retry.
+    if(result.status==='pending'){await markDead(db,clock,enrollment,'integration_reconciliation_required');summary.dead++;return;}
+    const edge=selectEdge(graph.edges,node.id,{type:'branch',branch_id:result.status==='succeeded'?'success':'error'});
+    if(!edge){await applyHandlerFailure(deps,enrollment,'integration_branch_missing',summary);return;}
+    if(result.status==='succeeded'&&node.config.output){
+      const {field,variable}=node.config.output;
+      const value=result.output&&typeof result.output==='object'&&Object.hasOwn(result.output,field)?(result.output as Record<string,unknown>)[field]:undefined;
+      const kind=typeof value;
+      if(!db.setVariableStep||(kind!=='string'&&kind!=='number'&&kind!=='boolean')||(typeof value==='string'&&value.length>2000)){
+        await applyHandlerFailure(deps,enrollment,'integration_output_invalid',summary);return;
+      }
+      await db.setVariableStep(enrollment,edge.target,variable,kind,value as string|number|boolean);summary.advanced++;return;
+    }
+    await applyResult(deps,enrollment,node,{kind:'advance',next_node_id:edge.target,next_eval_at:clock()},summary);
+    return;
+  }
+
+  if (node.type === 'action' && node.config.mode === 'set_variable') {
+    const next = selectEdge(graph.edges, node.id, { type: 'always' });
+    const result = evaluateExpression(node.config.expression, lead.custom_fields ?? {}, lead.variables);
+    if (!result.ok || typeof result.value !== node.config.value_type || !next || !db.setVariableStep) {
+      await applyHandlerFailure(deps, enrollment, !result.ok ? `formula_${result.code}` : 'variable_configuration_invalid', summary);
+      return;
+    }
+    await db.setVariableStep(enrollment, next.target, node.config.key, node.config.value_type, result.value);
+    summary.advanced++;
+    return;
+  }
 
   let waitElapsed: boolean | undefined;
   let wokeEarly: boolean | undefined;
@@ -589,7 +663,7 @@ async function processEnrollment(
     node.type === "repeat";
 
   if (precisaEventos) {
-    events = await db.loadEnrollmentEvents(enrollment.id);
+    events = await db.loadEnrollmentEvents(enrollment.id, enrollment.organization_id);
   }
 
   if (vaiPlanejar) {
@@ -648,6 +722,9 @@ async function processEnrollment(
   }
 
   const nextAlways = selectEdge(graph.edges, node.id, { type: "always" });
+  const attachmentMessageId = node.type === 'match_reply' && node.config.answer_format === 'file'
+    ? await db.loadAttachmentAnswer?.(enrollment) ?? null : null;
+  if (attachmentMessageId) wokeEarly = true;
   const proximo = nextAlways ? (graph.nodes.find((n) => n.id === nextAlways.target) ?? null) : null;
 
   const result = processNode({
@@ -659,6 +736,9 @@ async function processEnrollment(
     waitElapsed,
     wokeEarly,
     lastInboundBody,
+    attachmentMessageId,
+    selectedChoiceId: node.type === 'match_reply' && node.config.choice_source_node_id
+      ? await db.loadSelectedChoice?.(enrollment, node.config.choice_source_node_id) ?? null : undefined,
     actionEnqueued,
     actionRecheckCount,
     actionCompleted,
@@ -669,6 +749,16 @@ async function processEnrollment(
     repeatTotal,
     proximo,
   });
+  if (result.kind === 'advance' && wokeEarly && node.type === 'match_reply' && node.config.save_to?.kind === 'session_variable' && node.config.answer_format) {
+    const answer = validateAnswer(node.config.answer_format, lastInboundBody ?? '', attachmentMessageId);
+    if (answer.valid) {
+      if (!db.setVariableStep) throw new Error('session_variable_writer_unavailable');
+      const value = node.config.answer_format === 'number' ? Number(answer.value) : answer.value;
+      await db.setVariableStep(enrollment, result.next_node_id, node.config.save_to.key, typeof value === 'number' ? 'number' : 'string', value);
+      summary.advanced++;
+      return;
+    }
+  }
   await applyResult(
     deps,
     enrollment,
@@ -677,7 +767,8 @@ async function processEnrollment(
     summary,
     smartWaits,
     events,
-    node.type === "match_reply" && wokeEarly ? (lastInboundBody ?? "").trim() || null : null,
+    node.type === "match_reply" && wokeEarly ? (attachmentMessageId ?? (lastInboundBody ?? "").trim()) || null : null,
+    attachmentMessageId,
   );
 }
 
@@ -773,6 +864,46 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
         custom_fields: custom,
       };
     },
+    async executeIntegration(enrollment,config,input) {
+      await assertServiceBoundarySupabase(admin,enrollment.service_boundary ?? null);
+      return executeIntegration({organizationId:enrollment.organization_id,executionKey:enrollment.id+':'+enrollment.current_node_id+':'+enrollment.steps_taken},
+        {connectionId:config.connection_id,revision:config.connection_revision,action:config.action,input},integrationActions,createSupabaseIntegrationStore(admin));
+    },
+    async setVariableStep(enrollment, nextNodeId, key, type, value) {
+      const revision = revisions.get(enrollment.id);
+      if (revision === undefined) throw new StaleServiceBoundaryError();
+      const { data, error } = await admin.rpc('fn_followup_set_variable' as never, {
+        p_org: enrollment.organization_id, p_id: enrollment.id, p_revision: revision, p_node: enrollment.current_node_id,
+        p_next: nextNodeId, p_key: key, p_type: type, p_value: value,
+      } as never);
+      if (error?.code === '40001') throw new StaleServiceBoundaryError();
+      if (error) throw new Error('session_variable_write_failed');
+      revisions.set(enrollment.id, Number(data));
+    },
+    async loadAttachmentAnswer(enrollment) {
+      if (!enrollment.conversation_id) return null;
+      const { data, error } = await admin.from('messages').select(ATTACHMENT_ANSWER_COLUMNS)
+        .eq('organization_id', enrollment.organization_id).eq('contact_id', enrollment.contact_id)
+        .eq('conversation_id', enrollment.conversation_id).eq('direction', 'inbound')
+        .gte('sent_at', enrollment.updated_at).order('sent_at', { ascending: false }).limit(1).maybeSingle();
+      if (error) throw new Error('attachment_answer_read_failed');
+      return attachmentAnswerId(data, enrollment);
+    },
+    async loadSelectedChoice(enrollment, sourceNodeId) {
+      if (!enrollment.conversation_id) return null;
+      const { data: reply, error: replyError } = await admin.from('messages').select('metadata')
+        .eq('organization_id', enrollment.organization_id).eq('contact_id', enrollment.contact_id)
+        .eq('conversation_id', enrollment.conversation_id).eq('direction', 'inbound')
+        .gte('sent_at', enrollment.updated_at).order('sent_at', { ascending: false }).limit(1).maybeSingle();
+      if (replyError) throw new Error('choice_reply_read_failed');
+      const { data: prompt, error: promptError } = await admin.from('messages').select('external_id,metadata')
+        .eq('organization_id', enrollment.organization_id).eq('contact_id', enrollment.contact_id)
+        .eq('conversation_id', enrollment.conversation_id).eq('direction', 'outbound')
+        .eq('metadata->>followup_enrollment_id', enrollment.id).eq('metadata->>followup_node_id', sourceNodeId)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (promptError) throw new Error('choice_prompt_read_failed');
+      return choiceForPrompt(reply?.metadata, prompt);
+    },
     async loadLastInboundBody(orgId, contactId, conversationId, naoAntesDe) {
       const ids = await idsDoContatoEGemeos(admin, orgId, contactId);
       let q = admin
@@ -787,11 +918,12 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       if (error) throw new Error(error.message);
       return typeof data?.body === "string" ? data.body : null;
     },
-    async loadEnrollmentEvents(enrollmentId) {
+    async loadEnrollmentEvents(enrollmentId, organizationId) {
       const { data, error } = await admin
         .from("followup_enrollment_events")
         .select("node_id, idempotency_key, event_type, payload")
         .eq("enrollment_id", enrollmentId)
+        .eq("organization_id", organizationId)
         .order("created_at", { ascending: true });
       if (error) throw new Error(error.message);
       return (data ?? []).map((row) => ({

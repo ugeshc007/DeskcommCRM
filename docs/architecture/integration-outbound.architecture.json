@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Webhook outbound — fronteira de integração", "subtitle": "Caminho existente reforçado; galeria e OAuth ainda não implementados", "output": "integration-outbound.html", "quality_profile": "standard" },
+  "lanes": [
+    { "id": "editor", "label": "Configuração" },
+    { "id": "worker", "label": "Execução" },
+    { "id": "boundary", "label": "Fronteira externa" },
+    { "id": "history", "label": "Operador" }
+  ],
+  "mainPath": ["rule", "execute", "socket", "endpoint"],
+  "nodes": [
+    { "id": "rule", "lane": "editor", "col": 1, "type": "database", "label": "automation_rules", "sublabel": "URL + segredo cifrado, regra da organização" },
+    { "id": "execute", "lane": "worker", "col": 2, "type": "service", "label": "executeCallWebhook", "sublabel": "org do evento/contexto; segredo indisponível impede envio" },
+    { "id": "socket", "lane": "boundary", "col": 3, "type": "lib", "label": "postOutboundWebhook / safeOutboundLookup", "sublabel": "mesmo DNS do socket, TLS original, sem redirects, payload limitado" },
+    { "id": "endpoint", "lane": "boundary", "col": 4, "type": "external", "label": "Endpoint configurado pelo tenant" },
+    { "id": "runs", "lane": "history", "col": 5, "type": "database", "label": "automation_rule_runs", "sublabel": "status HTTP / erro controlado, sem corpo remoto" },
+    { "id": "repair", "lane": "editor", "col": 6, "type": "frontend", "label": "Editor e histórico de automações", "sublabel": "operador corrige URL/credencial antes de reenviar" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "rule", "to": "execute", "label": "configuração carregada pela automação da organização" },
+    { "id": "e2", "from": "execute", "to": "socket", "label": "envelope e assinatura; nunca downgrade silencioso" },
+    { "id": "e3", "from": "socket", "to": "endpoint", "label": "POST sem seguir Location" },
+    { "id": "e4", "from": "socket", "to": "execute", "label": "somente status HTTP ou falha controlada" },
+    { "id": "e5", "from": "execute", "to": "runs", "label": "ActionResultDetail consumido pelo engine" },
+    { "id": "e6", "from": "runs", "to": "repair", "label": "GET automation-rules runs" },
+    { "id": "e7", "from": "repair", "to": "rule", "label": "correção explícita; sem aprendizado/publicação automática" }
+  ]
+}

@@ -111,6 +111,10 @@ export const ALVO_DE_FUNIL: Record<string, AlvoDeFunil> = {
   crm_set_appointment_outcome: "sem_funil",
 
   // ---- não têm funil, e isso é declarado ----
+  // Loja nativa: autoridade vem do job inbound/contato atual e da proposta;
+  // estas operações não escrevem crm_leads nem aceitam pipeline do modelo.
+  crm_quote_store_checkout: "sem_funil",
+  crm_confirm_store_checkout: "sem_funil",
   crm_send_whatsapp_message: "sem_funil",
   crm_add_case_note: "sem_funil",
   crm_close_human_case: "sem_funil",

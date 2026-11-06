@@ -74,6 +74,7 @@ describe("ApiErrorToast", () => {
   });
 
   it("calls toast.warning with canonical PT-BR for conversation_already_claimed", () => {
+    render(<IdiomaProvider locale="pt-BR"><span /></IdiomaProvider>);
     showApiError(new ApiError(409, "conversation_already_claimed", undefined, "req-1"));
     expect(toast.warning).toHaveBeenCalledTimes(1);
     expect(toast.warning).toHaveBeenCalledWith(
@@ -83,6 +84,7 @@ describe("ApiErrorToast", () => {
   });
 
   it("calls toast.warning com mensagem humana para invalid_state (casos humanos, spec 15)", () => {
+    render(<IdiomaProvider locale="pt-BR"><span /></IdiomaProvider>);
     showApiError(new ApiError(409, "invalid_state", undefined, "req-3"));
     expect(toast.warning).toHaveBeenCalledTimes(1);
     expect(toast.warning).toHaveBeenCalledWith(
@@ -102,6 +104,7 @@ describe("ApiErrorToast", () => {
   });
 
   it("calls toast.error with generic message for non-ApiError", () => {
+    render(<IdiomaProvider locale="pt-BR"><span /></IdiomaProvider>);
     showApiError(new Error("oops"));
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith("Erro inesperado. Tente novamente.");

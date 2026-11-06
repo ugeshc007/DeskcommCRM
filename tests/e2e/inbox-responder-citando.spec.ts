@@ -47,7 +47,7 @@ async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
+  await page.getByRole("button", { name: /entrar|sign in/i }).click();
   await page.waitForURL(/\/app\//);
 }
 

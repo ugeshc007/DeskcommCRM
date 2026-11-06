@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as channelCapabilities from "@/lib/channels/capabilities";
 
 import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
 import { SPINNING_DEFAULTS } from "@/lib/agent-engine/spinning/defaults";
@@ -97,6 +98,21 @@ describe("gate messaging_window", () => {
 });
 
 describe("gate messaging_window — template é a saída, não um bypass", () => {
+  it("não aceita a flag de template quando o canal não oferece essa exceção", () => {
+    const original = channelCapabilities.capabilitiesOf("meta_cloud");
+    const capability = vi.spyOn(channelCapabilities, "capabilitiesOf").mockReturnValue({
+      ...original, requiresTemplates: false, canManageTemplates: false,
+    });
+    try {
+      const result = messagingWindowGate.evaluate(baseCtx({
+        provider: "meta_cloud", messagingWindow: { lastInboundAt: horasAtras(99), isTemplate: true },
+      }));
+      expect(result.pass).toBe(false);
+      if (result.pass) throw new Error("unreachable");
+      expect(result.reason).not.toContain("send_template");
+      expect(result.reason).toContain("wait for a new customer message");
+    } finally { capability.mockRestore(); }
+  });
   it("template PASSA mesmo com a janela fechada — é o caminho legítimo", () => {
     const v = messagingWindowGate.evaluate(
       baseCtx({

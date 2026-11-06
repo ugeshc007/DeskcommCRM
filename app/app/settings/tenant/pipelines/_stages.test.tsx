@@ -11,7 +11,8 @@
  * sem dizer para onde eles vão; e (d) reler o servidor depois de tudo.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 

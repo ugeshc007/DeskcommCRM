@@ -16,6 +16,7 @@ ser fonte sem ninguém decidir isso.
 
 | arquivo | escopo |
 |---|---|
+| `lead-stage-aging.architecture.json` | relatório de envelhecimento: carimbo da etapa no lead, consulta com RLS e limite, e retorno ao funil para ação humana |
 | `pre-go-live-whatsapp.architecture.json` | modo de teste por canal (issue #573): configuração administrativa, gate compartilhado, releitura no envio e validação pelo Inbox |
 | `meta-webhook-security.architecture.json` | App Secret do webhook oficial: configuração platform-only cifrada, banco sobre ambiente, validação HMAC e estado visível sem devolver o segredo |
 | `agenda-google-sync.architecture.json` | fontes/destino por dono, tupla estável, três vias, claim/CAS e cobertura de calendário; presença e LGPD integradas |

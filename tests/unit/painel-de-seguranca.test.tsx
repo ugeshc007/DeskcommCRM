@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { PainelDeSeguranca } from "@/app/app/ai/agents/[id]/_components/PainelDeSeguranca";

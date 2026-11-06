@@ -37,6 +37,8 @@
  * que suba daqui viraria 500 para o provider, e ele reenviaria tudo — trocaria
  * um efeito faltando por uma tempestade de reentregas. Cada passo falha para
  * dentro, com log, e o seguinte roda mesmo assim.
+ * O worker durável é a exceção: devolve a falha à fila e só confirma o evento
+ * depois dos efeitos. O despacho desse caminho deduplica pela mensagem.
  */
 import { audit } from "@/lib/audit";
 import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
@@ -79,6 +81,8 @@ type Admin = ReturnType<typeof createAdminClient>;
  */
 
 export interface EntradaDeMensagem {
+  /** Worker durável: falhas devem voltar à fila; despacho deduplica por mensagem. */
+  durable?: boolean;
   organizationId: string;
   contactId: string;
   conversationId: string;
@@ -147,28 +151,31 @@ export async function aplicarEfeitosPosEntrada(
 async function avaliarCampanha(admin: Admin, entrada: EntradaDeMensagem): Promise<void> {
   if (!entrada.texto || entrada.texto.trim() === "") return;
   try {
-    const { data: sess } = await admin
+    const { data: sess, error: sessionError } = await admin
       .from("channel_sessions")
       .select("metadata")
       .eq("organization_id", entrada.organizationId)
       .eq("id", entrada.channelSessionId)
       .maybeSingle();
+    if (entrada.durable && sessionError) throw new Error('inbound_campaign_retry');
     const gate = (sess?.metadata as Record<string, unknown> | null)?.ai_gate;
     if (gate !== "allowlist") return;
 
-    const { data: contato } = await admin
+    const { data: contato, error: contactError } = await admin
       .from("contacts")
       .select("ai_authorized_at")
       .eq("organization_id", entrada.organizationId)
       .eq("id", entrada.contactId)
       .maybeSingle();
+    if (entrada.durable && contactError) throw new Error('inbound_campaign_retry');
     if (contato?.ai_authorized_at != null) return; // já elegível — não reescreve a origem
 
-    const { data: org } = await admin
+    const { data: org, error: orgError } = await admin
       .from("organizations")
       .select("settings")
       .eq("id", entrada.organizationId)
       .maybeSingle();
+    if (entrada.durable && orgError) throw new Error('inbound_campaign_retry');
     const campanhas = lerCampanhas(org?.settings ?? null);
     const casada = casarCampanha(entrada.texto, campanhas, entrada.channelSessionId);
     if (casada === null) return;
@@ -190,6 +197,7 @@ async function avaliarCampanha(admin: Admin, entrada: EntradaDeMensagem): Promis
       conversation_id: entrada.conversationId,
       detail: err instanceof Error ? err.message.slice(0, 160) : "desconhecido",
     });
+    if (entrada.durable) throw new Error('inbound_campaign_retry');
   }
 }
 
@@ -221,6 +229,7 @@ async function aplicarOptOut(admin: Admin, entrada: EntradaDeMensagem): Promise<
         origem: entrada.origem,
         detail: error.message.slice(0, 160),
       });
+      if (entrada.durable) throw new Error('inbound_opt_out_retry');
       return;
     }
 
@@ -238,6 +247,7 @@ async function aplicarOptOut(admin: Admin, entrada: EntradaDeMensagem): Promise<
       origem: entrada.origem,
       detail: err instanceof Error ? err.message.slice(0, 160) : "desconhecido",
     });
+    if (entrada.durable) throw new Error('inbound_opt_out_retry');
   }
 }
 
@@ -255,6 +265,7 @@ async function abrirDemanda(admin: Admin, entrada: EntradaDeMensagem): Promise<v
       conversationId: entrada.conversationId,
       nomeDoContato: entrada.nomeDoContato,
     });
+    if (entrada.durable && !nascimento.criado && nascimento.motivo === 'erro') throw new Error('inbound_lead_retry');
 
     // Os DOIS desfechos viram log. Sem a linha do "não criou", o silêncio de
     // "já existia" e o de "a organização não tem funil configurado" têm a mesma
@@ -272,6 +283,7 @@ async function abrirDemanda(admin: Admin, entrada: EntradaDeMensagem): Promise<v
       origem: entrada.origem,
       error: err instanceof Error ? err.message.slice(0, 120) : "unknown",
     });
+    if (entrada.durable) throw new Error('inbound_lead_retry');
   }
 }
 
@@ -289,6 +301,11 @@ async function abrirDemanda(admin: Admin, entrada: EntradaDeMensagem): Promise<v
  */
 async function pedirDespachoDoAgente(admin: Admin, entrada: EntradaDeMensagem): Promise<void> {
   if (!entrada.messageId) return;
+  if (entrada.durable) {
+    const { error } = await admin.rpc('fn_dispatch_inbound_once' as never, { p_org: entrada.organizationId, p_message: entrada.messageId } as never);
+    if (error) throw new Error('inbound_dispatch_retry');
+    return;
+  }
 
   const { error } = await admin.rpc("emit_event" as never, {
     p_event_type: "ai_agent.dispatch_requested",

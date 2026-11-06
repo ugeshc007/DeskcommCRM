@@ -16,6 +16,7 @@ import { conditionConfigSchema, nodeBranches } from "@/lib/followup/graph-schema
 import {
   CAMPOS_DA_CONDICAO,
   COMBINADORES,
+  TIPOS_DE_VARIAVEL,
   comparador,
   comparadoresDoCampo,
   fraseDaCondicao,
@@ -26,6 +27,9 @@ import {
 } from "@/lib/followup/vocabulario";
 import { Plus, Trash } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { ExpressionEditor } from './ExpressionEditor';
+import { BusinessHoursEditor } from './BusinessHoursEditor';
+import type { BusinessHours } from '@/lib/followup/business-hours';
 
 import type { ConfigOf } from "./shared";
 
@@ -247,7 +251,9 @@ export function ConditionForm({
               onValueChange={(v) => {
                 const campo = v as CampoDaCondicao;
                 const next = checks.map((c, i) =>
-                  i === idx ? { ...c, field: campo, op: operadorValidoPara(campo, c.op) } : c,
+                  i === idx ? { ...c, field: campo, op: operadorValidoPara(campo, c.op),
+                    ...(campo === 'business_hours' ? { op: 'eq' as const, value: 'open', schedule: c.schedule ?? { tz: 'UTC', days: ['mon', 'tue', 'wed', 'thu', 'fri'], start: '09:00', end: '17:00' } as BusinessHours } : {}),
+                    ...(campo === 'formula' ? { expression: c.expression ?? { kind: 'literal' as const, value: 0 } } : {}) } : c,
                 );
                 setChecks(next);
                 commit({ checks: next });
@@ -283,16 +289,42 @@ export function ConditionForm({
                 ))}
               </SelectContent>
             </Select>
-            <Input
+            {check.field === 'business_hours' && check.schedule && <BusinessHoursEditor value={check.schedule} onChange={schedule => {
+              const next = checks.map((c, i) => i === idx ? { ...c, schedule } : c);
+              setChecks(next); commit({ checks: next });
+            }} />}
+            {check.field === 'formula' && <ExpressionEditor value={check.expression ?? { kind: 'literal', value: 0 }} onChange={expression => {
+              const next = checks.map((c, i) => i === idx ? { ...c, expression } : c);
+              setChecks(next); commit({ checks: next });
+            }} />}
+            {check.field === 'formula' && <Select value={typeof check.value} onValueChange={type => {
+              const next = checks.map((c, i) => i === idx ? { ...c, value: type === 'number' ? 0 : type === 'boolean' ? false : '', op: type === 'boolean' ? 'eq' as const : c.op } : c);
+              setChecks(next); commit({ checks: next });
+            }}><SelectTrigger aria-label="Comparison value type"><SelectValue /></SelectTrigger><SelectContent>
+              {opcoes(TIPOS_DE_VARIAVEL).map(({ valor, rotulo }) => <SelectItem key={valor} value={valor}>{t(rotulo)}</SelectItem>)}
+            </SelectContent></Select>}
+            {check.field === 'business_hours' ? <Select value={String(check.value)} onValueChange={value => {
+              const next = checks.map((c, i) => i === idx ? { ...c, value } : c);
+              setChecks(next); commit({ checks: next });
+            }}><SelectTrigger aria-label="Schedule state"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="open">Open</SelectItem><SelectItem value="closed">Closed</SelectItem>
+            </SelectContent></Select> : typeof check.value === 'boolean' ? <Select value={String(check.value)} onValueChange={raw => {
+              const next = checks.map((c, i) => i === idx ? { ...c, value: raw === 'true' } : c);
+              setChecks(next); commit({ checks: next });
+            }}><SelectTrigger aria-label="Comparison value"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="true">True</SelectItem><SelectItem value="false">False</SelectItem>
+            </SelectContent></Select> : <Input
               aria-label={t("Valor")}
               placeholder={CAMPOS_DA_CONDICAO[check.field].tipoDeValor === "numero" ? t("Ex.: 3") : t("Valor")}
               value={String(check.value)}
               onChange={(e) => {
-                const next = checks.map((c, i) => (i === idx ? { ...c, value: e.target.value } : c));
+                const numeric = (check.field === 'formula' ? typeof check.value === 'number' : CAMPOS_DA_CONDICAO[check.field].tipoDeValor === 'numero') && check.op !== 'contains';
+                const value = numeric && e.target.value.trim() && Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : e.target.value;
+                const next = checks.map((c, i) => (i === idx ? { ...c, value } : c));
                 setChecks(next);
                 commit({ checks: next });
               }}
-            />
+            />}
             {/* A frase inteira, para quem não tem certeza do que os três campos
                 acima somam — e o aviso quando o motor nunca satisfaz o par. */}
             <p className="text-xs text-text-muted">{fraseDaCondicao(check.field, check.op, check.value)}</p>

@@ -2,6 +2,12 @@
 
 Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migration 0320 and the matching app image; verify the installed schema and health version before claiming it is available. Evidence, not phase names, determines completion.
 
+## Separate location history download
+
+- In Route and visits, selecting exactly one officer and an organization-local travel date exposes a separate location CSV download. The existing attendance and daily activity exports continue to exclude coordinates.
+- The CSV includes each retained raw GPS fix from authorized work sessions for that officer and day: employee name, local and UTC capture time, latitude, longitude, reported accuracy, mock/quality flags, and a map link. It is a sequence of recorded fixes, not a continuous location trace or proof of a particular building. Opening a map link shares the coordinates with OpenStreetMap.
+- An officer may export only their own fixes; managers and admins may export enrolled officers in their organization. The read is bounded and follows the existing raw GPS retention policy. Each export writes an audit entry with the employee, date and point count, without coordinates.
+
 ## Monthly attendance export — deployed on CT102 at b5fd983 (2026-10-21)
 
 - Attendance includes a compact monthly report for one selected officer and a downloadable `.xlsx` workbook. Both show every organization-local calendar date of the selected month, including no-punch days, with the recorded project name(s), daily status, first recorded punch-in, last recorded punch-out, working hours and break hours. The workbook also repeats the officer name in each row. A project is shown only when recorded on a punch session for that local check-in date; multiple projects are listed together, and missing projects stay blank. Punch timestamps include their full local date so an overnight session is not mistaken for a same-day punch.

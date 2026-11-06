@@ -23,6 +23,24 @@ export function dailyFieldReport(date: string, timezone: string, sessions: Repor
   }
   return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }
+type LocationPoint = { captured_at: Instant; latitude: number | string; longitude: number | string;
+  accuracy_m: number | string; mock_location: boolean; quality_flags?: string[] | null };
+/** Raw, retained fixes for one authorized employee and one organization-local day. */
+export function locationHistoryReport(date: string, timezone: string, employeeName: string, points: LocationPoint[]) {
+  localDateSchema.parse(date);
+  const localTime = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  const rows: string[][] = [['Employee', 'Recorded at (local)', 'Time zone', 'Recorded at (UTC)',
+    'Latitude', 'Longitude', 'Accuracy (m)', 'Mock location', 'Quality flags', 'Map link']];
+  for (const point of points) {
+    const latitude = String(point.latitude), longitude = String(point.longitude);
+    rows.push([employeeName, localTime.format(new Date(point.captured_at)), timezone,
+      new Date(point.captured_at).toISOString(), latitude, longitude, String(point.accuracy_m),
+      point.mock_location ? 'Yes' : 'No', (point.quality_flags ?? []).join('; '),
+      `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=17/${encodeURIComponent(latitude)}/${encodeURIComponent(longitude)}`]);
+  }
+  return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
 export function csvCell(value: string) {
   // Quoting alone does not stop spreadsheet formula execution, including whitespace prefixes.
   const safe = /^[\s\uFEFF]*[=+@-]/u.test(value) || /^[\t\r\n]/u.test(value) ? "'" + value : value;

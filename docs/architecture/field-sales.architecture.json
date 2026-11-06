@@ -19,6 +19,7 @@
     { "id": "operations", "lane": "ui", "col": 3, "type": "service", "label": "Map, visits and approvals", "sublabel": "On-duty cards without GPS; embedded team routes and visits; isolated fixes as dots; independent activity date; due follow-ups and corrections" },
     { "id": "audit", "lane": "ui", "col": 4, "type": "service", "label": "Existing audit view / device sync errors", "sublabel": "Audited mutations; rejection receipts visible without expired coordinates" },
     { "id": "reports", "lane": "ui", "col": 4, "type": "service", "label": "Daily CSV export", "sublabel": "Scoped attendance and visits; excludes GPS and notes; formula-safe cells" },
+    { "id": "location-export", "lane": "ui", "col": 4, "type": "service", "label": "Location history CSV", "sublabel": "One authorized officer and local date; raw retained fixes with accuracy, flags and map links" },
     { "id": "tiles", "lane": "runtime", "col": 4, "type": "service", "label": "Local map assets", "sublabel": "Read-only raster or PMTiles dataset; authenticated bounded reads; no external fallback" }
   ],
   "edges": [
@@ -48,6 +49,9 @@
     { "id": "audit-mobile", "from": "audit", "to": "mobile", "label": "Human resolves permissions, connection or pending sync" },
     { "id": "records-reports", "from": "records", "to": "reports", "label": "Existing operation scope; organization calendar day" },
     { "id": "reports-audit", "from": "reports", "to": "audit", "label": "Export audit without report contents" },
+    { "id": "operations-location-export", "from": "operations", "to": "location-export", "label": "Selected officer and date download" },
+    { "id": "records-location-export", "from": "records", "to": "location-export", "label": "Authorized retained work-session fixes" },
+    { "id": "location-export-audit", "from": "location-export", "to": "audit", "label": "Employee, date and count only; no coordinates" },
     { "id": "crm-tiles", "from": "crm", "to": "tiles", "label": "Administrator configures local dataset path and attribution" },
     { "id": "tiles-operations", "from": "tiles", "to": "operations", "label": "Bounded tiles/archive ranges or visible missing-coverage error" }
   ]

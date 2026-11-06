@@ -4,4 +4,4 @@ secao: adicionado
 titulo: Equipe de campo
 ---
 
-Promotores, criação direta, listas por função e mapa maior.
+Promotores, criação direta, listas por função, mapa ampliado e CSV de GPS.

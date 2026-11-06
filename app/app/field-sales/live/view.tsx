@@ -26,6 +26,8 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
   const [voiding, setVoiding] = useState<ShopCollection | null>(null);
   const [voidBusy, setVoidBusy] = useState(false), [voidError, setVoidError] = useState('');
   const [visitLayout, setVisitLayout] = useState<OfficerLayout>('list');
+  const [locationExporting, setLocationExporting] = useState(false);
+  const [locationExportError, setLocationExportError] = useState('');
   const dateTouched = useRef(Boolean(initialDate));
   const query = useQuery({
     queryKey: ['field-sales-live', organizationId, userId, date, selectedEmployeeIds],
@@ -58,6 +60,21 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
   const money = (value: string | null, currency: string) => value === null ? 'Not specified'
     : `${currency} ${(Math.abs(Number(value)) / 100).toFixed(2)}`;
   const selectedCollections = data?.collections.filter(item => item.employee_id === employeeId) ?? [];
+  async function exportLocations() {
+    if (!employeeId || locationExporting) return;
+    setLocationExporting(true); setLocationExportError('');
+    try {
+      const params = new URLSearchParams({ date, employee_id: employeeId, report: 'locations' });
+      const response = await fetch(`/api/v1/field-sales/operations?${params}`, { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message ?? 'Unable to download location history.');
+      if (!body.data.count) throw new Error('No recorded locations are available for this date within the retention period.');
+      const url = URL.createObjectURL(new Blob([body.data.csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = body.data.filename; link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { setLocationExportError(error instanceof Error ? error.message : 'Unable to download location history.'); }
+    finally { setLocationExporting(false); }
+  }
   async function voidCollection(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!voiding || voidBusy) return;
     const form = new FormData(event.currentTarget), reason = String(form.get('reason') ?? '').trim();
@@ -102,8 +119,11 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         </div></details>
       </div>
       <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}>Refresh locations</Button>
+      {employeeId && <Button variant="outline" onClick={() => void exportLocations()} disabled={locationExporting || query.isPending}>
+        {locationExporting ? 'Preparing locations…' : 'Download location CSV'}</Button>}
       {timezone && <p className="pb-2 text-xs text-muted-foreground">Dates and times use {timezone}.</p>}
     </section>
+    {locationExportError && <p role="alert" className="text-sm text-destructive">{locationExportError}</p>}
     {query.isPending && <p role="status">Loading field locations…</p>}
     {query.error && <p role="alert" className="rounded-lg border border-destructive p-3">{query.error.message}</p>}
     {data && <>
@@ -129,6 +149,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
       </section>}
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
+        <p className="text-xs text-muted-foreground">The separate location CSV includes every retained GPS fix for this employee and date, including imprecise or flagged fixes. Coordinates are approximate; opening a map link shares them with OpenStreetMap.</p>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · validated travel ${(plottedRoute.distance_m / 1000).toFixed(2)} km · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
         {plottedRoute.plotted.length > 0 && !plottedRoute.lines.length && <p className="mt-2 text-sm">Only isolated GPS fixes are available. Colored dots show recorded positions; there are not enough continuous fixes to draw a travel path.</p>}
         {!!data.points.length && !plottedRoute.plotted.length && <p className="mt-2 text-sm">The recorded fixes were too imprecise or untrusted to show a travel path. No exact building can be inferred from them.</p>}

@@ -584,6 +584,17 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
   await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('field-location-download.png') });
+  const locationsDownload = page.waitForEvent('download');
+  await routeDialog.getByRole('button', { name: 'Download location CSV' }).click();
+  const locationsCsv = await locationsDownload;
+  expect(locationsCsv.suggestedFilename()).toBe(`field-sales-locations-${day}-${employee}.csv`);
+  const locationRows = readFileSync(await locationsCsv.path(), 'utf8');
+  expect(locationRows).toContain('"Synthetic salesperson"');
+  expect(locationRows).toContain('"25.2048","55.2708","12"');
+  expect(locationRows).toContain('"25.23","55.3","230"');
+  expect(locationRows).toContain('https://www.openstreetmap.org/?mlat=25.2048&mlon=55.2708');
+  await expect.poll(async () => Number((await pool.query("select count(*) from api_audit_log where organization_id=$1 and action='field_sales.location_history_exported' and resource_id=$2", [org, employee])).rows[0].count)).toBe(1);
   await routeDialog.getByRole('button', { name: 'Full screen map' }).click();
   const viewport = await page.evaluate(() => ({ width: document.documentElement.clientWidth, height: window.innerHeight }));
   await expect.poll(async () => {

@@ -689,6 +689,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(offlineCard.getByText(/^Online · App last checked in:/)).toBeVisible();
   await expect(offlineCard.getByText('Phone online, but no recent reliable GPS. Last known position is historical; there is no current live map pin.')).toBeVisible();
   await offlineCard.getByRole('button', { name: 'View route and visits' }).click();
+  await page.getByLabel('Travel date').fill(day);
   await expect(page.getByLabel('Recorded route endpoints')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('online-officer-with-stale-gps.png'), fullPage: true });
   await pool.query("update field_sales_sessions set status='off_duty',punched_out_at=now() where organization_id=$1 and id=$2", [org, liveSession]);

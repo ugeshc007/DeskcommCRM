@@ -34,14 +34,18 @@ set -a
 set +a
 
 echo "==> Buildando contra ${NEXT_PUBLIC_SUPABASE_URL}"
+# Parallel E2E shards intermittently fail in Next 16.3.4's Turbopack font
+# import-map resolver before Playwright starts. The separate image/perf jobs
+# still build the exact commit with Turbopack; use webpack here to keep the
+# browser test gate deterministic without changing its assertions or local env.
 if command -v pnpm >/dev/null 2>&1; then
   node scripts/copy-maplibre-worker.mjs
-  pnpm exec next build
+  pnpm exec next build --webpack
 else
   # Git Bash no Windows enxerga o `corepack` sem extensão, mas não o shim
   # `pnpm.cmd`. Mantém a versão fixada no packageManager do projeto.
   node scripts/copy-maplibre-worker.mjs
-  corepack pnpm@9.15.9 exec next build
+  corepack pnpm@9.15.9 exec next build --webpack
 fi
 
 # A PROVA, e não a suposição: se a URL de produção sobreviveu em qualquer

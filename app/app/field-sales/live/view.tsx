@@ -19,7 +19,7 @@ function localDate(instant: string, timezone: string) {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
-export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate, embedded = false, onMapFullscreenChange }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string; embedded?: boolean; onMapFullscreenChange?: (fullscreen: boolean) => void }) {
+export function FieldLiveView({ organizationId, userId, initialEmployeeId, initialDate, embedded = false, locationOnly = false, onMapFullscreenChange }: { organizationId: string; userId: string; initialEmployeeId?: string; initialDate?: string; embedded?: boolean; locationOnly?: boolean; onMapFullscreenChange?: (fullscreen: boolean) => void }) {
   const [date, setDate] = useState(() => initialDate ?? new Date().toISOString().slice(0, 10));
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>(initialEmployeeId ? [initialEmployeeId] : []);
   const employeeId = selectedEmployeeIds.length === 1 ? selectedEmployeeIds[0]! : '';
@@ -55,6 +55,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
   const onDuty = data?.latest.filter(person => person.status) ?? [];
   const validPoints = data?.points.filter(point => !point.mock_location) ?? [];
   const plottedRoute = displayRoute(data?.points ?? [], data?.quality);
+  const routeStart = plottedRoute.plotted[0], routeEnd = plottedRoute.plotted[plottedRoute.plotted.length - 1];
   const time = (value: string | null) => value && timezone
     ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'No location yet';
   const money = (value: string | null, currency: string) => value === null ? 'Not specified'
@@ -129,11 +130,11 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
     {data && <>
       <RouteMap data={data} selectedEmployeeId={employeeId} selectedEmployeeIds={selectedEmployeeIds} routeDate={date} onSelectEmployee={id => setSelectedEmployeeIds([id])} onFullscreenChange={onMapFullscreenChange}/>
       <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Amber pins mean a newer GPS report was too imprecise or untrusted. Officers without a recent reliable fix remain in the cards with their last known GPS time. The shaded circle shows reported uncertainty. Each officer’s colored path is recorded GPS, not a road-routed estimate. Tracking stops at punch-out.</p>
-      <div className="grid gap-3 sm:grid-cols-3">
+      {!embedded && <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{onDuty.length}</strong><p className="text-sm text-muted-foreground">On-duty officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{data.latest.length}</strong><p className="text-sm text-muted-foreground">Enrolled field officers</p></div>
         <div className="rounded-xl border bg-card p-4"><strong className="text-2xl">{selectedEmployeeIds.length ? validPoints.length : '—'}</strong><p className="text-sm text-muted-foreground">Recorded GPS points for selected date{selectedEmployeeIds.length > 1 ? ' · sampled every 30 seconds per officer' : ''}</p></div>
-      </div>
+      </div>}
       {!embedded && <OfficerCards people={data.latest} timezone={data.region.timezone} date={date} generatedAt={data.generated_at} quality={data.quality} selectedEmployeeId={employeeId} onSelect={id => setSelectedEmployeeIds([id])}/>}
       {selectedEmployeeIds.length > 1 && <section className="rounded-xl border bg-card p-3" aria-label="Selected officer routes">
         <h2 className="font-semibold">Routes for {selectedEmployeeIds.length} officers · {date}</h2>
@@ -151,12 +152,17 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
         <p className="text-xs text-muted-foreground">The separate location CSV includes every retained GPS fix for this employee and date, including imprecise or flagged fixes. Coordinates are approximate; opening a map link shares them with OpenStreetMap.</p>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · validated travel ${(plottedRoute.distance_m / 1000).toFixed(2)} km · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
+        {routeStart && <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2" aria-label="Recorded route endpoints">
+          <p><strong>Start · first plotted fix</strong><br/>{time(routeStart.captured_at)}<br/>{routeStart.latitude}, {routeStart.longitude} · approximate ±{Math.round(routeStart.accuracy_m)} m</p>
+          {routeEnd && routeEnd !== routeStart ? <p><strong>End · last plotted fix</strong><br/>{time(routeEnd.captured_at)}<br/>{routeEnd.latitude}, {routeEnd.longitude} · approximate ±{Math.round(routeEnd.accuracy_m)} m</p>
+            : <p>Only one quality-checked GPS fix is available; a separate end point cannot be confirmed.</p>}
+        </div>}
         {plottedRoute.plotted.length > 0 && !plottedRoute.lines.length && <p className="mt-2 text-sm">Only isolated GPS fixes are available. Colored dots show recorded positions; there are not enough continuous fixes to draw a travel path.</p>}
         {!!data.points.length && !plottedRoute.plotted.length && <p className="mt-2 text-sm">The recorded fixes were too imprecise or untrusted to show a travel path. No exact building can be inferred from them.</p>}
         {!data.points.length && selected?.status && <p className="mt-2 text-sm">The work session is active, but no GPS records are available for this date. Check location and pending GPS records in the phone app’s Notifications.</p>}
         <Button className="mt-3" variant="outline" onClick={() => setSelectedEmployeeIds([])}>Show all current positions</Button>
       </section>}
-      {employeeId && <section className="space-y-3" aria-label="Officer activity notes">
+      {employeeId && !locationOnly && <section className="space-y-3" aria-label="Officer activity notes">
         <h2 className="text-lg font-semibold">Activity notes · {date}</h2>
         {!data.activities.some(item => item.employee_id === employeeId) && <p className="rounded-xl border p-4 text-sm">No confirmed activity notes for this date.</p>}
         {data.activities.filter(item => item.employee_id === employeeId).map(item => <article key={item.id} className="rounded-xl border bg-card p-4">
@@ -165,7 +171,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
           <p className="mt-1 text-xs text-muted-foreground">Confirmed by the officer · {item.source === 'voice' ? 'spoken then reviewed' : 'typed'}</p>
         </article>)}
       </section>}
-      {employeeId && <section className="space-y-3" aria-label="Officer shop visits and collections">
+      {employeeId && !locationOnly && <section className="space-y-3" aria-label="Officer shop visits and collections">
         <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold">Shop visits and collections · {date}</h2>
           <OfficerLayoutToggle label="Visit display" layout={visitLayout} onChange={setVisitLayout}/></div>
         <p className="text-sm text-muted-foreground">Recorded payments are money already received, not online charges. A negative remaining balance is advance credit. Shop pins appear only when a nearby, accurate GPS fix is available within the location-retention period.</p>

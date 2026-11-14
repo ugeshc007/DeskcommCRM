@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { strFromU8, unzipSync } from 'fflate';
 import pg from 'pg';
@@ -17,6 +18,10 @@ const password = randomUUID() + 'Aa9!', email = `field-${org}@synthetic.test`;
 let actor = '';
 let pool: pg.Pool;
 let admin: ReturnType<typeof createClient>;
+async function teamAction(page: Page, row: Locator, name: string) {
+  await row.getByRole('button', { name: /^Actions for / }).click();
+  await page.getByRole('menuitem', { name, exact: true }).click();
+}
 test.beforeAll(async () => {
   const api = process.env.NEXT_PUBLIC_SUPABASE_URL!, db = process.env.SUPABASE_DB_URL!;
   for (const value of [api, db]) if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(value).hostname)) throw new Error('Field UI tests require a disposable local backend');
@@ -159,7 +164,7 @@ test('admin edits and removes a Field Sales officer from the compact Team list w
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   const list = page.locator('[data-layout="list"]');
   const row = list.getByRole('article').filter({ hasText: 'Roster test officer' });
-  await row.getByRole('button', { name: 'Android keys' }).click();
+  await teamAction(page, row, 'Android keys');
   const devices = page.getByRole('dialog', { name: 'Android access — Roster test officer' });
   await devices.getByRole('textbox', { name: 'Phone name' }).fill('Roster test phone');
   await devices.getByRole('button', { name: 'Create pairing code' }).click();
@@ -169,12 +174,12 @@ test('admin edits and removes a Field Sales officer from the compact Team list w
   [org, teammate, 'Roster test phone'])).rows[0].n).toBe(1);
   await page.keyboard.press('Escape');
   await expect(devices).not.toBeVisible();
-  await row.getByRole('button', { name: 'Edit name' }).click();
+  await teamAction(page, row, 'Edit name');
   await page.getByRole('dialog', { name: 'Edit field officer name' }).getByLabel('Field Sales display name').fill('Updated roster officer');
   await page.getByRole('dialog', { name: 'Edit field officer name' }).getByRole('button', { name: 'Save name' }).click();
   await expect(list.getByRole('article').filter({ hasText: 'Updated roster officer' })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-team-edited-name.png'), fullPage: true });
-  await list.getByRole('article').filter({ hasText: 'Updated roster officer' }).getByRole('button', { name: 'Remove' }).click();
+  await teamAction(page, list.getByRole('article').filter({ hasText: 'Updated roster officer' }), 'Remove');
   const confirmation = page.getByRole('alertdialog', { name: 'Remove this field officer?' });
   await expect(confirmation.getByText(/attendance, routes and visits remain saved/)).toBeVisible();
   await confirmation.getByRole('button', { name: 'Remove from Field Sales' }).click();
@@ -205,11 +210,13 @@ test('manager can edit a Field Sales name but cannot remove or enroll an officer
     await page.getByRole('tab', { name: 'Team', exact: true }).click();
     await page.getByRole('button', { name: /Other staff \(/ }).click();
     const row = page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Synthetic salesperson' });
-    await expect(row.getByRole('button', { name: 'Edit name' })).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Android keys' })).toHaveCount(0);
-    await expect(row.getByRole('button', { name: 'Remove' })).toHaveCount(0);
+    await row.getByRole('button', { name: /^Actions for / }).click();
+    await expect(page.getByRole('menuitem', { name: 'Edit name' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Android keys' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Remove' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await expect(page.getByRole('button', { name: 'Enroll salesperson' })).toHaveCount(0);
-    await row.getByRole('button', { name: 'Edit name' }).click();
+    await teamAction(page, row, 'Edit name');
     await page.getByRole('dialog', { name: 'Edit field officer name' }).getByLabel('Field Sales display name').fill('Manager-renamed salesperson');
     await page.getByRole('dialog', { name: 'Edit field officer name' }).getByRole('button', { name: 'Save name' }).click();
     await expect(page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Manager-renamed salesperson' })).toBeVisible();
@@ -382,7 +389,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(page.getByRole('button', { name: 'Create field worker' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Invite other role' })).toHaveAttribute('href', '/app/team/invite');
   await page.getByRole('button', { name: /Other staff \(/ }).click();
-  await page.getByRole('button', { name: 'Manage projects' }).click();
+  await teamAction(page, page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Synthetic salesperson' }), 'Manage projects');
   const projectManager = page.getByRole('dialog');
   await expect(projectManager.getByText('Synthetic showroom')).toBeVisible();
   const secondary = projectManager.locator('section').filter({ hasText: 'Secondary project' });
@@ -409,7 +416,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(officerWeek.locator('td').nth(1).getByText('Secondary project')).toBeVisible();
   await expect(officerWeek.locator('td').nth(6).getByText('Secondary project')).toBeVisible();
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
-  await page.getByRole('button', { name: 'Manage projects' }).click();
+  await teamAction(page, page.locator('[data-layout="list"]').getByRole('article').filter({ hasText: 'Synthetic salesperson' }), 'Manage projects');
   const ending = page.getByRole('dialog').locator('section').filter({ hasText: 'Secondary project' });
   await ending.getByRole('button', { name: 'End assignment now' }).click();
   const endConfirmation = page.getByRole('alertdialog', { name: 'End this project assignment?' });
@@ -449,13 +456,14 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
     (organization_id,id,employee_id,session_id,project_id,note,source,captured_at,fingerprint)
     values($1,$2,$3,$4,$5,$6,'voice',$7,$8)`, [org, randomUUID(), employee, liveSession, project,
     'Going to Synthetic showroom', new Date(start.getTime() + 15000), 'b'.repeat(64)]);
-  for (const [sequence, latitude, longitude] of [[0, 25.2048, 55.2708], [1, 25.2100, 55.2800]] as const) {
+  for (const [sequence, latitude, longitude, seconds] of [[0, 25.2048, 55.2708, 30], [1, 25.2100, 55.2800, 60],
+    [2, 25.21005, 55.28005, 75]] as const) {
     await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
-      values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), liveSession, sequence, new Date(start.getTime() + 30000 + sequence * 30000), latitude, longitude, 'a'.repeat(64)]);
+      values($1,$2,$3,$4,$5,$6,$7,12,false,$8)`, [org, randomUUID(), liveSession, sequence, new Date(start.getTime() + seconds * 1000), latitude, longitude, 'a'.repeat(64)]);
   }
   // A newer indoor/network fix must not erase the earlier credible map pin.
   await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
-    values($1,$2,$3,2,$4,25.2300,55.3000,230,false,$5)`, [org, randomUUID(), liveSession, new Date(start.getTime() + 90000), 'a'.repeat(64)]);
+    values($1,$2,$3,3,$4,25.2300,55.3000,230,false,$5)`, [org, randomUUID(), liveSession, new Date(start.getTime() + 90000), 'a'.repeat(64)]);
   const visitedShop = randomUUID();
   await pool.query(`insert into field_sales_project_customers(organization_id,id,project_id,shop_name,currency)
     values($1,$2,$3,'Synthetic visited shop','AED')`, [org, visitedShop, project]);
@@ -486,7 +494,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(staffedProject.getByText('Working now · 1').locator('..').getByText('Synthetic salesperson')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('project-working-officer.png'), fullPage: true });
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
-  await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
+  await teamAction(page, officerCard, 'Attendance');
   await expect(page.getByRole('tab', { name: 'Attendance' })).toHaveAttribute('data-state', 'active');
   const attendance = page.getByRole('region', { name: 'Daily field officer attendance' });
   await expect(attendance.locator('[data-layout="list"]')).toBeVisible();
@@ -532,7 +540,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.reload();
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await page.getByRole('button', { name: /Other staff \(/ }).click();
-  await officerCard.getByRole('button', { name: 'Attendance', exact: true }).click();
+  await teamAction(page, officerCard, 'Attendance');
   const [teamDownload] = await Promise.all([
     page.waitForEvent('download'), monthly.getByRole('button', { name: 'Export all employees Excel' }).click(),
   ]);
@@ -544,18 +552,30 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(strFromU8(teamArchive['xl/worksheets/sheet1.xml']!)).toContain('<t>Aardvark salesperson</t>');
   expect(strFromU8(teamArchive['xl/worksheets/sheet2.xml']!)).toContain('<t>Synthetic salesperson</t>');
   await page.screenshot({ path: testInfo.outputPath('field-attendance-team-export.png'), fullPage: true });
+  const comparisonSession = randomUUID(), comparisonToken = 'fld_' + randomBytes(32).toString('hex');
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,local_date,status,punched_in_at,last_event_at)
+    values($1,$2,$3,$4,$5::date,'working',$6,$6)`, [org, comparisonSession, secondEmployee, project, day, new Date(Date.now() - 90000)]);
+  await pool.query(`insert into field_sales_locations(organization_id,id,session_id,sequence,captured_at,latitude,longitude,accuracy_m,mock_location,fingerprint)
+    values($1,$2,$3,0,$4,25.196,55.256,12,false,$5)`, [org, randomUUID(), comparisonSession, new Date(Date.now() - 45000), 'd'.repeat(64)]);
+  await pool.query(`insert into field_sales_devices(organization_id,id,employee_id,label,token_hash,expires_at)
+    values($1,$2,$3,'Comparison Android',$4,null)`, [org, randomUUID(), secondEmployee, deviceTokenHash(comparisonToken)]);
+  await authenticateFieldDevice(pool, 'Bearer ' + comparisonToken);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Live view', exact: true }).click();
+  await expect(page.getByRole('button', { name: "View Aardvark salesperson's route for this date" })).toBeVisible();
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
-  await expect(team.getByRole('article').first().getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
+  await page.getByRole('button', { name: /Other staff \(/ }).click();
+  await expect(officerCard.getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
   const offlineOfficer = team.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Aardvark salesperson' }) });
   const formatPunch = (value: Date) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }).format(value);
   await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondStart));
   await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondEnd));
-  await officerCard.getByRole('button', { name: 'View route and visits' }).click();
+  await teamAction(page, officerCard, 'View route and visits');
   await expect(page).toHaveURL(/\/app\/field-sales$/);
-  const routeDialog = page.getByRole('dialog', { name: 'Route and visits', exact: true });
+  const routeDialog = page.getByRole('dialog', { name: 'Synthetic salesperson · Route and visits', exact: true });
   await expect(routeDialog).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Route and visits', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Synthetic salesperson · Route and visits', exact: true })).toBeVisible();
   await routeDialog.getByRole('button', { name: 'Full screen', exact: true }).click();
   // The native vertical scrollbar can reserve 16px of a 1440px test viewport.
   // Full screen must cover the entire usable viewport, including its left edge.
@@ -565,11 +585,18 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   })).toBe(true);
   await routeDialog.getByRole('button', { name: 'Exit full screen', exact: true }).click();
   await page.getByLabel('Travel date').fill(day);
+  await expect(routeDialog.getByRole('button', { name: 'Synthetic salesperson route start' })).toBeVisible();
+  await expect(routeDialog.getByRole('button', { name: 'Synthetic salesperson route end' })).toBeVisible();
+  await expect(routeDialog.getByRole('button', { name: "View Aardvark salesperson's route for this date" })).toHaveCount(0);
+  await expect(routeDialog.getByRole('button', { name: 'Aardvark salesperson route start' })).toHaveCount(0);
+  await expect(routeDialog.getByLabel('Recorded route endpoints')).toContainText('Start · first plotted fix');
+  await expect(routeDialog.getByLabel('Recorded route endpoints')).toContainText('End · last plotted fix');
   await routeDialog.getByText('Field officers', { exact: true }).locator('..').locator('summary').click();
   await expect(routeDialog.getByLabel('Synthetic salesperson', { exact: true })).toBeChecked();
   await routeDialog.getByRole('button', { name: 'All routes' }).click();
   await routeDialog.getByText('Field officers', { exact: true }).locator('..').locator('summary').click();
   await expect(routeDialog.getByRole('region', { name: 'Selected officer routes' })).toBeVisible();
+  await expect(routeDialog.getByRole('button', { name: 'Aardvark salesperson route start' })).toBeVisible();
   await expect(routeDialog.getByLabel('Route color for Aardvark salesperson')).toBeVisible();
   const colorA = await routeDialog.getByLabel('Route color for Synthetic salesperson').locator('line').getAttribute('stroke');
   const colorB = await routeDialog.getByLabel('Route color for Aardvark salesperson').locator('line').getAttribute('stroke');
@@ -581,8 +608,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(routeDialog.getByLabel('Route color for Aardvark salesperson')).toHaveAttribute('aria-pressed', 'false');
   await routeDialog.getByRole('region', { name: 'Selected officer routes' }).getByText('Synthetic salesperson', { exact: true })
     .locator('..').getByRole('button', { name: 'View only this officer' }).click();
-  await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
-  await expect(page.getByText('3', { exact: true }).first()).toBeVisible();
+  await expect(routeDialog.getByRole('button', { name: 'Aardvark salesperson route start' })).toHaveCount(0);
+  await expect(routeDialog.getByRole('button', { name: 'Synthetic salesperson route end' })).toBeVisible();
   await expect(page.locator('[aria-label="Recorded employee positions and selected work route"]')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('field-location-download.png') });
   const locationsDownload = page.waitForEvent('download');
@@ -628,6 +655,13 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('admin-live-map-mobile.png'), fullPage: true });
   await routeDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await teamAction(page, officerCard, 'Location history');
+  const locationDialog = page.getByRole('dialog', { name: 'Synthetic salesperson · Location history' });
+  await expect(locationDialog.getByLabel('Recorded route endpoints')).toBeVisible();
+  await expect(locationDialog.getByRole('button', { name: 'Download location CSV' })).toBeVisible();
+  await expect(locationDialog.getByRole('region', { name: 'Officer activity notes' })).toHaveCount(0);
+  await locationDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.goto('/app/field-sales/live');
   await expect(page.getByText(/Newer GPS at .* was too imprecise or untrusted; pin shows the earlier reliable fix/)).toBeVisible();
   const officerPin = page.getByRole('button', { name: "View Synthetic salesperson's route for this date" });
@@ -653,9 +687,10 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(offlineCard.getByText(/^Online · App last checked in:/)).toBeVisible();
   await expect(offlineCard.getByText('Phone online, but no recent reliable GPS. Last known position is historical; there is no current live map pin.')).toBeVisible();
   await offlineCard.getByRole('button', { name: 'View route and visits' }).click();
-  await expect(page.getByText('Recorded GPS points for selected date')).toBeVisible();
+  await expect(page.getByLabel('Recorded route endpoints')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('online-officer-with-stale-gps.png'), fullPage: true });
   await pool.query("update field_sales_sessions set status='off_duty',punched_out_at=now() where organization_id=$1 and id=$2", [org, liveSession]);
+  await pool.query("update field_sales_sessions set status='off_duty',punched_out_at=now() where organization_id=$1 and id=$2", [org, comparisonSession]);
   await authenticateFieldDevice(pool, 'Bearer ' + deviceToken);
   await page.goto('/app/field-sales');
   await page.getByRole('tab', { name: 'Live view', exact: true }).click();

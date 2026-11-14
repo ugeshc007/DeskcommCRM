@@ -5,6 +5,8 @@ import { cloneElement, useEffect, useId, useRef, useState, type FormEvent, type 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarBlank, Buildings, Users, Plus, CaretLeft, ArrowRight } from '@/lib/ui/icons';
 import { Button } from '@/components/ui/button';
+import { Ellipsis } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -80,7 +82,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [activityDate, setActivityDate] = useState('');
   const [activityExporting, setActivityExporting] = useState(false);
   const [activityExportError, setActivityExportError] = useState('');
-  const [routeSelection, setRouteSelection] = useState<{ employeeId: string; date: string } | null>(null);
+  const [routeSelection, setRouteSelection] = useState<{ employeeId: string; date: string; mode?: 'route' | 'location' } | null>(null);
   const [routeExpanded, setRouteExpanded] = useState(false);
   const [routeMapExpanded, setRouteMapExpanded] = useState(false);
   const [editing, setEditing] = useState<Occurrence | null>(null);
@@ -313,14 +315,16 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
                   <div><dt className="inline text-muted-foreground">Last position: </dt><dd className="inline">{position?.latitude !== null && position?.longitude !== null && position?.captured_at ? formatTime(position.captured_at) : 'Not reported'}</dd></div>
                   <div><dt className="inline text-muted-foreground">App check-in: </dt><dd className="inline">{formatTime(position?.last_seen_at)}</dd></div></dl>
                 <p className="mt-1 text-sm">{latestShop ? `Latest shop: ${latestShop.shop_name} · ${formatTime(latestShop.captured_at)}${latestShop.amount_cents === null ? ' · visit only' : ` · received ${latestShop.currency} ${(Number(latestShop.amount_cents) / 100).toFixed(2)}`}` : 'No shop visits recorded today'}</p></div>
-                <div><div className="flex flex-wrap gap-2">
-                  {manager && <Button variant="outline" onClick={() => setRouteSelection({ employeeId: person.user_id, date: teamDate })}>View route and visits</Button>}
-                  {manager && <Button variant="outline" onClick={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</Button>}
-                  <Button variant="outline" onClick={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</Button>
-                  {manager && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setEditingEmployee(person); setDialog('rename'); }}>Edit name</Button>}
-                  {manager && fieldWorkerIds.has(person.user_id) && <Button variant="outline" onClick={() => setDeviceEmployee(person)}>Android keys</Button>}
-                  {administrator && <Button variant="outline" disabled={busy} onClick={() => { setError(''); setRemovingEmployee(person); }}>Remove</Button>}
-                </div>
+                <div><DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" aria-label={`Actions for ${person.display_name}`}><Ellipsis className="size-4" aria-hidden="true"/><span className="sr-only">Actions</span></Button></DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-48">
+                    {manager && <DropdownMenuItem onSelect={() => setRouteSelection({ employeeId: person.user_id, date: teamDate, mode: 'route' })}>View route and visits</DropdownMenuItem>}
+                    {manager && <DropdownMenuItem onSelect={() => setRouteSelection({ employeeId: person.user_id, date: teamDate, mode: 'location' })}>Location history</DropdownMenuItem>}
+                    {manager && <DropdownMenuItem onSelect={() => { setError(''); setManagedEmployeeId(person.user_id); setManagedProjectId(null); setEditingAssignment(null); setDialog('manage'); }}>Manage projects</DropdownMenuItem>}
+                    <DropdownMenuItem onSelect={() => { setAttendanceEmployeeId(person.user_id); setActiveTab('attendance'); }}>Attendance</DropdownMenuItem>
+                    {manager && <DropdownMenuItem disabled={busy} onSelect={() => { setError(''); setEditingEmployee(person); setDialog('rename'); }}>Edit name</DropdownMenuItem>}
+                    {manager && fieldWorkerIds.has(person.user_id) && <DropdownMenuItem onSelect={() => setDeviceEmployee(person)}>Android keys</DropdownMenuItem>}
+                    {administrator && <DropdownMenuItem disabled={busy} onSelect={() => { setError(''); setRemovingEmployee(person); }}>Remove</DropdownMenuItem>}
+                  </DropdownMenuContent></DropdownMenu>
                 <p className="mt-1 text-xs text-muted-foreground">{(data.assignments ?? []).filter(a => a.employee_id === person.user_id && (!a.schedule.end_date || a.schedule.end_date >= teamDate)).length} project assignment(s)</p>
                 </div>
               </article>;
@@ -448,9 +452,9 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       <DialogContent className={routeExpanded || routeMapExpanded
         ? 'left-0 top-0 h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-none p-4 md:p-6'
         : 'max-h-[92dvh] w-[calc(100%-1rem)] max-w-6xl overflow-y-auto p-4 md:p-6'}>
-        <DialogHeader className="pr-16"><DialogTitle>Route and visits</DialogTitle><DialogDescription>Review recorded travel, shop visits and activity without leaving your team.</DialogDescription></DialogHeader>
+        <DialogHeader className="pr-16"><DialogTitle>{people.find(person => person.user_id === routeSelection?.employeeId)?.display_name ?? 'Field officer'} · {routeSelection?.mode === 'location' ? 'Location history' : 'Route and visits'}</DialogTitle><DialogDescription>{routeSelection?.mode === 'location' ? 'Review recorded GPS positions and download location history.' : 'Review recorded travel, shop visits and activity without leaving your team.'}</DialogDescription></DialogHeader>
         <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => setRouteExpanded(value => !value)}>{routeExpanded ? 'Exit full screen' : 'Full screen'}</Button>
-        {routeSelection && <FieldLiveView embedded organizationId={organizationId} userId={userId} initialEmployeeId={routeSelection.employeeId} initialDate={routeSelection.date} onMapFullscreenChange={setRouteMapExpanded}/>}
+        {routeSelection && <FieldLiveView key={`${routeSelection.employeeId}:${routeSelection.date}:${routeSelection.mode}`} embedded locationOnly={routeSelection.mode === 'location'} organizationId={organizationId} userId={userId} initialEmployeeId={routeSelection.employeeId} initialDate={routeSelection.date} onMapFullscreenChange={setRouteMapExpanded}/>}
       </DialogContent>
     </Dialog>
     <AlertDialog open={endingAssignment !== null} onOpenChange={open => { if (!open) setEndingAssignment(null); }}>

@@ -34,19 +34,33 @@ set -a
 set +a
 
 echo "==> Buildando contra ${NEXT_PUBLIC_SUPABASE_URL}"
-# Parallel E2E shards intermittently fail in Next 16.3.4's Turbopack font
-# import-map resolver before Playwright starts. The separate image/perf jobs
-# still build the exact commit with Turbopack; use webpack here to keep the
-# browser test gate deterministic without changing its assertions or local env.
-if command -v pnpm >/dev/null 2>&1; then
-  node scripts/copy-maplibre-worker.mjs
-  pnpm exec next build --webpack
-else
-  # Git Bash no Windows enxerga o `corepack` sem extensão, mas não o shim
-  # `pnpm.cmd`. Mantém a versão fixada no packageManager do projeto.
-  node scripts/copy-maplibre-worker.mjs
-  corepack pnpm@9.15.9 exec next build --webpack
-fi
+node scripts/copy-maplibre-worker.mjs
+build_next() {
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm exec next build
+  else
+    # Git Bash on Windows sees corepack but not the pnpm.cmd shim.
+    corepack pnpm@9.15.9 exec next build
+  fi
+}
+
+# Next 16.3.4 sometimes gets a stale Google font file from its remote source.
+# Turbopack reports that specific fetch failure as an internal module error.
+# Retry only that known transient failure; every other build error stops here.
+BUILD_LOG="$(mktemp)"
+trap 'rm -f "$BUILD_LOG"' EXIT
+for attempt in 1 2 3; do
+  if build_next > "$BUILD_LOG" 2>&1; then
+    cat "$BUILD_LOG"
+    break
+  fi
+  cat "$BUILD_LOG"
+  if [ "$attempt" -eq 3 ] || ! grep -Eq 'next/font/google queries have exactly one entry|@vercel/turbopack-next/internal/font/google/font' "$BUILD_LOG"; then
+    exit 1
+  fi
+  echo "==> Retrying transient Next font fetch failure ($attempt/3)."
+  node -e 'const fs=require("fs"),path=require("path");const root=fs.realpathSync(process.cwd());const target=path.resolve(root,".next");if(path.dirname(target)!==root)throw Error("Unsafe build cache path");fs.rmSync(target,{recursive:true,force:true})'
+done
 
 # A PROVA, e não a suposição: se a URL de produção sobreviveu em qualquer
 # artefato do bundle, o `.env.local` venceu e o teste falaria com a nuvem pela

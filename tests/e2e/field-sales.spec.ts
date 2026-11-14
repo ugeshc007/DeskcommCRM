@@ -449,7 +449,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await dutyCards.getByRole('button', { name: 'List' }).click();
   await expect(page.getByText(/waiting for the phone to send a GPS position/)).toBeVisible();
   await page.getByRole('button', { name: 'View route and visits', exact: true }).click();
-  const emptyRoute = page.getByRole('dialog', { name: 'Route and visits', exact: true });
+  const emptyRoute = page.getByRole('dialog', { name: 'Synthetic salesperson · Route and visits', exact: true });
   await expect(emptyRoute.getByText('No recorded route for this date within the retention period.')).toBeVisible();
   await emptyRoute.getByRole('button', { name: 'Close', exact: true }).click();
   await pool.query(`insert into field_sales_activity_notes

@@ -552,6 +552,13 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(strFromU8(teamArchive['xl/worksheets/sheet1.xml']!)).toContain('<t>Aardvark salesperson</t>');
   expect(strFromU8(teamArchive['xl/worksheets/sheet2.xml']!)).toContain('<t>Synthetic salesperson</t>');
   await page.screenshot({ path: testInfo.outputPath('field-attendance-team-export.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Team', exact: true }).click();
+  await page.getByRole('button', { name: /Other staff \(/ }).click();
+  const offlineOfficer = team.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Aardvark salesperson' }) });
+  const formatPunch = (value: Date) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }).format(value);
+  await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondStart));
+  await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondEnd));
   const comparisonSession = randomUUID(), comparisonToken = 'fld_' + randomBytes(32).toString('hex');
   await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,local_date,status,punched_in_at,last_event_at)
     values($1,$2,$3,$4,$5::date,'working',$6,$6)`, [org, comparisonSession, secondEmployee, project, day, new Date(Date.now() - 90000)]);
@@ -566,11 +573,6 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await page.getByRole('button', { name: /Other staff \(/ }).click();
   await expect(officerCard.getByRole('heading', { name: 'Synthetic salesperson' })).toBeVisible();
-  const offlineOfficer = team.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Aardvark salesperson' }) });
-  const formatPunch = (value: Date) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }).format(value);
-  await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondStart));
-  await expect(offlineOfficer.locator('dl')).toContainText(formatPunch(secondEnd));
   await teamAction(page, officerCard, 'View route and visits');
   await expect(page).toHaveURL(/\/app\/field-sales$/);
   const routeDialog = page.getByRole('dialog', { name: 'Synthetic salesperson · Route and visits', exact: true });

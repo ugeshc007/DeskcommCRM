@@ -16,6 +16,7 @@ import { routeColor, routeDash } from '@/lib/field-sales/route-colors';
 import { OfficerCards } from './officer-cards';
 import { RouteSwatch } from './route-swatch';
 import { nearbyPlace } from '@/lib/field-sales/nearby-place';
+import { nearbyPlaceFromTiles } from '@/lib/field-sales/nearby-place-tiles';
 
 type Position = { employee_id: string; display_name: string; route_style_index: number; status: string | null; latitude: number | null; longitude: number | null; captured_at: string | null; accuracy_m: number | null; mock_location: boolean | null; quality_flags?: string[] | null; speed_m_s?: number | null; last_reported_at: string | null; last_reported_accuracy_m: number | null; online: boolean; last_seen_at: string | null };
 type Point = { employee_id: string; session_id: string; latitude: number; longitude: number; captured_at: string; accuracy_m: number; mock_location: boolean; quality_flags?: string[] };
@@ -87,6 +88,8 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
       let activePopup: Popup | null = null;
       let routeHoverPopup: Popup | null = null;
       let hoverAt = 0;
+      let hoverLookup: ReturnType<typeof setTimeout> | null = null;
+      let hoverSerial = 0;
       let hoverPoints = latest.current.points;
       const hoverFixes = new Map<string, RecordedPoint[]>();
       const draw = () => {
@@ -215,7 +218,10 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
             .filter(layer => Boolean(instance.getLayer(layer)));
           const hit = layers.length ? instance.queryRenderedFeatures(event.point, { layers })[0] : null;
           const employeeId = hit?.properties?.employee_id;
-          if (!employeeId || typeof employeeId !== 'string') { routeHoverPopup?.remove(); routeHoverPopup = null; instance.getCanvas().style.cursor = ''; return; }
+          if (!employeeId || typeof employeeId !== 'string') {
+            hoverSerial++; if (hoverLookup) clearTimeout(hoverLookup);
+            routeHoverPopup?.remove(); routeHoverPopup = null; instance.getCanvas().style.cursor = ''; return;
+          }
           const current = latest.current;
           if (hoverPoints !== current.points) { hoverPoints = current.points; hoverFixes.clear(); }
           let fixes = hoverFixes.get(employeeId);
@@ -231,15 +237,27 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
           if (instance.getSource('basemap') && instance.isSourceLoaded('basemap')) {
             try { placeFeatures = instance.querySourceFeatures('basemap', { sourceLayer: 'places' }); } catch { /* Raster map has no place source. */ }
           }
-          const place = nearbyPlace(placeFeatures, nearest.latitude, nearest.longitude) ?? 'Area name unavailable';
+          const place = nearbyPlace(placeFeatures, nearest.latitude, nearest.longitude);
           const name = current.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Field officer';
           const captured = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: current.region.timezone }).format(new Date(nearest.captured_at));
-          const description = `${name} · nearest plotted GPS fix · ${captured} · ${place} · ${nearest.latitude}, ${nearest.longitude} · approximate ±${Math.round(nearest.accuracy_m)} m`;
+          const description = (label: string) => `${name} · nearest plotted GPS fix · ${captured} · ${label} · ${nearest.latitude}, ${nearest.longitude} · approximate ±${Math.round(nearest.accuracy_m)} m`;
           routeHoverPopup ??= new lib.Popup({ closeButton: false, closeOnClick: false, offset: 14 });
-          routeHoverPopup.setLngLat(event.lngLat).setText(description).addTo(instance);
+          routeHoverPopup.setLngLat(event.lngLat).setText(description(place ?? (header ? 'Looking up area…' : 'Area name unavailable'))).addTo(instance);
           instance.getCanvas().style.cursor = 'crosshair';
+          hoverSerial++; if (hoverLookup) clearTimeout(hoverLookup);
+          if (!place && header && tile) {
+            const serial = hoverSerial;
+            hoverLookup = setTimeout(() => {
+              void nearbyPlaceFromTiles(tile, window.location.origin, nearest.latitude, nearest.longitude).then(label => {
+                if (!closed && serial === hoverSerial && routeHoverPopup) routeHoverPopup.setText(description(label ?? 'Area name unavailable'));
+              });
+            }, 300);
+          }
         });
-        instance.getCanvas().addEventListener('mouseleave', () => { routeHoverPopup?.remove(); routeHoverPopup = null; instance.getCanvas().style.cursor = ''; });
+        instance.getCanvas().addEventListener('mouseleave', () => {
+          hoverSerial++; if (hoverLookup) clearTimeout(hoverLookup);
+          routeHoverPopup?.remove(); routeHoverPopup = null; instance.getCanvas().style.cursor = '';
+        });
         const points = selections.current?.length || selection.current || latest.current.points.length ? []
           : latest.current.latest.filter(p => livePosition(p, latest.current.generated_at, latest.current.quality));
         if (points.length) {
@@ -250,7 +268,7 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
       instance.on('error', () => setProblem('Map tiles or rendering are unavailable. Recorded positions remain available below.'));
       // Data updates do not reset the manager's chosen zoom or pan.
       const timer = window.setInterval(draw, 2000);
-      instance.once('remove', () => { window.clearInterval(timer); routeHoverPopup?.remove(); });
+      instance.once('remove', () => { window.clearInterval(timer); if (hoverLookup) clearTimeout(hoverLookup); routeHoverPopup?.remove(); });
     }).catch(() => setProblem('Map rendering could not be loaded. Use the position list below.'));
     return () => { closed = true; resizeObserver?.disconnect(); markers.current.forEach(marker => marker.remove()); markers.current = []; positionCache.clear(); map.current?.remove(); map.current = null; };
   }, [data.map?.map_tile_path, data.region.country_code]);

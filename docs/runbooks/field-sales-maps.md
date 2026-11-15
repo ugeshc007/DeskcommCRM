@@ -24,6 +24,12 @@ from the archive. MapLibre's worker and shared module are copied from the instal
 package before dev/build and served from `/maplibre/`; both files are required or the
 map mounts but never requests tiles. The whole archive is never returned in one request.
 Existing raster configurations remain valid.
+Route hover labels use the installed vector archive's nearby `places` points,
+including tiles just outside the current viewport. The browser requests only
+bounded tiles from this installation; no employee coordinates go to an external
+geocoder. Labels identify a nearby mapped area or city, not the exact street or
+building. Raster tiles have no place data, so raster-only installations continue
+to show coordinates without an area name.
 In Field Sales → Live view → Self-hosted basemap, enter either
 `/field-map-tiles/uae.pmtiles` or `/field-map-tiles/uae/{z}/{x}/{y}.png` and the
 dataset's required attribution.

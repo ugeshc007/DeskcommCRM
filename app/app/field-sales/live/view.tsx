@@ -12,6 +12,7 @@ import { displayRoute } from '@/lib/field-sales/route-quality';
 import { RouteSwatch } from '../route-swatch';
 import { OfficerCards } from '../officer-cards';
 import { OfficerLayoutToggle, type OfficerLayout } from '../officer-layout-toggle';
+import { LocationHistoryList } from './location-history-list';
 
 function localDate(instant: string, timezone: string) {
   const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(instant));
@@ -162,6 +163,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
         {!data.points.length && selected?.status && <p className="mt-2 text-sm">The work session is active, but no GPS records are available for this date. Check location and pending GPS records in the phone app’s Notifications.</p>}
         <Button className="mt-3" variant="outline" onClick={() => setSelectedEmployeeIds([])}>Show all current positions</Button>
       </section>}
+      {employeeId && locationOnly && <LocationHistoryList key={`${employeeId}:${date}`} points={data.points} tilePath={data.map?.map_tile_path ?? null} timezone={data.region.timezone}/>}
       {employeeId && !locationOnly && <section className="space-y-3" aria-label="Officer activity notes">
         <h2 className="text-lg font-semibold">Activity notes · {date}</h2>
         {!data.activities.some(item => item.employee_id === employeeId) && <p className="rounded-xl border p-4 text-sm">No confirmed activity notes for this date.</p>}

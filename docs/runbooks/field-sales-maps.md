@@ -30,6 +30,10 @@ bounded tiles from this installation; no employee coordinates go to an external
 geocoder. Labels identify a nearby mapped area or city, not the exact street or
 building. Raster tiles have no place data, so raster-only installations continue
 to show coordinates without an area name.
+The Team → Location history dialog also lists retained GPS fixes in pages of ten,
+with their local time, nearest mapped area or city, coordinates, accuracy and GPS
+quality flags. Names come from the same installed vector archive. When its place
+layer has no nearby label, the row says so and keeps the coordinates and map link.
 In Field Sales → Live view → Self-hosted basemap, enter either
 `/field-map-tiles/uae.pmtiles` or `/field-map-tiles/uae/{z}/{x}/{y}.png` and the
 dataset's required attribution.

@@ -662,6 +662,12 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   const locationDialog = page.getByRole('dialog', { name: 'Synthetic salesperson · Location history' });
   await expect(locationDialog.getByLabel('Recorded route endpoints')).toBeVisible();
   await expect(locationDialog.getByRole('button', { name: 'Download location CSV' })).toBeVisible();
+  const history = locationDialog.getByRole('region', { name: 'Location history' });
+  await expect(history.getByRole('row')).toHaveCount(5);
+  await expect(history.getByText('25.2048, 55.2708')).toBeVisible();
+  await expect(history.getByText('±12 m').first()).toBeVisible();
+  await expect(history.getByText('±230 m')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('field-location-history-list.png') });
   await expect(locationDialog.getByRole('region', { name: 'Officer activity notes' })).toHaveCount(0);
   await locationDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.goto('/app/field-sales/live');

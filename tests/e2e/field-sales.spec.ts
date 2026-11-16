@@ -589,6 +589,8 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByLabel('Travel date').fill(day);
   await expect(routeDialog.getByRole('button', { name: 'Synthetic salesperson route start' })).toBeVisible();
   await expect(routeDialog.getByRole('button', { name: 'Synthetic salesperson route end' })).toBeVisible();
+  await expect(routeDialog.getByRole('button', { name: 'Synthetic salesperson route end' })).toHaveText('➤');
+  await expect(routeDialog.getByText('➤ marks the last plotted GPS fix', { exact: false })).toBeVisible();
   await expect(routeDialog.getByRole('button', { name: "View Aardvark salesperson's route for this date" })).toHaveCount(0);
   await expect(routeDialog.getByRole('button', { name: 'Aardvark salesperson route start' })).toHaveCount(0);
   await expect(routeDialog.getByLabel('Recorded route endpoints')).toContainText('Start · first plotted fix');

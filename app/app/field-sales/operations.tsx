@@ -157,11 +157,11 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
           for (const endpoint of endpoints) {
             const name = current.latest.find(person => person.employee_id === endpoint.id)?.display_name ?? 'Field officer';
             const label = endpoint.kind === 'start' ? 'Start' : 'End';
-            const icon = document.createElement('button'); icon.type = 'button'; icon.textContent = label === 'Start' ? 'S' : 'E';
-            icon.className = 'flex size-9 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow-md';
+            const icon = document.createElement('button'); icon.type = 'button'; icon.textContent = label === 'Start' ? 'S' : '➤';
+            icon.className = 'flex size-9 items-center justify-center rounded-full border-2 border-white text-base font-bold text-white shadow-md';
             icon.style.backgroundColor = endpoint.color;
             icon.setAttribute('aria-label', `${name} route ${label.toLowerCase()}`);
-            icon.title = `${name} · ${label} of plotted GPS route`;
+            icon.title = `${name} · ${label === 'Start' ? 'first' : 'last'} plotted GPS fix`;
             const marker = new lib.Marker({ element: icon }).setLngLat([endpoint.point.longitude, endpoint.point.latitude]).addTo(instance);
             const captured = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: current.region.timezone }).format(new Date(endpoint.point.captured_at));
             const popup = new lib.Popup({ offset: 24 }).setText(`${name} · ${label} plotted GPS fix · ${captured} · ${endpoint.point.latitude}, ${endpoint.point.longitude} · approximate ±${Math.round(endpoint.point.accuracy_m)} m`);
@@ -283,7 +283,7 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
       className="flex items-center gap-2 rounded-md border px-2 py-1 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-primary/10">
       <RouteSwatch styleIndex={person.route_style_index}/>{person.display_name}
     </button>)}</div>}
-    {(selectedEmployeeIds?.length || routeEmployeeId) && <p className="text-xs text-muted-foreground">S and E mark the first and last plotted GPS fixes for each selected route. Hover over a route to see its nearest recorded fix, coordinates, and a nearby area or city when the local basemap has one. Area names are approximate. GPS uncertainty means the route cannot identify an exact building.</p>}
+    {(selectedEmployeeIds?.length || routeEmployeeId) && <p className="text-xs text-muted-foreground">S marks the first plotted GPS fix; ➤ marks the last plotted GPS fix for each selected route. Hover over a route to see its nearest recorded fix, coordinates, and a nearby area or city when the local basemap has one. Area names are approximate. GPS uncertainty means the route cannot identify an exact building.</p>}
     {data.map?.map_tile_path && <p className="text-xs text-muted-foreground">{data.map.map_attribution} · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></p>}
     {!fullscreen && <p className="text-xs text-muted-foreground">Live pins require an online, on-duty phone and a reliable GPS fix within five minutes. Amber pins mean a newer GPS report was too imprecise or untrusted. Older positions remain in officer cards and recorded routes, without appearing as current pins. Each officer’s colored route requires precise, confirmed movement. The shaded circle shows reported uncertainty; indoors, GPS cannot identify an exact building. Raw records remain unchanged.</p>}
   </section>;

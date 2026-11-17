@@ -1,5 +1,5 @@
 ---
-impacto: correcao
+impacto: capacidade_nova
 secao: corrigido
 titulo: Links do histórico de locais abrem no Google Maps
 ---

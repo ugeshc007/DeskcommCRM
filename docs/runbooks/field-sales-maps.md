@@ -34,6 +34,12 @@ The Team → Location history dialog also lists retained GPS fixes in pages of t
 with their local time, nearest mapped area or city, coordinates, accuracy and GPS
 quality flags. Names come from the same installed vector archive. When its place
 layer has no nearby label, the row says so and keeps the coordinates and map link.
+The separate location CSV resolves nearby English/Latin area or road names from
+the installed vector archive on the server. A nearby road is used only for a
+reliable fix; otherwise the export falls back to an area or city. Missing names
+are explicit, and coordinates and reported accuracy remain in every row. Raster
+maps cannot provide these names. The OpenStreetMap links open its own map layer,
+which may still display names in Arabic regardless of the CRM language.
 In Field Sales → Live view → Self-hosted basemap, enter either
 `/field-map-tiles/uae.pmtiles` or `/field-map-tiles/uae/{z}/{x}/{y}.png` and the
 dataset's required attribution.

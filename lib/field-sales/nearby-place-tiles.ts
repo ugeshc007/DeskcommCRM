@@ -3,12 +3,18 @@ import { nearbyPlace, type PlaceFeature } from './nearby-place';
 const tileCache = new Map<string, Promise<PlaceFeature[]>>();
 const maxCachedTiles = 128;
 
-export function surroundingTiles(latitude: number, longitude: number, zoom: number) {
+export function tileForPoint(latitude: number, longitude: number, zoom: number) {
   const size = 2 ** zoom;
   const lat = Math.max(-85.05112878, Math.min(85.05112878, latitude));
   const x = Math.floor((longitude + 180) / 360 * size);
   const radians = lat * Math.PI / 180;
   const y = Math.floor((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * size);
+  return { z: zoom, x, y };
+}
+
+export function surroundingTiles(latitude: number, longitude: number, zoom: number) {
+  const size = 2 ** zoom;
+  const { x, y } = tileForPoint(latitude, longitude, zoom);
   const tiles: Array<{ z: number; x: number; y: number }> = [];
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const tileX = x + dx, tileY = y + dy;

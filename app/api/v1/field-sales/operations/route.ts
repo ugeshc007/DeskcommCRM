@@ -7,6 +7,8 @@ import { readFieldOperations, recordVisit, manageCorrection, completeNextAction 
 import { readIntegrationJson } from '../../integration-connections/_shared';
 import { fieldError } from '../_shared';
 import { dailyFieldReport, locationHistoryReport } from '@/lib/field-sales/reports';
+import { locationPlaceLabels } from '@/lib/field-sales/location-place-labels';
+import { env } from '@/lib/env';
 import { fieldAudit, fieldTransaction } from '@/lib/field-sales/authority';
 const headers = { 'Cache-Control': 'private, no-store' };
 export async function GET(req: Request) {
@@ -30,7 +32,8 @@ export async function GET(req: Request) {
       const employeeId = query.get('employee_id')!;
       const employee = data.latest.find(person => person.employee_id === employeeId);
       if (!employee) throw new Error('field_forbidden');
-      const csv = locationHistoryReport(date, data.region.timezone, employee.display_name, data.points);
+      const labels = await locationPlaceLabels(env.FIELD_MAP_TILES_DIR, data.map?.map_tile_path, data.points);
+      const csv = locationHistoryReport(date, data.region.timezone, employee.display_name, data.points, labels);
       await fieldTransaction(pool, auth.org.orgId, auth.user.id, db => fieldAudit(db, auth.org.orgId,
         auth.user.id, 'field_sales.location_history_exported', employeeId, { date, points: data.points.length }));
       return ok({ csv, filename: `field-sales-locations-${date}-${employeeId}.csv`, count: data.points.length }, { headers });

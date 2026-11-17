@@ -5,7 +5,7 @@ Status: Field Officer/Team is deployed on CT102. Six-digit pairing requires migr
 ## Separate location history download
 
 - In Route and visits, selecting exactly one officer and an organization-local travel date exposes a separate location CSV download. The existing attendance and daily activity exports continue to exclude coordinates.
-- The CSV includes each retained raw GPS fix from authorized work sessions for that officer and day: employee name, local and UTC capture time, latitude, longitude, reported accuracy, mock/quality flags, and a map link. It is a sequence of recorded fixes, not a continuous location trace or proof of a particular building. Opening a map link shares the coordinates with OpenStreetMap.
+- The CSV includes each retained raw GPS fix from authorized work sessions for that officer and day: employee name, local and UTC capture time, a nearby English/Latin area or road label when mapped in the installed vector archive, latitude, longitude, reported accuracy, mock/quality flags, and a map link. A road label is used only for a reliable fix near a named road; otherwise the export uses a nearby area/city or says that no English map name is available. This is an approximate reference, not a verified street address, continuous trace or proof of a particular building. Opening a map link shares the coordinates with OpenStreetMap; that external map may still display Arabic labels.
 - An officer may export only their own fixes; managers and admins may export enrolled officers in their organization. The read is bounded and follows the existing raw GPS retention policy. Each export writes an audit entry with the employee, date and point count, without coordinates.
 
 ## Monthly attendance export — deployed on CT102 at b5fd983 (2026-10-21)

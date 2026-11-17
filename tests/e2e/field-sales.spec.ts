@@ -622,6 +622,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(locationsCsv.suggestedFilename()).toBe(`field-sales-locations-${day}-${employee}.csv`);
   const locationRows = readFileSync(await locationsCsv.path(), 'utf8');
   expect(locationRows).toContain('"Synthetic salesperson"');
+  expect(locationRows).toContain('"Nearby area or road (English where mapped, approximate)"');
   expect(locationRows).toContain('"25.2048","55.2708","12"');
   expect(locationRows).toContain('"25.23","55.3","230"');
   expect(locationRows).toContain('https://www.openstreetmap.org/?mlat=25.2048&mlon=55.2708');

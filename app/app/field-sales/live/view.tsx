@@ -151,7 +151,7 @@ export function FieldLiveView({ organizationId, userId, initialEmployeeId, initi
       </section>}
       {employeeId && <section className="rounded-xl border bg-card p-4" aria-label="Selected officer route">
         <h2 className="font-semibold">{selected?.display_name ?? 'Selected field officer'} · {date}</h2>
-        <p className="text-xs text-muted-foreground">The separate location CSV includes every retained GPS fix for this employee and date, including imprecise or flagged fixes. Coordinates are approximate; opening a map link shares them with OpenStreetMap.</p>
+        <p className="text-xs text-muted-foreground">The separate location CSV includes every retained GPS fix for this employee and date, including imprecise or flagged fixes, plus a nearby English map name when available. Names and coordinates are approximate; opening a map link shares the coordinates with OpenStreetMap.</p>
         <p className="text-sm text-muted-foreground">{validPoints.length ? `${validPoints.length} recorded points · ${plottedRoute.plotted.length} quality-checked points plotted · validated travel ${(plottedRoute.distance_m / 1000).toFixed(2)} km · ${time(validPoints[0]!.captured_at)} to ${time(validPoints[validPoints.length - 1]!.captured_at)}` : 'No recorded route for this date within the retention period.'}</p>
         {routeStart && <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2" aria-label="Recorded route endpoints">
           <p><strong>Start · first plotted fix</strong><br/>{time(routeStart.captured_at)}<br/>{routeStart.latitude}, {routeStart.longitude} · approximate ±{Math.round(routeStart.accuracy_m)} m</p>

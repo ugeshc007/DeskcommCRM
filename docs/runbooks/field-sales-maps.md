@@ -38,14 +38,16 @@ The separate location CSV resolves nearby English/Latin area or road names from
 the installed vector archive on the server. A nearby road is used only for a
 reliable fix; otherwise the export falls back to an area or city. Missing names
 are explicit, and coordinates and reported accuracy remain in every row. Raster
-maps cannot provide these names. The OpenStreetMap links open its own map layer,
-which may still display names in Arabic regardless of the CRM language.
+maps cannot provide these names. Location history and CSV links open the recorded
+coordinate in Google Maps; this shares that coordinate with Google. Google controls
+its map labels and may still show local-language roads. The nearby English name
+in the CSV comes from local tiles.
 In Field Sales → Live view → Self-hosted basemap, enter either
 `/field-map-tiles/uae.pmtiles` or `/field-map-tiles/uae/{z}/{x}/{y}.png` and the
 dataset's required attribution.
 The map already displays the OpenStreetMap copyright link; preserve source attribution.
 
-Only authenticated CRM staff can request tiles. Requests are local file reads: no Google
+Only authenticated CRM staff can request tiles. Tile requests are local file reads: no Google
 API, address lookup, paid routing or external fallback. Missing tiles return a visible map
 error. The server accepts zoom 0–22, valid tile coordinates, raster files up to 1 MiB
 and vector extracts up to 2 MiB.

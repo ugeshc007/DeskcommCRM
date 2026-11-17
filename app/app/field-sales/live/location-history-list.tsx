@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { nearbyPlaceFromTiles } from '@/lib/field-sales/nearby-place-tiles';
+import { googleMapsPointUrl } from '@/lib/field-sales/map-links';
 import type { Operations } from '../operations';
 
 type Point = Operations['points'][number];
@@ -46,14 +47,14 @@ export function LocationHistoryList({ points, tilePath, timezone }: { points: Po
           const key = pointKey(point);
           const label = labels[key];
           const flags = point.quality_flags ?? [];
-          const url = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(point.latitude)}&mlon=${encodeURIComponent(point.longitude)}#map=17/${encodeURIComponent(point.latitude)}/${encodeURIComponent(point.longitude)}`;
+          const url = googleMapsPointUrl(point.latitude, point.longitude);
           return <tr key={`${key}:${index}`} className="border-b last:border-0">
             <td className="py-2 pr-3 whitespace-nowrap">{clock.format(new Date(point.captured_at))}</td>
             <td className="py-2 pr-3">{tilePath ? label === undefined ? 'Finding nearby area…' : label ?? 'No nearby mapped area' : 'Area labels not configured'}
               {(point.mock_location || flags.length > 0) && <span className="block text-xs text-amber-700">{point.mock_location ? 'Mock location' : `Flagged GPS: ${flags.join(', ')}`}</span>}</td>
             <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{point.latitude}, {point.longitude}</td>
             <td className="py-2 pr-3 whitespace-nowrap">±{Math.round(point.accuracy_m)} m</td>
-            <td className="py-2"><a className="underline underline-offset-2" href={url} target="_blank" rel="noreferrer" aria-label={`Open location from ${clock.format(new Date(point.captured_at))} in OpenStreetMap`}>Open</a></td>
+            <td className="py-2"><a className="underline underline-offset-2" href={url} target="_blank" rel="noreferrer" aria-label={`Open location from ${clock.format(new Date(point.captured_at))} in Google Maps`}>Open</a></td>
           </tr>;
         })}</tbody>
       </table></div>

@@ -1,5 +1,6 @@
 import { addCalendarDays, wallTimeToUtc } from './schedule';
 import { localDateSchema } from './contracts';
+import { googleMapsPointUrl } from './map-links';
 
 type Instant = string | Date;
 type ReportSession = { display_name: string; punched_in_at: Instant; punched_out_at: Instant | null;
@@ -37,7 +38,7 @@ export function locationHistoryReport(date: string, timezone: string, employeeNa
     rows.push([employeeName, localTime.format(new Date(point.captured_at)), timezone,
       new Date(point.captured_at).toISOString(), nearbyLabels[index] ?? 'No nearby English map name', latitude, longitude, String(point.accuracy_m),
       point.mock_location ? 'Yes' : 'No', (point.quality_flags ?? []).join('; '),
-      `https://www.openstreetmap.org/?mlat=${encodeURIComponent(latitude)}&mlon=${encodeURIComponent(longitude)}#map=17/${encodeURIComponent(latitude)}/${encodeURIComponent(longitude)}`]);
+      googleMapsPointUrl(latitude, longitude)]);
   }
   return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }

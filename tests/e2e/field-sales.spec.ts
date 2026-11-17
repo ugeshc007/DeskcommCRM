@@ -625,7 +625,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(locationRows).toContain('"Nearby area or road (English where mapped, approximate)"');
   expect(locationRows).toContain('"25.2048","55.2708","12"');
   expect(locationRows).toContain('"25.23","55.3","230"');
-  expect(locationRows).toContain('https://www.openstreetmap.org/?mlat=25.2048&mlon=55.2708');
+  expect(locationRows).toContain('https://www.google.com/maps/search/?api=1&query=25.2048%2C55.2708');
   await expect.poll(async () => Number((await pool.query("select count(*) from api_audit_log where organization_id=$1 and action='field_sales.location_history_exported' and resource_id=$2", [org, employee])).rows[0].count)).toBe(1);
   await routeDialog.getByRole('button', { name: 'Full screen map' }).click();
   const viewport = await page.evaluate(() => ({ width: document.documentElement.clientWidth, height: window.innerHeight }));
@@ -670,6 +670,9 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await expect(history.getByText('25.2048, 55.2708')).toBeVisible();
   await expect(history.getByText('±12 m').first()).toBeVisible();
   await expect(history.getByText('±230 m')).toBeVisible();
+  const googleLocationLinks = history.getByRole('link', { name: /in Google Maps/ });
+  await expect(googleLocationLinks).toHaveCount(4);
+  await expect(googleLocationLinks.first()).toHaveAttribute('href', /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
   await page.screenshot({ path: testInfo.outputPath('field-location-history-list.png') });
   await expect(locationDialog.getByRole('region', { name: 'Officer activity notes' })).toHaveCount(0);
   await locationDialog.getByRole('button', { name: 'Close', exact: true }).click();

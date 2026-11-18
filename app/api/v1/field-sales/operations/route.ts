@@ -6,8 +6,9 @@ import { getRequestPool } from '@/lib/agent-engine/db/request-pool';
 import { readFieldOperations, recordVisit, manageCorrection, completeNextAction } from '@/lib/field-sales/operations';
 import { readIntegrationJson } from '../../integration-connections/_shared';
 import { fieldError } from '../_shared';
-import { dailyFieldReport, locationHistoryReport } from '@/lib/field-sales/reports';
+import { dailyFieldReport, locationAreaChanges, locationHistoryReport } from '@/lib/field-sales/reports';
 import { locationPlaceLabels } from '@/lib/field-sales/location-place-labels';
+import { reliablePosition } from '@/lib/field-sales/route-quality';
 import { env } from '@/lib/env';
 import { fieldAudit, fieldTransaction } from '@/lib/field-sales/authority';
 const headers = { 'Cache-Control': 'private, no-store' };
@@ -32,11 +33,13 @@ export async function GET(req: Request) {
       const employeeId = query.get('employee_id')!;
       const employee = data.latest.find(person => person.employee_id === employeeId);
       if (!employee) throw new Error('field_forbidden');
-      const labels = await locationPlaceLabels(env.FIELD_MAP_TILES_DIR, data.map?.map_tile_path, data.points);
-      const csv = locationHistoryReport(date, data.region.timezone, employee.display_name, data.points, labels);
+      const reliablePoints = data.points.filter(point => reliablePosition(point, data.quality));
+      const labels = await locationPlaceLabels(env.FIELD_MAP_TILES_DIR, data.map?.map_tile_path, reliablePoints, { areaOnly: true });
+      const changes = locationAreaChanges(reliablePoints, labels);
+      const csv = locationHistoryReport(date, data.region.timezone, employee.display_name, changes);
       await fieldTransaction(pool, auth.org.orgId, auth.user.id, db => fieldAudit(db, auth.org.orgId,
-        auth.user.id, 'field_sales.location_history_exported', employeeId, { date, points: data.points.length }));
-      return ok({ csv, filename: `field-sales-locations-${date}-${employeeId}.csv`, count: data.points.length }, { headers });
+        auth.user.id, 'field_sales.location_history_exported', employeeId, { date, points: data.points.length, exported_area_changes: changes.length }));
+      return ok({ csv, filename: `field-sales-locations-${date}-${employeeId}.csv`, count: changes.length }, { headers });
     }
     return ok(data, { headers });
   } catch (error) { return fieldError(error); }

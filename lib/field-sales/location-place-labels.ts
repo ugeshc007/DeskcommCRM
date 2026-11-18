@@ -8,14 +8,15 @@ type Fix = { latitude: number | string; longitude: number | string; accuracy_m: 
   mock_location: boolean; quality_flags?: string[] | null };
 type Tile = { z: number; x: number; y: number };
 type ReadTile = (tile: Tile) => Promise<Uint8Array>;
+type LabelOptions = { areaOnly?: boolean; readTile?: ReadTile };
 
 /** Names come only from the administrator-installed archive; no employee coordinates leave this server. */
 export async function locationPlaceLabels(root: string | undefined, archivePath: string | null | undefined,
-  points: Fix[], readTileOverride?: ReadTile): Promise<Array<string | null>> {
+  points: Fix[], options: LabelOptions = {}): Promise<Array<string | null>> {
   const match = /^\/field-map-tiles\/([a-z0-9][a-z0-9_-]{0,79}\.pmtiles)$/.exec(archivePath ?? '');
-  if ((!root && !readTileOverride) || !match) return points.map(() => null);
+  if ((!root && !options.readTile) || !match) return points.map(() => null);
   const archive = match[1]!;
-  const readTile = readTileOverride ?? ((tile: Tile) => readVectorTile(root!, [archive, String(tile.z), String(tile.x), String(tile.y)]));
+  const readTile = options.readTile ?? ((tile: Tile) => readVectorTile(root!, [archive, String(tile.z), String(tile.x), String(tile.y)]));
   const cache = new Map<string, Promise<PlaceFeature[]>>();
   async function features(tile: Tile, layerName: 'roads' | 'places') {
     const key = `${tile.z}/${tile.x}/${tile.y}/${layerName}`;
@@ -42,7 +43,7 @@ export async function locationPlaceLabels(root: string | undefined, archivePath:
     const latitude = Number(point.latitude), longitude = Number(point.longitude), accuracy = Number(point.accuracy_m);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 85 || Math.abs(longitude) > 180) return null;
     // A wide or flagged fix cannot reliably identify the closest street.
-    if (!point.mock_location && !(point.quality_flags?.length) && accuracy <= 35) {
+    if (!options.areaOnly && !point.mock_location && !(point.quality_flags?.length) && accuracy <= 35) {
       const road = nearbyEnglishRoad(await features(tileForPoint(latitude, longitude, 14), 'roads'), latitude, longitude);
       if (road) return road;
     }

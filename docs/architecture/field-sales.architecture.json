@@ -19,7 +19,7 @@
     { "id": "operations", "lane": "ui", "col": 3, "type": "service", "label": "Map, visits and approvals", "sublabel": "On-duty cards without GPS; embedded team routes and visits; isolated fixes as dots; independent activity date; due follow-ups and corrections" },
     { "id": "audit", "lane": "ui", "col": 4, "type": "service", "label": "Existing audit view / device sync errors", "sublabel": "Audited mutations; rejection receipts visible without expired coordinates" },
     { "id": "reports", "lane": "ui", "col": 4, "type": "service", "label": "Daily CSV export", "sublabel": "Scoped attendance and visits; excludes GPS and notes; formula-safe cells" },
-    { "id": "location-export", "lane": "ui", "col": 4, "type": "service", "label": "Location history CSV", "sublabel": "One authorized officer and local date; retained fixes with approximate local map names, accuracy, flags and links" },
+    { "id": "location-export", "lane": "ui", "col": 4, "type": "service", "label": "Location history CSV", "sublabel": "One authorized officer and local date; first reliable fix near each new mapped area, with accuracy and links" },
     { "id": "tiles", "lane": "runtime", "col": 4, "type": "service", "label": "Local map assets", "sublabel": "Read-only raster or PMTiles dataset; authenticated bounded reads; no external fallback" }
   ],
   "edges": [
@@ -51,7 +51,7 @@
     { "id": "reports-audit", "from": "reports", "to": "audit", "label": "Export audit without report contents" },
     { "id": "operations-location-export", "from": "operations", "to": "location-export", "label": "Selected officer and date download" },
     { "id": "records-location-export", "from": "records", "to": "location-export", "label": "Authorized retained work-session fixes" },
-    { "id": "tiles-location-export", "from": "tiles", "to": "location-export", "label": "Bounded local vector tiles provide approximate English area or road names" },
+    { "id": "tiles-location-export", "from": "tiles", "to": "location-export", "label": "Bounded local vector tiles provide approximate English area names" },
     { "id": "location-export-audit", "from": "location-export", "to": "audit", "label": "Employee, date and count only; no coordinates" },
     { "id": "crm-tiles", "from": "crm", "to": "tiles", "label": "Administrator configures local dataset path and attribution" },
     { "id": "tiles-operations", "from": "tiles", "to": "operations", "label": "Bounded tiles/archive ranges or visible missing-coverage error" }

@@ -622,9 +622,9 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   expect(locationsCsv.suggestedFilename()).toBe(`field-sales-locations-${day}-${employee}.csv`);
   const locationRows = readFileSync(await locationsCsv.path(), 'utf8');
   expect(locationRows).toContain('"Synthetic salesperson"');
-  expect(locationRows).toContain('"Nearby area or road (English where mapped, approximate)"');
+  expect(locationRows).toContain('"Nearby area (English where mapped, approximate)"');
   expect(locationRows).toContain('"25.2048","55.2708","12"');
-  expect(locationRows).toContain('"25.23","55.3","230"');
+  expect(locationRows).not.toContain('"25.23","55.3","230"');
   expect(locationRows).toContain('https://www.google.com/maps/search/?api=1&query=25.2048%2C55.2708');
   await expect.poll(async () => Number((await pool.query("select count(*) from api_audit_log where organization_id=$1 and action='field_sales.location_history_exported' and resource_id=$2", [org, employee])).rows[0].count)).toBe(1);
   await routeDialog.getByRole('button', { name: 'Full screen map' }).click();

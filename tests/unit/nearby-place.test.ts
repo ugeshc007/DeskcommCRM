@@ -46,8 +46,10 @@ describe('local map place labels', () => {
       { latitude: 25.27, longitude: 55.32, accuracy_m: 8, mock_location: false, quality_flags: [] },
       { latitude: 25.27, longitude: 55.32, accuracy_m: 90, mock_location: false, quality_flags: [] },
     ];
-    expect(await locationPlaceLabels('', '/field-map-tiles/uae.pmtiles', fixes, readTile))
+    expect(await locationPlaceLabels('', '/field-map-tiles/uae.pmtiles', fixes, { readTile }))
       .toEqual(['Near Market Street (road)', 'Near Deira (area)']);
+    expect(await locationPlaceLabels('', '/field-map-tiles/uae.pmtiles', fixes, { readTile, areaOnly: true }))
+      .toEqual(['Near Deira (area)', 'Near Deira (area)']);
     expect(nearbyEnglishRoad([{ geometry: { type: 'LineString', coordinates: [[55.319, 25.27], [55.321, 25.27]] },
       properties: { name: 'شارع السوق' } }], 25.27, 55.32)).toBeNull();
   });

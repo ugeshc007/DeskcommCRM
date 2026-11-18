@@ -34,11 +34,12 @@ The Team → Location history dialog also lists retained GPS fixes in pages of t
 with their local time, nearest mapped area or city, coordinates, accuracy and GPS
 quality flags. Names come from the same installed vector archive. When its place
 layer has no nearby label, the row says so and keeps the coordinates and map link.
-The separate location CSV resolves nearby English/Latin area or road names from
-the installed vector archive on the server. A nearby road is used only for a
-reliable fix; otherwise the export falls back to an area or city. Missing names
-are explicit, and coordinates and reported accuracy remain in every row. Raster
-maps cannot provide these names. Location history and CSV links open the recorded
+The separate location CSV resolves nearby English/Latin area or city names from
+the installed vector archive on the server. It retains the first reliable fix
+near each consecutive area and omits repeated fixes near that area. Unmapped
+or city-only reliable fixes stay separate; mock, flagged or imprecise fixes cannot establish
+an area change. Coordinates and reported accuracy remain in every exported row.
+Raster maps cannot provide these names. Location history and CSV links open the recorded
 coordinate in Google Maps; this shares that coordinate with Google. Google controls
 its map labels and may still show local-language roads. The nearby English name
 in the CSV comes from local tiles.

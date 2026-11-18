@@ -26,17 +26,34 @@ export function dailyFieldReport(date: string, timezone: string, sessions: Repor
 }
 type LocationPoint = { captured_at: Instant; latitude: number | string; longitude: number | string;
   accuracy_m: number | string; mock_location: boolean; quality_flags?: string[] | null };
-/** Raw, retained fixes for one authorized employee and one organization-local day. */
-export function locationHistoryReport(date: string, timezone: string, employeeName: string, points: LocationPoint[], nearbyLabels: Array<string | null> = []) {
+type AreaChange = { point: LocationPoint; label: string | null };
+/** The first reliable fix near each consecutive mapped area; unmapped fixes stay visible. */
+export function locationAreaChanges(points: LocationPoint[], nearbyLabels: Array<string | null>): AreaChange[] {
+  if (points.length !== nearbyLabels.length) throw new Error('Location labels do not match recorded fixes');
+  const changes: AreaChange[] = [];
+  let previousArea: string | null = null;
+  for (const [index, point] of points.entries()) {
+    const label = nearbyLabels[index]?.trim() || null;
+    // A city label covers too much ground to imply that repeated fixes are stationary.
+    if (!label || !label.endsWith('(area)')) { changes.push({ point, label }); continue; }
+    const area = label.toLocaleLowerCase('en');
+    if (area === previousArea) continue;
+    changes.push({ point, label });
+    previousArea = area;
+  }
+  return changes;
+}
+/** Approximate area changes for one authorized employee and one organization-local day. */
+export function locationHistoryReport(date: string, timezone: string, employeeName: string, changes: AreaChange[]) {
   localDateSchema.parse(date);
   const localTime = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year: 'numeric', month: '2-digit',
     day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
-  const rows: string[][] = [['Employee', 'Recorded at (local)', 'Time zone', 'Recorded at (UTC)',
-    'Nearby area or road (English where mapped, approximate)', 'Latitude', 'Longitude', 'Accuracy (m)', 'Mock location', 'Quality flags', 'Map link']];
-  for (const [index, point] of points.entries()) {
+  const rows: string[][] = [['Employee', 'First recorded near area (local)', 'Time zone', 'First recorded near area (UTC)',
+    'Nearby area (English where mapped, approximate)', 'Latitude', 'Longitude', 'Accuracy (m)', 'Mock location', 'Quality flags', 'Map link']];
+  for (const { point, label } of changes) {
     const latitude = String(point.latitude), longitude = String(point.longitude);
     rows.push([employeeName, localTime.format(new Date(point.captured_at)), timezone,
-      new Date(point.captured_at).toISOString(), nearbyLabels[index] ?? 'No nearby English map name', latitude, longitude, String(point.accuracy_m),
+      new Date(point.captured_at).toISOString(), label ?? 'No nearby English area name', latitude, longitude, String(point.accuracy_m),
       point.mock_location ? 'Yes' : 'No', (point.quality_flags ?? []).join('; '),
       googleMapsPointUrl(latitude, longitude)]);
   }

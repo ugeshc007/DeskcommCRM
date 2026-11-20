@@ -24,12 +24,15 @@ from the archive. MapLibre's worker and shared module are copied from the instal
 package before dev/build and served from `/maplibre/`; both files are required or the
 map mounts but never requests tiles. The whole archive is never returned in one request.
 Existing raster configurations remain valid.
-Route hover labels use the installed vector archive's nearby `places` points,
+Route hover labels use English or Latin names from the installed vector archive's nearby `places` points,
 including tiles just outside the current viewport. The browser requests only
 bounded tiles from this installation; no employee coordinates go to an external
 geocoder. Labels identify a nearby mapped area or city, not the exact street or
-building. Raster tiles have no place data, so raster-only installations continue
-to show coordinates without an area name.
+building. The [verified local alias](https://www.arada.com/en/aljada/) `الجادة` → `Aljada` is used when the archive
+lacks a Latin name. Other Arabic-only names are not shown as English; if the archive has no
+English or Latin name nearby, the tooltip says the English area name is unavailable
+and still shows the coordinates. Raster tiles have no place data, so raster-only
+installations continue to show coordinates without an area name.
 The Team → Location history dialog also lists retained GPS fixes in pages of ten,
 with their local time, nearest mapped area or city, coordinates, accuracy and GPS
 quality flags. Names come from the same installed vector archive. When its place

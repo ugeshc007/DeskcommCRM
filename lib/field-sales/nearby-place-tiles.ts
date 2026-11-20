@@ -57,7 +57,7 @@ export async function nearbyPlaceFromTiles(archivePath: string, origin: string, 
       const url = `${base.toString()}/${tile.z}/${tile.x}/${tile.y}`;
       return readPlaces(url, tile.x, tile.y, tile.z);
     }))).flat();
-    const place = nearbyPlace(features, latitude, longitude);
+    const place = nearbyPlace(features, latitude, longitude, { englishOnly: true });
     if (place) return place;
   }
   return null;

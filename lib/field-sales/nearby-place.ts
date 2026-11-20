@@ -1,13 +1,19 @@
 /** Approximate nearby label from the installed basemap, not an address or administrative boundary. */
 export type PlaceFeature = { geometry?: { type?: string; coordinates?: unknown }; properties?: Record<string, unknown> | null };
 
+// Verified local aliases for archive features without a Latin name (e.g. Arada's Aljada).
+const englishPlaceAliases: Record<string, string> = { 'الجادة': 'Aljada' };
+
 /** Prefer mapped English names; a Latin-script local name is useful when no translation exists. */
 export function englishMapName(properties: Record<string, unknown> | null | undefined) {
-  const translated = properties?.['name:en'];
-  if (typeof translated === 'string' && translated.trim()) return translated.trim();
+  for (const key of ['name:en', 'name:latin', 'int_name', 'name']) {
+    const value = properties?.[key];
+    if (typeof value === 'string' && /[A-Za-z]/u.test(value) && !/\p{Script=Arabic}/u.test(value)) {
+      return value.trim() || null;
+    }
+  }
   const local = properties?.name;
-  return typeof local === 'string' && /[A-Za-z]/u.test(local) && !/\p{Script=Arabic}/u.test(local)
-    ? local.trim() || null : null;
+  return typeof local === 'string' ? englishPlaceAliases[local.trim()] ?? null : null;
 }
 
 export function nearbyPlace(features: PlaceFeature[], latitude: number, longitude: number,

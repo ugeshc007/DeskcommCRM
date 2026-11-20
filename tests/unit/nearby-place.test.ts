@@ -59,6 +59,27 @@ describe('local map place labels', () => {
       accuracy_m: 8, mock_location: false }])).toEqual([null]);
     expect(nearbyPlace([place('ديرة', 'neighbourhood', 55.32, 25.27)], 25.27, 55.32,
       { englishOnly: true })).toBeNull();
+    expect(nearbyPlace([{ geometry: { type: 'Point', coordinates: [55.4555369, 25.3061189] },
+      properties: { name: 'الجادة', 'name:en': 'Aljada', kind: 'locality' } }], 25.3061189, 55.4555369,
+    { englishOnly: true })).toBe('Near Aljada (city)');
+  });
+
+  it('uses the verified English name for Aljada in the tooltip tile lookup', async () => {
+    const source = new GeoJSONVT({ type: 'FeatureCollection', features: [{
+      type: 'Feature', properties: { name: 'الجادة', kind: 'locality' },
+      geometry: { type: 'Point', coordinates: [55.4555369, 25.3061189] },
+    }] });
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const match = /\/(\d+)\/(\d+)\/(\d+)$/.exec(url)!;
+      const tile = source.getTile(Number(match[1]), Number(match[2]), Number(match[3]));
+      if (!tile) return { ok: false };
+      const bytes = fromGeojsonVt({ places: tile });
+      return { ok: true, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+    }));
+    expect(await nearbyPlaceFromTiles('/field-map-tiles/arabic-only.pmtiles', 'https://crm.example.test', 25.3061189, 55.4555369))
+      .toBe('Near Aljada (city)');
+    expect(nearbyPlace([place('منطقة أخرى', 'locality', 55.4555369, 25.3061189)], 25.3061189, 55.4555369,
+      { englishOnly: true })).toBeNull();
   });
 
   it('reads a nearby area from an archive tile outside the visible map tiles', async () => {

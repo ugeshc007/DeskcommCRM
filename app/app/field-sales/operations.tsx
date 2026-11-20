@@ -237,19 +237,19 @@ export function RouteMap({ data, selectedEmployeeId, selectedEmployeeIds, onSele
           if (instance.getSource('basemap') && instance.isSourceLoaded('basemap')) {
             try { placeFeatures = instance.querySourceFeatures('basemap', { sourceLayer: 'places' }); } catch { /* Raster map has no place source. */ }
           }
-          const place = nearbyPlace(placeFeatures, nearest.latitude, nearest.longitude);
+          const place = nearbyPlace(placeFeatures, nearest.latitude, nearest.longitude, { englishOnly: true });
           const name = current.latest.find(person => person.employee_id === employeeId)?.display_name ?? 'Field officer';
           const captured = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone: current.region.timezone }).format(new Date(nearest.captured_at));
           const description = (label: string) => `${name} · nearest plotted GPS fix · ${captured} · ${label} · ${nearest.latitude}, ${nearest.longitude} · approximate ±${Math.round(nearest.accuracy_m)} m`;
           routeHoverPopup ??= new lib.Popup({ closeButton: false, closeOnClick: false, offset: 14 });
-          routeHoverPopup.setLngLat(event.lngLat).setText(description(place ?? (header ? 'Looking up area…' : 'Area name unavailable'))).addTo(instance);
+          routeHoverPopup.setLngLat(event.lngLat).setText(description(place ?? (header ? 'Looking up area…' : 'English area name unavailable'))).addTo(instance);
           instance.getCanvas().style.cursor = 'crosshair';
           hoverSerial++; if (hoverLookup) clearTimeout(hoverLookup);
           if (!place && header && tile) {
             const serial = hoverSerial;
             hoverLookup = setTimeout(() => {
               void nearbyPlaceFromTiles(tile, window.location.origin, nearest.latitude, nearest.longitude).then(label => {
-                if (!closed && serial === hoverSerial && routeHoverPopup) routeHoverPopup.setText(description(label ?? 'Area name unavailable'));
+                if (!closed && serial === hoverSerial && routeHoverPopup) routeHoverPopup.setText(description(label ?? 'English area name unavailable'));
               });
             }, 300);
           }

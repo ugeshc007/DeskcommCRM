@@ -59,6 +59,7 @@ test.beforeAll(async () => {
     email,
     password,
     email_confirm: true,
+      user_metadata: { locale: "pt-BR" },
   });
   if (error || !data.user) throw error;
   usuario = { id: data.user.id, email };

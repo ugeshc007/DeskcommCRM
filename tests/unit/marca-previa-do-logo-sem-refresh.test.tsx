@@ -46,7 +46,8 @@
  * tipo de volta para a string, é este caso que fica vermelho.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 
 const refreshMock = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: refreshMock }) }));

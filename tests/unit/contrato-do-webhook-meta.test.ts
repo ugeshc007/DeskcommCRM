@@ -23,6 +23,11 @@ vi.mock("@/lib/channels/meta/session", () => ({
   metaSessionByWebhookToken: async () => SESSAO,
 }));
 
+// O contrato desta rota verifica o HMAC; a resolução banco/env tem suíte própria.
+vi.mock("@/lib/channels/meta/platform-secret", () => ({
+  resolveMetaAppSecret: async () => ({ value: APP_SECRET, source: "environment" }),
+}));
+
 vi.mock("@/lib/channels/meta/ingest", () => ({
   ingestMetaInbound: async (_a: unknown, e: unknown) => {
     ingeridos.push(e);

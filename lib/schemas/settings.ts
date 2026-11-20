@@ -7,6 +7,7 @@
  * - pipelineConfigPatchSchema: pipeline vocabulary + settings.fields + settings.lost_reasons
  */
 import { z } from "zod";
+import { countries } from "countries-list";
 
 import { ehHexValido } from "@/lib/branding/rampa";
 import { IDIOMAS } from "@/lib/i18n/idiomas";
@@ -84,13 +85,17 @@ const MOEDAS = MOEDAS_SERVIDAS;
 export const tenantSchema = z.object({
   display_name: z.string().min(1).max(120),
   legal_name: z.string().min(1).max(200),
+  country_code: z.string().refine((code) => Object.hasOwn(countries, code), "Choose a valid country.").optional(),
   cnpj: z
     .string()
     .max(20)
     .nullable()
     .optional()
     .or(z.literal("").transform(() => null)),
-  timezone: z.string().min(1).max(64),
+  timezone: z.string().min(1).max(64).refine((value) => {
+    try { new Intl.DateTimeFormat("en", { timeZone: value }).format(); return true; }
+    catch { return false; }
+  }, "Choose a valid time zone."),
   locale: z.enum(LOCALES),
   currency: z.enum(MOEDAS),
   media_retention_days: z.coerce.number().int().min(30).max(3650),

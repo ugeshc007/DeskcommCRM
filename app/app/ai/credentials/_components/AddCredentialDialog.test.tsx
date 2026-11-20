@@ -3,7 +3,8 @@
  * conta num provedor não sabia qual escolher nem onde a chave mora.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { describe, expect, it, vi } from "vitest";
 import { AddCredentialDialog } from "./AddCredentialDialog";
 

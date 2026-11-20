@@ -1465,6 +1465,8 @@ Se o responsável é diferente do ator criador, `issueInvite` emite o convite so
 
 O token assina convite, organização, papel, emissor, instante e `interface_settings`. O aceite é serializado por `fn_accept_team_invite`: cria ou reativa o vínculo e aplica a interface assinada; replay de vínculo já ativo devolve `changed=false` antes de alterar papel ou preferência. Um vínculo revogado exige convite emitido depois da revogação. Após o aceite, a organização convidada se torna ativa no cookie.
 
+Sem entrega de e-mail, um convite persistido, pendente e assinado pode ser entregue em particular pelo administrador após conferência offline da identidade do destinatário. O mesmo prazo de 24 horas vale para `field_officer`, `viewer`, `agent`, `manager` e `admin`; a interface de convite avisa explicitamente que a posse do link de gerente/administrador permite reivindicar esse papel. Cadastro manual confere organização, e-mail, papel, interface, prazo e estado pendente contra a linha persistida antes de criar a conta; convite revogado, usado, vencido ou substituído falha fechado. Quem já tem conta entra com ela, sem redefinição de senha pelo convite.
+
 Criação, convite e troca de organização não prometem seed de pipeline, OAuth ou conexão WhatsApp. Esses fluxos mantêm seus próprios contratos. A interface de troca valida membership aceita e não revogada, organização ativa e MFA em dívida, audita origem/destino e usa navegação de documento completo para estabelecer a nova fronteira de cache.
 
 ### 9.3 Trigger de seed (T-06)

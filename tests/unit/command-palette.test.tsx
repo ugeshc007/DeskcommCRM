@@ -7,7 +7,8 @@
  * outra feature.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import userEvent from "@testing-library/user-event";
 
 import { CommandPalette } from "@/components/shell/CommandPalette";

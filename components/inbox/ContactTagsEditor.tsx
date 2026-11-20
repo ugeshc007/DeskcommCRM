@@ -40,12 +40,12 @@ export function ContactTagsEditor({ contactId, tags }: Props) {
         {tags.length > 0 ? (
           tags.map((tag) => (
             <Badge key={tag} variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
-              {tag}
+              {t(tag)}
               <button
                 type="button"
                 onClick={() => remove(tag)}
                 disabled={mutation.isPending}
-                aria-label={`${t("Remover tag")} ${tag}`}
+                aria-label={`${t("Remover tag")} ${t(tag)}`}
                 className="rounded-sm hover:text-destructive"
               >
                 <X size={10} weight="bold" aria-hidden />

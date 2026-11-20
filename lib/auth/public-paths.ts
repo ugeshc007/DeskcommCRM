@@ -13,6 +13,15 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/500$/,
   /^\/503$/,
   /^\/api\/v1\/health$/,
+  // Employee-scoped, expiring hash-only device bearer; current membership is
+  // revalidated inside the handler. Never exposes management operations.
+  /^\/api\/v1\/field-sales\/mobile$/,
+  // Device-bearer-only voice proxy; the handler verifies current membership,
+  // an open work session and service availability before accepting audio.
+  /^\/api\/v1\/field-sales\/voice$/,
+  // One-time six-digit pairing is validated, globally throttled and exchanged
+  // for a strong bearer inside the handler. No cookie exists on a fresh phone.
+  /^\/api\/v1\/field-sales\/pair$/,
   /^\/api\/v1\/webhooks\//,
   /^\/api\/v1\/cron\//,
   // Heartbeat do agente do host (bearer INTERNAL_SECRET/INTERNAL_CRON_SECRET,
@@ -37,6 +46,8 @@ export const PUBLIC_PATHS: RegExp[] = [
   // qualquer sub-path futuro nascer público de carona.
   /^\/api\/v1\/agenda\/google\/callback$/,
   /^\/api\/v1\/integrations\/nuvemshop\/callback$/,
+  // Opaque one-use state, browser nonce and current DB membership guard inside.
+  /^\/api\/v1\/integration-connections\/oauth\/callback$/,
   /^\/api\/internal\//,
   /^\/api\/mcp(\/.*)?$/,
   // GET /api/v1/contacts aceita SESSÃO ou Bearer `dsk_...` (api_tokens) — a
@@ -77,6 +88,8 @@ export const PUBLIC_PATHS: RegExp[] = [
   // dois nomes de propósito: `/^\/legal/` deixaria qualquer sub-path futuro
   // nascer público de carona.
   /^\/legal\/(terms|privacy)$/,
+  // Retorno estático do checkout: não lê pedido, não aceita ação nem confirma pagamento.
+  /^\/checkout\/return$/,
 ];
 
 export function isPublicPath(pathname: string): boolean {

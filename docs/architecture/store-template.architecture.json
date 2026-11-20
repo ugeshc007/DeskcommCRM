@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Store enquiry draft installer", "subtitle": "Organization configuration → atomic drafts; no publication or checkout", "output": "store-template.html", "quality_profile": "standard" },
+  "lanes": [{ "id": "ui", "label": "Administrator" }, { "id": "service", "label": "Authenticated transaction" }, { "id": "storage", "label": "Existing organization resources" }],
+  "mainPath": ["setup", "install", "drafts", "editors"],
+  "nodes": [
+    { "id": "setup", "lane": "ui", "col": 0, "type": "service", "label": "AI → Follow-ups → StoreTemplateInstaller", "sublabel": "Own account region, policies and delivery preview" },
+    { "id": "install", "lane": "service", "col": 1, "type": "service", "label": "POST ecommerce-template → installStoreDraft", "sublabel": "Admin membership lock, explicit organization checks" },
+    { "id": "drafts", "lane": "storage", "col": 2, "type": "database", "label": "Agent + version + pipeline + draft flow", "sublabel": "One transaction, settings receipt, no overwrite or publication" },
+    { "id": "editors", "lane": "ui", "col": 3, "type": "service", "label": "Agent editor / pipeline settings / FlowCanvas", "sublabel": "Review links; publication remains a separate guarded action" },
+    { "id": "audit", "lane": "storage", "col": 3, "type": "database", "label": "api_audit_log → existing audit viewer", "sublabel": "Installation receipt and draft-only metadata, no credentials" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "setup", "to": "install", "label": "Validated policy input, never client organization authority" },
+    { "id": "e2", "from": "install", "to": "drafts", "label": "Atomic draft creation after current ownership checks" },
+    { "id": "e3", "from": "drafts", "to": "install", "label": "Locked receipt prevents duplicate installation" },
+    { "id": "e4", "from": "install", "to": "setup", "label": "Receipt links or readable failure; retain inputs for correction" },
+    { "id": "e5", "from": "drafts", "to": "editors", "label": "Existing editable primitives, inactive and unpublished" },
+    { "id": "e6", "from": "editors", "to": "drafts", "label": "Organization-scoped edits through existing APIs" },
+    { "id": "e7", "from": "install", "to": "audit", "label": "Audit in the same transaction" },
+    { "id": "e8", "from": "audit", "to": "editors", "label": "Operator reviews installation and affected resource IDs" }
+  ]
+}

@@ -37,6 +37,7 @@ export async function GET(_req: NextRequest): Promise<Response> {
       "id, organization_id, email, role, interface_settings, invited_by, inviter_name, email_dispatched, created_at, last_sent_at, resend_count, expires_at, accepted_at, revoked_at",
     )
     .eq("organization_id", activeOrg.orgId)
+    .is("archived_at", null)
     .order("created_at", { ascending: false });
 
   if (error) return fail("internal_error", error.message, 500, { requestId });

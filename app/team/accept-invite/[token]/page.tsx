@@ -77,14 +77,14 @@ export default async function AcceptInvitePage({ params }: PageProps) {
         <h1 className="text-xl font-semibold">{t("Você foi convidado")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {t("Para aceitar o convite como")} <strong>{payload.role}</strong>,{" "}
-          {t("faça login com o email")} <strong>{payload.email}</strong>.
+          {t("crie sua conta ou entre com o email")} <strong>{payload.email}</strong>.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Link
-            href={`/login?next=${next}`}
+            href={`/signup?invite=${encodeURIComponent(token)}`}
             className="inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
           >
-            {t("Fazer login")}
+            {t("Ainda não tenho conta")}
           </Link>
           {/*
             O caminho que faltava. Quem é convidado e ainda NÃO tem conta só
@@ -94,10 +94,10 @@ export default async function AcceptInvitePage({ params }: PageProps) {
             amarrada a este convite.
           */}
           <Link
-            href={`/signup?invite=${encodeURIComponent(token)}`}
+            href={`/login?next=${next}`}
             className="text-sm underline underline-offset-4"
           >
-            {t("Ainda não tenho conta")}
+            {t("Fazer login")}
           </Link>
         </div>
       </Shell>

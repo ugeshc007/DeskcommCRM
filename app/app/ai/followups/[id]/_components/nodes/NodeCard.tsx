@@ -1,6 +1,7 @@
 "use client";
 
 import { Handle, Position } from "@xyflow/react";
+import type { ReactNode } from "react";
 
 import type { FlowBranch } from "@/lib/followup/graph-schema";
 import { rotuloDoRamo } from "@/lib/followup/rotulo-do-ramo";
@@ -9,6 +10,7 @@ import { useT } from "@/hooks/i18n/useT";
 import type { NodeVisual } from "./nodeVisuals";
 
 interface Props {
+  children?: ReactNode;
   id: string;
   visual: NodeVisual;
   label: string;
@@ -42,6 +44,7 @@ export function NodeCard({
   showTarget = true,
   showSource = true,
   branches,
+  children,
 }: Props) {
   const t = useT();
   const Icon = visual.icon;
@@ -76,6 +79,7 @@ export function NodeCard({
           <p className="truncate text-xs text-text-muted">{subtitle}</p>
         </div>
       </div>
+      {children && <div className="nodrag nopan border-t border-border p-2">{children}</div>}
       {hasError && (
         <p
           className="border-t border-error/30 px-3 py-1.5 text-xs leading-snug text-error-fg"

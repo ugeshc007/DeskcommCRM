@@ -35,3 +35,10 @@ triplet before enabling managed mode. Configure `MANAGED_WORKER_HEALTH_URL` to t
 Production also requires a public HTTPS hostname, database backups with tested restore, worker and
 scheduler freshness monitoring, Redis, storage, transactional email, and one callback URL per
 channel token. `localhost` is not a valid Meta callback.
+
+## Billing screen reference
+
+The repository image `evidence/managed-saas-billing.png` shows the
+synthetic “Managed SaaS E2E” workspace: plan status, current period and usage
+limits. This image documents the screen layout only; it does not prove a real
+payment, restore drill or current production health.

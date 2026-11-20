@@ -164,6 +164,22 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "declarado pela migration 0034 e não há call site de RPC para removê-lo " +
       "com segurança sem medir o disparo de cada trigger.",
   },
+  {
+    fn: "fn_assign_retail_store(uuid,uuid,text)",
+    razao: "POST app/api/v1/retail-leads/stores/route.ts usa createClient da sessão; RPC exige manager, suporte de escrita e membro ativo. tests/invariants/retail-lead-events.test.ts prova negação ao agente e isolamento A/B.",
+  },
+  {
+    fn: "fn_create_retail_lead(uuid,uuid,uuid,text,text,text,text,text,text,text[],bigint,date,text,timestampwithtimezone)",
+    razao: "POST app/api/v1/retail-leads/route.ts usa createClient da sessão; RPC deriva vendedor/loja de auth.uid(), valida etapa e guarda unicidade do telefone aberto. tests/invariants/retail-lead-events.test.ts prova ACL A/B e conflito.",
+  },
+  {
+    fn: "fn_complete_retail_followup(uuid,uuid,timestampwithtimezone,uuid,timestampwithtimezone,text,text)",
+    razao: "POST app/api/v1/retail-leads/[id]/followups/route.ts usa createClient da sessão; RPC valida papel, visibilidade, org e due-time CAS. tests/invariants/retail-lead-events.test.ts prova histórico e conflito.",
+  },
+  {
+    fn: "fn_transfer_retail_lead(uuid,uuid,uuid,uuid,uuid,uuid)",
+    razao: "POST app/api/v1/retail-leads/[id]/transfer/route.ts usa createClient da sessão; RPC exige manager nas duas organizações, valida destino e rejeita vínculos não migráveis. tests/invariants/retail-lead-events.test.ts prova negação, isolamento, rollback e Event ID preservado.",
+  },
 ];
 
 interface Definer {

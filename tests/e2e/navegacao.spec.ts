@@ -222,12 +222,17 @@ test.describe("navegação agrupada", () => {
   test("nenhum grupo fica fora da dobra, e em 900px o menu não rola", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await loginAdmin(page);
+    // A largura dos rótulos muda quando a fonte da interface termina de carregar.
+    // Medir a navegação antes desse layout final pode relatar scroll transitório.
+    await page.evaluate(async () => { await document.fonts.ready; });
 
     const m = await page.evaluate(() => {
       const nav = document.querySelector('nav[aria-label="Navegação principal"]')!;
       const r = nav.getBoundingClientRect();
       return {
         rola: nav.scrollHeight > Math.round(r.height) + 1,
+        altura: r.height,
+        conteudo: nav.scrollHeight,
         titulosFora: [...nav.querySelectorAll("h2")].filter(
           (h) => h.getBoundingClientRect().bottom > r.bottom,
         ).length,
@@ -235,7 +240,7 @@ test.describe("navegação agrupada", () => {
     });
 
     expect(m.titulosFora, "grupo inteiro invisível é o problema que viemos resolver").toBe(0);
-    expect(m.rola, "em 900px o menu inteiro tem de caber sem scroll").toBe(false);
+    expect(m.rola, `em 900px o menu inteiro tem de caber sem scroll (${m.conteudo}px em ${m.altura}px)`).toBe(false);
   });
 
   test.describe("mobile", () => {

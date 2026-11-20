@@ -10,10 +10,12 @@ import {
   type SignupComConviteInput,
 } from "@/lib/auth/schemas";
 import { verifyInviteToken } from "@/lib/auth/invite-token";
-import { audit, hashEmail } from "@/lib/audit";
+import { audit, hashEmail, isServiceRoleConfigured } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
+import { enrollFromManualInvite } from "@/lib/auth/manual-invite-enrollment";
 import { publicSignupAllowed } from "@/lib/saas/deployment-mode";
+import { isExistingAccountError } from "@/lib/auth/existing-account-error";
 
 export type SignUpResult =
   | {
@@ -34,6 +36,7 @@ export type SignUpResult =
        * Achado de @KIRAzinx566, com um cliente real travado nessa tela.
        */
       sessao_ativa: boolean;
+      convite_aceito?: boolean;
     }
   | {
       ok: false;
@@ -118,6 +121,22 @@ export async function signUp(
     convite = inviteToken;
   }
 
+  if (convite && isServiceRoleConfigured()) {
+    const payload = verifyInviteToken(convite);
+    if (!payload) return { ok: false, error: "validation_error" };
+    const manual = await enrollFromManualInvite({
+      payload,
+      fullName: (parsed.data as SignupComConviteInput).full_name,
+      password: parsed.data.password,
+      requestId,
+    });
+    if (manual.kind === "accepted") return { ok: true, sessao_ativa: true, convite_aceito: true };
+    if (manual.kind === "already_exists") return { ok: false, error: "conta_ja_existe" };
+    if (manual.kind === "invalid") return { ok: false, error: "validation_error", details: { invite: ["convite_invalido"] } };
+    if (manual.kind === "failed") return { ok: false, error: "signup_failed" };
+    // Email was delivered: preserve the provider's ordinary confirmation flow.
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
@@ -165,7 +184,7 @@ export async function signUp(
     // O caminho certo existe e é curto (entrar e aceitar o convite), mas a
     // tela não levava até ele.
     //
-    const jaExiste = /already\s*registered|already\s*exists/i.test(error.message);
+    const jaExiste = isExistingAccountError(error);
     if (jaExiste) {
       await audit({
         action: "auth.signup_failed",

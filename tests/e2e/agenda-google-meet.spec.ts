@@ -32,7 +32,7 @@ async function rpc(name: string, args: Record<string, unknown>) {
 async function fixture() {
   expect(["127.0.0.1", "localhost"]).toContain(new URL(credentials.dbUrl).hostname);
   const email = `meet-ui-${randomUUID()}@invariant.test`;
-  const created = await db.auth.admin.createUser({ email, password, email_confirm: true });
+  const created = await db.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { locale: "pt-BR" } });
   if (created.error || !created.data.user) throw created.error;
   const user = created.data.user.id;
   users.push(user);

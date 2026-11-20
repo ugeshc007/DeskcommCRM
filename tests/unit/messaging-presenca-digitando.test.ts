@@ -20,8 +20,10 @@ vi.mock("@/lib/waha/client", async (original) => ({
 }));
 
 import { sinalizarDigitando } from "@/lib/messaging/presenca";
+import { getAdapter } from "@/lib/channels";
 
 interface LinhaDeConversa {
+  provider_conversation_id?: string | null;
   is_group: boolean;
   group_chat_id: string | null;
   contacts: { phone_number: string | null; wa_identity: string | null; wa_lid: string | null } | null;
@@ -67,6 +69,17 @@ beforeEach(() => {
 });
 
 describe("sinalizarDigitando", () => {
+  it("entrega a identidade da conversa ao mesmo resolvedor, sem alterar o telefone", async () => {
+    linha!.provider_conversation_id = "thread-page-scoped";
+    const resolver = vi.spyOn(getAdapter("waha"), "resolveRecipient");
+    try {
+      await sinalizarDigitando(supabaseDeTeste(), { organizationId: "org-1", conversationId: "conv-1" });
+      expect(resolver).toHaveBeenCalledWith(expect.objectContaining({
+        providerConversationId: "thread-page-scoped", phoneNumber: "+5527999998888",
+      }));
+      expect(setPresence).toHaveBeenCalledWith("sessao-do-sitio", "5527999998888@c.us", "typing");
+    } finally { resolver.mockRestore(); }
+  });
   it("acende 'digitando' no número da sessão e no endereço do contato", async () => {
     await sinalizarDigitando(supabaseDeTeste(), { organizationId: "org-1", conversationId: "conv-1" });
 

@@ -40,6 +40,7 @@ test.beforeAll(async () => {
     email,
     password: SENHA,
     email_confirm: true,
+    user_metadata: { locale: "pt-BR" },
   });
   if (errUser || !criado.user) throw errUser ?? new Error("sem usuário");
   userId = criado.user.id;
@@ -50,6 +51,7 @@ test.beforeAll(async () => {
       slug: `minha-empresa-${randomUUID().slice(0, 8)}`,
       display_name: "Minha Empresa",
       legal_name: "Minha Empresa",
+      locale: "pt-BR",
       status: "active",
       created_by: userId,
       settings: { llm: { provider: "anthropic" } },

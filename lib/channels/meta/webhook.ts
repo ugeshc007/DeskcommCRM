@@ -1,3 +1,4 @@
+import { parseMetaSelection } from './interactive';
 /**
  * Webhook da Meta (Cloud API) — verificação e parse. **Puro e síncrono**: nada
  * aqui toca banco nem rede, para que cada regra seja testável sem ambiente.
@@ -96,6 +97,7 @@ export interface TemplateStatusEvent {
  * acorda, e a janela de 24h (que deriva de `last_inbound_at`) nunca abre.
  */
 export interface InboundMessageEvent {
+  selection?: { id: string; title: string; reply_to_external_id: string | null };
   kind: "inbound_message";
   wabaId: string;
   /** Qual número NOSSO recebeu — é o que amarra a mensagem à sessão certa. */
@@ -207,7 +209,8 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
           const tipo = str(raw.type) ?? "unknown";
           const corpoMidia = tipo !== "contacts" ? (raw[tipo] as Record<string, unknown> | undefined) : undefined;
           const sharedContact = tipo === "contacts" ? parseMetaInboundContact(raw) : null;
-          const tipoCrm = tipo === "contacts" ? "contact" : tipo;
+          const selection = parseMetaSelection(raw);
+          const tipoCrm = selection ? 'text' : tipo === "contacts" ? "contact" : tipo;
 
           out.push({
             kind: "inbound_message",
@@ -219,7 +222,8 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             // A Meta manda epoch em SEGUNDOS, string. Passar direto ao Date daria 1970.
             sentAt: new Date(Number(str(raw.timestamp) ?? "0") * 1000),
             type: tipoCrm,
-            text:
+            ...(selection ? { selection } : {}),
+            text: selection ? selection.title :
               tipoCrm === "text"
                 ? str((raw.text as Record<string, unknown>)?.body)
                 : sharedContact?.name ?? null,

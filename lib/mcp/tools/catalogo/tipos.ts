@@ -40,6 +40,8 @@ export interface McpToolCatalogEntry {
    * usar, e ela nunca dispara.
    */
   apenasHumano?: boolean;
+  /** Módulo opcional: seleção explícita, nunca habilitado pelo pacote genérico. */
+  opt_in_only?: boolean;
 }
 
 /**

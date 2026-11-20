@@ -210,7 +210,8 @@ describe("executeCallWebhook", () => {
       is_blocked: false,
     };
 
-    const ctx = baseCtx();
+    const ctx = baseCtx({ organization_id: 'org-secret-1' });
+    ctx.organizationId = 'org-secret-1';
     ctx.context = { lead: fullLeadRow, contact: fullContactRow };
 
     const result = await executeCallWebhook(
@@ -298,4 +299,20 @@ describe("executeCallWebhook", () => {
     await close();
     await closeTarget();
   }, 15_000);
+
+  it('rejects a foreign event before any delivery', async () => {
+    expect(await executeCallWebhook(baseCtx({ organization_id: 'foreign' }), { url: 'https://example.com' }))
+      .toMatchObject({ status: 'failed', error: 'organization_scope_mismatch' });
+  });
+  it('rejects a foreign context row before any delivery', async () => {
+    const ctx = baseCtx(); ctx.context.contact = { organization_id: 'foreign', name: 'Private' };
+    expect(await executeCallWebhook(ctx, { url: 'https://example.com' }))
+      .toMatchObject({ status: 'failed', error: 'organization_scope_mismatch' });
+  });
+  it('never sends unsigned when configured encryption is unavailable', async () => {
+    const ctx = baseCtx();
+    ctx.admin = { rpc: async () => ({ data: null, error: { message: 'unavailable' } }) } as unknown as ActionCtx['admin'];
+    expect(await executeCallWebhook(ctx, { url: 'https://example.com', secret_enc: 'deadbeef' }))
+      .toMatchObject({ status: 'failed', error: 'webhook_secret_unavailable' });
+  });
 });

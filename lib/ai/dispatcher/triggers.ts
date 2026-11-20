@@ -111,7 +111,7 @@ export function triggerMatches(input: TriggerMatchInput): boolean {
   return true;
 }
 
-function inBusinessHours(cfg: BusinessHoursConfig, ts: Date): boolean {
+export function inBusinessHours(cfg: BusinessHoursConfig, ts: Date): boolean {
   const tz = cfg.tz ?? "UTC";
   const dayAbbrev = weekdayAbbrev(ts, tz);
   const days = cfg.days && cfg.days.length > 0 ? cfg.days.map((d) => d.toLowerCase()) : DEFAULT_DAYS;

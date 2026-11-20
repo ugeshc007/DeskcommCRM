@@ -4,7 +4,12 @@
  * Generated from every Portuguese source key in `dicionario.ts`. The
  * completeness guard fails when a screen adds a key without an English value.
  */
+import { CHANNEL_SETUP_EN } from '@/lib/channels/i18n';
+
 export const DICIONARIO_EN: Readonly<Record<string, string>> = {
+  ...CHANNEL_SETUP_EN,
+  "Store": "Store",
+  "Manage your product catalogue, delivery charges and reviewed orders.": "Manage your product catalogue, delivery charges and reviewed orders.",
   "A Meta validou o número, mas não conseguiu ativar a entrega de mensagens para esta conta.":
     "Meta validated the number but could not activate message delivery for this account.",
   "Atendimento, vendas e IA em um só lugar": "Customer service, sales, and AI in one place",
@@ -503,6 +508,14 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Sem pedidos.": "No orders.",
   "Sem atividade.": "No activity.",
   "Nova tag…": "New tag…",
+  "dúvida": "question",
+  "reclamação": "complaint",
+  "troca": "exchange",
+  "devolução": "return",
+  "elogio": "compliment",
+  "orçamento": "quote",
+  "pós-venda": "after-sales",
+  "urgente": "urgent",
   "Sem próximo passo definido": "No defined next step",
   "Marcar próximo passo": "Mark next step",
   Lead: "Lead",
@@ -1193,6 +1206,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Follow-up cancelado.": "Follow-up cancelled.",
   "Retorno cancelado.": "Return cancelled.",
   "Rascunho salvo.": "Draft saved.",
+  "Texto fixo": "Fixed text",
   "Fluxo publicado.": "Published stream.",
   "Fluxo desativado.": "Stream disabled.",
   "Fluxo revertido para a versão anterior.": "Flow reverted to previous version.",
@@ -2569,7 +2583,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Do jeito que está, esta cor não chegaria à tela: o sistema continuaria com as cores padrão dele.":
     "As it is, this color would not reach the screen: the system would continue with its default colors.",
   "Logo atualizado.": "Logo updated.",
-  "Logo removido.": "Soon removed.",
+  "Logo removido.": "Logo removed.",
   "PNG ou JPG, até": "PNG or JPG, even",
   "KB. Prefira fundo transparente. SVG não é aceito: ele pode executar código quando aberto direto pelo endereço da imagem.":
     "KB. Prefer transparent background. SVG is not accepted: it can execute code when opened directly from the image address.",
@@ -4733,6 +4747,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Você foi convidado": "You were invited",
   "Para aceitar o convite como": "To accept the invitation as",
   "faça login com o email": "login with email",
+  "crie sua conta ou entre com o email": "create an account or sign in with email",
   "Fazer login": "Login",
   "Ainda não tenho conta": "I don't have an account yet",
   "Email não corresponde": "Email does not match",
@@ -4844,6 +4859,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Adicione ao menos um email.": "Add at least one email.",
   "Máximo 20 emails por convite.": "Maximum 20 emails per invitation.",
   "convite(s) enviado(s)": "invitation(s) sent",
+  "convite(s) criado(s)": "invitation(s) created",
   "falha(s).": "failure(s).",
   "Enviando…": "Sending…",
   "Enviar convites": "Send invitations",
@@ -4851,6 +4867,19 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Email enviado.": "Email sent.",
   "Resend não configurado — link copiável abaixo (DEV).":
     "Resend not configured — copyable link below (DEV).",
+  "Sem email configurado? Crie o convite e compartilhe o link privado. Cada pessoa define a própria senha ao abrir o link.":
+    "No email gateway? Create the invitation and share its private link. Each person sets their own password when opening the link.",
+  "Convites criados": "Invitations created",
+  "Email não enviado. Compartilhe este link somente com a pessoa convidada.":
+    "Email not sent. Share this link only with the invited person.",
+  "Email não enviado. Confirme a identidade da pessoa antes de entregar o link em particular. Quem tiver o link pode criar uma conta de gerente ou administrador nas próximas 24 horas.":
+    "Email not sent. Verify the person's identity before sharing the link privately. Anyone with the link can create a manager or admin account within the next 24 hours.",
+  "Copiar link de acesso": "Copy setup link",
+  "Link de acesso copiado.": "Setup link copied.",
+  "Não foi possível copiar. Selecione o link abaixo e copie manualmente.":
+    "Could not copy. Select the link below and copy it manually.",
+  "Expira em 24 horas. Quem receber o link deve usar o email acima e definir a própria senha.":
+    "Expires in 24 hours. The recipient must use the email above and set their own password.",
   Falhas: "Failures",
   "Resultados aparecerão aqui após o envio.": "Results will appear here after submission.",
   "Erro ao carregar membros.": "Error loading members.",
@@ -5149,7 +5178,7 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "You haven't published your opening hours yet",
   "Sem eles ninguém consegue marcar — nem você, nem o agente. Configure a sua disponibilidade e os horários aparecem aqui.":
     "Without them, no one can score — not you, not the agent. Configure your availability and times appear here.",
-  "Estamos supondo o fuso": "We are assuming the spindle",
+  "Estamos supondo o fuso": "We are assuming the time zone",
   "— ninguém escolheu ainda. O agente oferece horário usando ele.":
     "— no one has chosen yet. The agent offers timetable using it.",
   "O lembrete não será enviado — combine por telefone.":
@@ -5799,8 +5828,6 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "Sessão expirada": "Session expired",
   "Sessão sem token.": "Tokenless session.",
   "Skill não encontrada no catálogo de plataforma.": "Skill not found in the platform catalog.",
-  "Suba o Docker (docker compose up -d waha) e tente novamente.":
-    "Upload Docker (docker compose up -d waha) and try again.",
   "Skill não está instalada nesta organização.": "Skill is not installed in this organization.",
   "Solicitação não encontrada.": "Request not found.",
   "Só manager+ cria template compartilhado.": "Only manager+ creates shared template.",
@@ -6491,12 +6518,6 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
     "It is not possible to disable the organization's default agent.",
   "Não é possível revogar o último admin do tenant.":
     "It is not possible to revoke the last tenant admin.",
-  "O WhatsApp (WAHA) não está configurado neste ambiente (faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY) — sem ele o número não pode ser desconectado do aparelho.":
-    "WhatsApp (WAHA) is not configured in this environment (WAHA_API_BASE_URL and/or WAHA_API_KEY are missing) — without it the number cannot be disconnected from the device.",
-  "O WhatsApp (WAHA) não está configurado neste ambiente: faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY. Configure-as e tente de novo.":
-    "WhatsApp (WAHA) is not configured in this environment: WAHA_API_BASE_URL and/or WAHA_API_KEY are missing. Configure them and try again.",
-  "O servidor de o WhatsApp (WAHA) foi encontrado, mas recusou a conexão: nada está atendendo naquela porta. Confirme que o serviço está no ar e que a porta configurada é a dele.":
-    "The WhatsApp (WAHA) server was found, but it refused the connection: nothing is listening on that port. Confirm that the service is running and that the configured port is correct.",
   "O cabeçalho aceita imagem JPG ou PNG.": "The header accepts JPG or PNG image.",
   "O caso não está aguardando resposta do atendente (awaiting_human).":
     "The case is not waiting for a response from the attendant (awaiting_human).",
@@ -6980,4 +7001,39 @@ export const DICIONARIO_EN: Readonly<Record<string, string>> = {
   "É o padrão da empresa. Cada negócio pode usar uma moeda diferente.":
     "This is the company default. Each deal can use a different currency.",
   "Valor do negócio": "Deal value",
+  "Retail leads": "Retail leads",
+  "Create Event IDs with customer details, store assignment and a required follow-up.":
+    "Create Event IDs with customer details, store assignment and a required follow-up.",
+  "Field Sales": "Field Sales",
+  "Field team live map": "Field team live map",
+  "Monitor on-duty field officers and review each recorded route by date.":
+    "Monitor on-duty field officers and review each recorded route by date.",
+  "Schedule project visits and coordinate on-duty field teams.":
+    "Schedule project visits and coordinate on-duty field teams.",
+  "Inherited from CRM organization settings": "Inherited from CRM organization settings",
+  "Convites manuais valem por 24 horas para todos os papéis. Para gerente ou administrador, confirme a identidade da pessoa antes de entregar o link em particular.":
+    "Manual invitations are valid for 24 hours for every role. For manager or admin, verify the person's identity before sharing the link privately.",
+  "Remove from list": "Remove from list",
+  "Remove revoked invitation?": "Remove revoked invitation?",
+  "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.":
+    "This removes it from the list. The revoked invitation remains invalid and its audit record is retained.",
+  "Invitation removed from the list.": "Invitation removed from the list.",
+  "Remove": "Remove",
+  "Nota recente": "Recent note",
+  "Autor não identificado": "Unknown author",
+  "Adicionar nota": "Add note",
+  "Registre a conversa ou o próximo passo": "Record the conversation or next step",
+  "Salvar nota": "Save note",
+  "Nota adicionada": "Note added",
+  "Não foi possível salvar a nota.": "Could not save the note.",
+  "Envelhecimento de leads": "Lead aging",
+  "Leads abertos que permanecem numa etapa além do prazo escolhido.": "Open leads that have stayed in one stage beyond a selected threshold.",
+  "Leads abertos que permanecem na etapa atual além do prazo escolhido.": "Open leads that have stayed in their current stage longer than the chosen number of days.",
+  "Dias na etapa": "Days in stage",
+  "Mostrar leads": "Show leads",
+  "Não foi possível carregar o relatório de envelhecimento.": "The aging report could not be loaded.",
+  "leads abertos acima de": "open leads exceed",
+  "dias. Mostrando os 100 mais antigos.": "days. Showing the oldest 100.",
+  "Na etapa desde": "In stage since",
+  "Nenhum lead ultrapassa este prazo.": "No leads exceed this threshold.",
 };

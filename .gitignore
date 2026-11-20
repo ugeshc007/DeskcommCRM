@@ -143,3 +143,19 @@ backups/
 # commit posterior de remoção não tira o blob.
 .qa-backups/
 *.dump
+
+# Local test diagnostics; not release assets.
+/*-regression-results.json
+/structural-fixed-results.json
+/full-eslint-results.json
+
+# Android generated files, local SDK paths and signing material.
+mobile/android/.gradle/
+mobile/android/**/build/
+mobile/android/local.properties
+mobile/android/*.jks
+mobile/android/*.keystore
+mobile/android/keystore.properties
+
+# Generated from the installed MapLibre version before dev/build.
+public/maplibre/

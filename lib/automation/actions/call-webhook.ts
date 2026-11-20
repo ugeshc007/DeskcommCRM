@@ -7,8 +7,8 @@
 import { createHmac } from "node:crypto";
 import { registerAction } from "@/lib/automation/actions";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
-import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
 import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
+import { postOutboundWebhook } from '@/lib/automation/outbound-request';
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 const TIMEOUT_MS = 10_000;
@@ -63,15 +63,16 @@ export async function executeCallWebhook(
   config: Record<string, unknown>,
   opts: { skipUrlCheck?: boolean; retryDelaysMs?: number[] } = {},
 ): Promise<ActionResultDetail> {
+  if (ctx.event.organization_id !== ctx.organizationId || ['lead', 'contact'].some(key => {
+    const row = ctx.context[key];
+    return row && typeof row === 'object' && 'organization_id' in row && row.organization_id !== ctx.organizationId;
+  })) return { type: 'call_webhook', status: 'failed', error: 'organization_scope_mismatch' };
   const url = typeof config.url === "string" ? config.url : null;
   if (!url) return { type: "call_webhook", status: "failed", error: "missing_url" };
   if (!opts.skipUrlCheck) {
     try {
       assertSafeOutboundUrl(url);
-      // Guard textual não resolve nome: um hostname público apontando para
-      // 169.254.169.254 (metadata da nuvem) ou para os serviços internos da rede do
-      // compose passava por ele. Este segundo resolve e julga o IP.
-      await assertDestinoResolvidoSeguro(new URL(url).hostname);
+      // A resolução é validada no próprio socket em postOutboundWebhook.
     } catch (err) {
       return { type: "call_webhook", status: "failed", error: (err as Error).message };
     }
@@ -92,13 +93,11 @@ export async function executeCallWebhook(
     "Content-Type": "application/json",
     "X-Deskcomm-Event": ctx.event.event_type,
   };
-  // secret_enc (cifrado at-rest, migration 0041) tem precedência; config.secret
-  // plaintext fica só como legado pré-retrofit. Decrypt indisponível (chave da
-  // GUC ausente) → envia SEM assinatura em vez de falhar a entrega — espelho do
-  // hmacSkipped do inbound.
+  // Cifra configurada é obrigatória: nunca degradar para envio sem assinatura.
   let secret: string | null = typeof config.secret === "string" && config.secret ? config.secret : null;
   if (typeof config.secret_enc === "string" && config.secret_enc) {
-    secret = await decryptWebhookSecret(ctx.admin, config.secret_enc);
+    try { secret = await decryptWebhookSecret(ctx.admin, config.secret_enc); } catch { secret = null; }
+    if (!secret) return { type: 'call_webhook', status: 'failed', error: 'webhook_secret_unavailable' };
   }
   if (secret) {
     headers["X-Deskcomm-Signature"] = createHmac("sha256", secret).update(body).digest("hex");
@@ -113,20 +112,14 @@ export async function executeCallWebhook(
       // segue redirect, e uma URL de tenant que passou no guard anti-SSRF pode
       // 302 pra um endpoint interno (ex.: http://169.254.169.254/...). Um 3xx
       // vira falha comum (conta pro retry), nunca é seguido.
-      const res = await fetch(url, {
-        method: "POST",
-        headers,
-        body,
-        redirect: "manual",
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      lastStatus = res.status;
-      if (res.ok) {
-        return { type: "call_webhook", status: "success", detail: { response_status: res.status, attempt } };
+      const status = await postOutboundWebhook(url, body, headers, { skipUrlCheck: opts.skipUrlCheck, timeoutMs: TIMEOUT_MS });
+      lastStatus = status;
+      if (status >= 200 && status < 300) {
+        return { type: "call_webhook", status: "success", detail: { response_status: status, attempt } };
       }
-      lastError = res.status >= 300 && res.status < 400 ? "redirect_not_followed" : `http_${res.status}`;
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = status >= 300 && status < 400 ? "redirect_not_followed" : `http_${status}`;
+    } catch {
+      lastError = 'webhook_request_failed';
     }
     const delay = retryDelaysMs[attempt - 1];
     if (delay !== undefined) await sleep(delay);

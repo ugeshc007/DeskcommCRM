@@ -60,6 +60,10 @@ const diasDeRetencao = (nome: string, padrao: number) =>
     });
 
 const schema = z.object({
+  // Optional, read-only XYZ raster tiles. No provider requests or automatic downloads.
+  FIELD_MAP_TILES_DIR: z.string().optional(),
+  // Optional internal speech sidecar. Empty keeps voice disabled without blocking CRM boot.
+  FIELD_VOICE_URL: z.string().optional().default(""),
   // Node
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
@@ -329,6 +333,8 @@ const schema = z.object({
   // `z.enum` sobre valor que ele digita transforma a alavanca em derrubador do
   // app inteiro no dia em que alguém escrever `TRUE`.
   GOOGLE_CALENDAR_CLIENT_ID: z.string().optional().default(""),
+  INTEGRATIONS_GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  INTEGRATIONS_GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GOOGLE_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
 
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando

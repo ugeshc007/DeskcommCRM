@@ -452,12 +452,14 @@ IMG_SCHEDULER="${IMG_NS}/deskcomm-scheduler"
 ultima_versao_publicada() {
   local url="${1:-https://github.com/melgarafael/DeskcommCRM.git}" ref
   command -v git >/dev/null 2>&1 || return 0
-  # `grep -v -- -` descarta PRERELEASE (v1.11.0-rc1, v1.1.1-jmpo.1 — esta última
+  # O filtro de hífen descarta PRERELEASE (v1.11.0-rc1, v1.1.1-jmpo.1 — esta última
   # existe de verdade neste repo). O `--sort=-v:refname` do git põe o prerelease
   # ACIMA do release final quando `versionsort.suffix` não está configurado, e
   # uma instalação nova nasceria num release candidate sem ninguém pedir.
+  # Consome a saída inteira: head -1 pode fechar o pipe cedo e causar SIGPIPE
+  # no produtor sob pipefail, descartando uma versão válida como falha de rede.
   ref="$(git ls-remote --tags --refs --sort=-v:refname "$url" 'v*' 2>/dev/null \
-        | awk '{print $2}' | grep -v -- '-' | head -1)" || return 0
+        | awk '$2 !~ /-/ && !encontrada { print $2; encontrada=1 }')" || return 0
   [ -n "$ref" ] || return 0
   printf '%s' "${ref#refs/tags/v}"
 }

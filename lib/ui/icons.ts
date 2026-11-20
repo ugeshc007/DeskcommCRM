@@ -20,6 +20,9 @@ export {
   Storefront,
   Robot,
   Sparkle,
+  HandWaving,
+  ShoppingBag,
+  CreditCard,
   ShieldCheck,
   Gear,
   House,
@@ -88,6 +91,8 @@ export {
   MonitorPlay,
   // conversation
   ChatCircle,
+  EnvelopeSimple,
+  Hash,
   Phone,
   PhoneIncoming,
   PhoneOutgoing,

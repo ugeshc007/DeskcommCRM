@@ -15,10 +15,11 @@ import { manageFieldSales } from '@/lib/field-sales/management';
 export const dynamic = 'force-dynamic';
 
 const createFieldMemberSchema = z.strictObject({
-  email: z.string().trim().email().transform(value => value.toLowerCase()),
+  email: z.preprocess(value => typeof value === 'string' ? value.trim().toLowerCase() || undefined : value,
+    z.email().optional()),
   full_name: z.string().trim().min(1).max(160),
   role: z.enum(['field_officer', 'promoter']),
-});
+}).refine(value => value.role === 'promoter' || !!value.email, { path: ['email'] });
 
 export async function POST(request: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -28,8 +29,11 @@ export async function POST(request: NextRequest): Promise<Response> {
   if (!auth.ok) return auth.response;
   const { org, user } = auth;
   const parsed = createFieldMemberSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return fail('validation_error', 'Enter a valid name, email, and field role.', 400, { requestId });
+  if (!parsed.success) return fail('validation_error', 'Enter a valid name and role. Field Officers also need an email.', 400, { requestId });
   const { email, full_name: fullName, role } = parsed.data;
+  // GoTrue requires an email or phone. This reserved domain cannot receive mail;
+  // the random password stays unknown and this promoter uses Android pairing.
+  const authEmail = email ?? `promoter-${randomUUID()}@accounts.invalid`;
   try { await assertSaasCapacity(org.orgId, 'members', 1); }
   catch (error) {
     if (error instanceof SaasCapacityError) return fail(error.code, 'Member capacity is unavailable.', error.code === 'plan_limit_reached' ? 409 : 503, { requestId });
@@ -38,10 +42,11 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const admin = createAdminClient();
   const created = await admin.auth.admin.createUser({
-    email,
+    email: authEmail,
     password: randomBytes(48).toString('base64url'),
     email_confirm: true,
-    user_metadata: { full_name: fullName, enrollment_method: 'manager_created_field_worker' },
+    user_metadata: { full_name: fullName, enrollment_method: 'manager_created_field_worker',
+      email_provided: !!email },
   });
   if (created.error || !created.data.user) return fail(isExistingAccountError(created.error) ? 'conflict' : 'internal_error',
     isExistingAccountError(created.error) ? 'This email already has an account. Use an invitation instead.' : 'Could not create the user.',
@@ -72,6 +77,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
   await audit({ action: 'member.accepted', actorUserId: user.id, organizationId: org.orgId,
     resourceType: 'membership', resourceId: membership.data.id,
-    metadata: { role, method: 'manager_created_field_worker', email_hash: hashEmail(email) }, requestId });
+    metadata: { role, method: 'manager_created_field_worker',
+      ...(email ? { email_hash: hashEmail(email) } : {}) }, requestId });
   return ok({ user_id: newUserId, role, display_name: fullName }, { status: 201, requestId });
 }

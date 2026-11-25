@@ -102,7 +102,6 @@ test.afterAll(async () => {
 });
 
 test('manager creates an active Promoter without a link and opens Android pairing', async ({ page }) => {
-  const workerEmail = `promoter-${randomUUID()}@synthetic.test`;
   await pool.query("update user_organizations set role='manager' where organization_id=$1 and user_id=$2", [org, actor]);
   try {
     await page.goto('/login');
@@ -115,15 +114,27 @@ test('manager creates an active Promoter without a link and opens Android pairin
     await page.getByRole('button', { name: 'Create field worker' }).click();
     const form = page.getByRole('dialog');
     await form.getByLabel('Employee name').fill('Synthetic promoter');
-    await form.getByLabel('Employee email').fill(workerEmail);
+    await expect(form.getByLabel('Employee email')).toHaveAttribute('required');
     await form.getByLabel('Field role').selectOption('promoter');
+    await expect(form.getByLabel('Employee email (optional)')).not.toHaveAttribute('required');
+    expect((await page.request.post('/api/v1/field-sales/members', { data: {
+      full_name: 'No email officer', email: '', role: 'field_officer',
+    } })).status()).toBe(400);
+    expect((await page.request.post('/api/v1/field-sales/members', { data: {
+      full_name: 'Invalid email promoter', email: 'invalid', role: 'promoter',
+    } })).status()).toBe(400);
     await form.getByRole('button', { name: 'Create and activate' }).click();
     await expect(page.getByRole('dialog', { name: /Android access/ })).toBeVisible();
-    const membership = (await pool.query(`select m.user_id,m.role,m.accepted_at,e.active from user_organizations m
+    const membership = (await pool.query(`select m.user_id,m.role,m.accepted_at,e.active,u.email from user_organizations m
       join field_sales_employees e on e.organization_id=m.organization_id and e.user_id=m.user_id
-      join auth.users u on u.id=m.user_id where m.organization_id=$1 and u.email=$2`, [org, workerEmail])).rows[0];
+      join auth.users u on u.id=m.user_id where m.organization_id=$1 and e.display_name=$2`, [org, 'Synthetic promoter'])).rows[0];
     expect(membership).toMatchObject({ role: 'promoter', active: true });
     expect(membership.accepted_at).not.toBeNull();
+    expect(membership.email).toMatch(/^promoter-[0-9a-f-]+@accounts\.invalid$/);
+    const teamResponse = await page.request.get('/api/v1/team');
+    expect(teamResponse.ok()).toBe(true);
+    const team = await teamResponse.json();
+    expect(team.data.find((member: { user_id: string }) => member.user_id === membership.user_id).email).toBeNull();
     await page.getByRole('dialog', { name: /Android access/ }).getByPlaceholder('Work phone').fill('Synthetic phone');
     await page.getByRole('dialog', { name: /Android access/ }).getByRole('button', { name: 'Create pairing code' }).click();
     await expect(page.getByRole('textbox', { name: 'Pairing code' })).toHaveValue(/^\d{6}$/);

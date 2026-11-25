@@ -77,7 +77,8 @@ export async function GET(_req: NextRequest): Promise<Response> {
       const u = userRes?.user;
       return {
         ...m,
-        email: u?.email ?? null,
+        email: u?.user_metadata?.email_provided === false && u?.user_metadata?.enrollment_method === 'manager_created_field_worker'
+          ? null : u?.email ?? null,
         full_name: (u?.user_metadata?.full_name as string | undefined) ?? null,
         last_sign_in_at: u?.last_sign_in_at ?? null,
       };

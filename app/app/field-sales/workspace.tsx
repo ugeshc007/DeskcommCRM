@@ -79,6 +79,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
   const [activeTab, setActiveTab] = useState('calendar');
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('all');
   const [teamRoleView, setTeamRoleView] = useState<'field_officer' | 'promoter' | 'other'>('field_officer');
+  const [newWorkerRole, setNewWorkerRole] = useState<'field_officer' | 'promoter'>('field_officer');
   const [activityDate, setActivityDate] = useState('');
   const [activityExporting, setActivityExporting] = useState(false);
   const [activityExportError, setActivityExportError] = useState('');
@@ -294,7 +295,7 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
               date={teamDate} loading={teamPresence.isPending} error={Boolean(teamPresence.error)}/>
             {manager && <Button className="mt-3" variant="outline" onClick={() => { setError(''); setCustomerProjectId(p.id); setDialog('customers'); }}>Manage shops and due</Button>}</article>)}</div>
         </TabsContent>
-        <TabsContent value="team" className="space-y-4">{manager && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setError(''); setDialog('create_member'); }}><Plus aria-hidden/>Create field worker</Button><Button asChild variant="outline"><Link href="/app/team/invite">Invite other role</Link></Button><Button variant="outline" onClick={() => setDialog('employee')}>Enroll existing member</Button></div>}
+        <TabsContent value="team" className="space-y-4">{manager && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { setError(''); setNewWorkerRole('field_officer'); setDialog('create_member'); }}><Plus aria-hidden/>Create field worker</Button><Button asChild variant="outline"><Link href="/app/team/invite">Invite other role</Link></Button><Button variant="outline" onClick={() => setDialog('employee')}>Enroll existing member</Button></div>}
           <p className="text-sm text-muted-foreground">Enrollment does not start tracking. Staff must punch in from their authorized Android app.</p>
           <section className="space-y-3" aria-label={selectedTeamRoleView === 'promoter' ? 'Promoter attendance' : selectedTeamRoleView === 'other' ? 'Other staff attendance' : 'Field officer attendance'}>
             <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">{selectedTeamRoleView === 'promoter' ? 'Promoters' : selectedTeamRoleView === 'other' ? 'Other enrolled staff' : 'Field officers'} · {teamDate}</h2><span className="text-xs text-muted-foreground">Refreshes every 15 seconds · {timezone}</span></div>
@@ -359,8 +360,9 @@ export function FieldSalesWorkspace({ organizationId, userId }: { organizationId
       {dialog === 'create_member' && <form className="space-y-4" onSubmit={event => void createFieldMember(event)}>
         <p className="text-sm text-muted-foreground">Creates an active Field Officer or Promoter without an invitation link. Verify the employee’s identity before creating the account. The Android pairing screen opens next.</p>
         <Field label="Employee name"><Input name="name" required maxLength={160} autoComplete="name"/></Field>
-        <Field label="Employee email"><Input name="email" type="email" required autoComplete="email"/></Field>
-        <Field label="Field role"><select name="role" className={selectClass} defaultValue="field_officer"><option value="field_officer">Field Officer</option><option value="promoter">Promoter</option></select></Field>
+        <Field label={newWorkerRole === 'promoter' ? 'Employee email (optional)' : 'Employee email'}><Input name="email" type="email" required={newWorkerRole === 'field_officer'} autoComplete="email"/></Field>
+        <Field label="Field role"><select name="role" className={selectClass} value={newWorkerRole} onChange={event => setNewWorkerRole(event.target.value as 'field_officer' | 'promoter')}><option value="field_officer">Field Officer</option><option value="promoter">Promoter</option></select></Field>
+        {newWorkerRole === 'promoter' && <p className="text-xs text-muted-foreground">Email is optional for Promoters using Android pairing. Without an email, they cannot sign in to the web app or receive email invitations.</p>}
         <Button disabled={busy}>Create and activate</Button>
       </form>}
       {dialog === 'customers' && customerProjectId && <div className="space-y-4">

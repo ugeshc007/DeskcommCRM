@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Lead stage aging",
+    "subtitle": "Manager report of open leads stalled in a stage",
+    "output": "lead-stage-aging.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "data",
+      "label": "Tenant records"
+    },
+    {
+      "id": "runtime",
+      "label": "Scoped report"
+    },
+    {
+      "id": "ui",
+      "label": "Manager decision"
+    }
+  ],
+  "mainPath": [
+    "leads",
+    "report",
+    "page"
+  ],
+  "nodes": [
+    {
+      "id": "leads",
+      "lane": "data",
+      "col": 0,
+      "type": "database",
+      "label": "crm_leads",
+      "sublabel": "stage_changed_at stamped by existing trigger"
+    },
+    {
+      "id": "stages",
+      "lane": "data",
+      "col": 0,
+      "type": "database",
+      "label": "crm_stages",
+      "sublabel": "Current stage label"
+    },
+    {
+      "id": "report",
+      "lane": "runtime",
+      "col": 1,
+      "type": "service",
+      "label": "fn_lead_stage_aging",
+      "sublabel": "Security invoker, organization filter, bounded oldest list"
+    },
+    {
+      "id": "page",
+      "lane": "ui",
+      "col": 2,
+      "type": "frontend",
+      "label": "Lead aging",
+      "sublabel": "Manager picks day threshold, opens pipeline"
+    }
+  ],
+  "edges": [
+    {
+      "id": "stage-age",
+      "from": "leads",
+      "to": "report",
+      "label": "Current open stage and entry timestamp"
+    },
+    {
+      "id": "stage-name",
+      "from": "stages",
+      "to": "report",
+      "label": "Tenant-matched stage label"
+    },
+    {
+      "id": "aged-list",
+      "from": "report",
+      "to": "page",
+      "label": "Count and oldest 100 for human follow-up"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "sky",
+      "title": "Scope and return path",
+      "items": [
+        "RLS applies as invoker; explicit organization filter narrows to active tenant.",
+        "Manager chooses a threshold; a stalled lead returns to its pipeline for action.",
+        "Report reads only; lead activity remains the mutation and audit path."
+      ]
+    }
+  ]
+}

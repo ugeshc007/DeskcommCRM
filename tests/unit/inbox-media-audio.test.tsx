@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AudioPlayer } from "@/components/inbox/media/AudioPlayer";

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { ReplySaveTo } from "./graph-schema";
+import { replySaveToSchema, type ReplySaveTo } from "./graph-schema";
 import { latestRepeatIndex, type EnrollmentEventRef } from "./node-handlers";
 
 const MAX_CHARS = 2_000;
@@ -31,6 +31,9 @@ export async function persistirRespostaFollowupSupabase(
   admin: SupabaseClient,
   input: PersistirRespostaInput,
 ): Promise<void> {
+  // Valida novamente na borda de persistência: payload de worker não é contrato só por ter tipo TS.
+  replySaveToSchema.parse(input.save_to);
+  if (input.save_to.kind === 'session_variable') throw new Error('session_variable_requires_atomic_step');
   const value = recorteDaResposta(input.value);
   if (value.length === 0) return;
 
@@ -40,7 +43,7 @@ export async function persistirRespostaFollowupSupabase(
       .update({ name: value, updated_at: new Date().toISOString() })
       .eq("organization_id", input.organization_id)
       .eq("id", input.contact_id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("followup_answer_write_failed");
     return;
   }
 
@@ -52,7 +55,7 @@ export async function persistirRespostaFollowupSupabase(
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (selErr) throw new Error(selErr.message);
+  if (selErr) throw new Error("followup_answer_lookup_failed");
   if (!lead) return;
 
   const prev =
@@ -67,13 +70,15 @@ export async function persistirRespostaFollowupSupabase(
     })
     .eq("organization_id", input.organization_id)
     .eq("id", lead.id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("followup_answer_write_failed");
 }
 
 export async function persistirRespostaFollowupPg(
   query: (sql: string, params: unknown[]) => Promise<unknown>,
   input: PersistirRespostaInput,
 ): Promise<void> {
+  replySaveToSchema.parse(input.save_to);
+  if (input.save_to.kind === 'session_variable') throw new Error('session_variable_requires_atomic_step');
   const value = recorteDaResposta(input.value);
   if (value.length === 0) return;
 
@@ -90,7 +95,7 @@ export async function persistirRespostaFollowupPg(
     `update crm_leads
         set custom_fields = coalesce(custom_fields, '{}'::jsonb) || jsonb_build_object($3::text, to_jsonb($4::text)),
             updated_at = now()
-      where id = (
+      where organization_id = $1 and id = (
         select id from crm_leads
          where organization_id = $1 and contact_id = $2
          order by updated_at desc

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Release rápida sem remover redes de proteção",
+    "subtitle": "feedback focado → gates paralelos → staging versionado → CT102 após adaptador",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "dev", "label": "Desenvolvimento" },
+    { "id": "ci", "label": "GitHub Actions" },
+    { "id": "stage", "label": "Staging isolado" },
+    { "id": "prod", "label": "CT102" }
+  ],
+  "mainPath": ["changed", "full", "images", "staging", "release", "smoke"],
+  "nodes": [
+    { "id": "changed", "lane": "dev", "col": 0, "type": "service", "label": "test:changed", "sublabel": "Vitest relacionado + shell quando aplicável" },
+    { "id": "full", "lane": "ci", "col": 1, "type": "service", "label": "Gates paralelos", "sublabel": "unit · RLS/DB · browser · Android · build" },
+    { "id": "images", "lane": "ci", "col": 2, "type": "service", "label": "Imagens amd64", "sublabel": "app + worker + scheduler · cache Buildx" },
+    { "id": "staging", "lane": "stage", "col": 3, "type": "service", "label": "release-safe.sh", "sublabel": "tag, compose e migrations de instalação com Git" },
+    { "id": "release", "lane": "prod", "col": 4, "type": "service", "label": "CT102: adaptador pendente", "sublabel": "snapshot sem Git; ainda não usar release-safe.sh" },
+    { "id": "smoke", "lane": "prod", "col": 5, "type": "service", "label": "Smoke pós-deploy", "sublabel": "login · WhatsApp · Field Sales · Live View" },
+    { "id": "rollback", "lane": "prod", "col": 6, "type": "service", "label": "Rollback automático", "sublabel": "imagem anterior + novo smoke; dump preservado" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "changed", "to": "full", "label": "feedback curto passou", "route": "highlight" },
+    { "id": "e2", "from": "full", "to": "images", "label": "todos os gates verdes", "route": "highlight" },
+    { "id": "e3", "from": "images", "to": "staging", "label": "tag imutável", "route": "highlight" },
+    { "id": "e4", "from": "staging", "to": "release", "label": "aprovação do environment", "route": "highlight" },
+    { "id": "e5", "from": "release", "to": "smoke", "label": "serviços reiniciados", "route": "highlight" },
+    { "id": "e6", "from": "smoke", "to": "rollback", "label": "qualquer falha", "route": "security" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "O que a aceleração nunca remove",
+      "items": [
+        "backup falha fechado antes de migration ou troca de imagem",
+        "isolamento RLS continua num job próprio e paralelo",
+        "health e smoke são consequência medida, não inferência por container healthy",
+        "rollback do app exige versão anterior imutável; sem ela a release é recusada"
+      ]
+    },
+    {
+      "dot": "sky",
+      "title": "Fronteiras",
+      "items": [
+        "staging tem banco separado e restaurável; nunca usa dados de CT102",
+        "secrets SSH ficam no GitHub Environment e host key é pinada",
+        "CT102 atualmente usa snapshot sem Git e imagem app local; a migração para pull por digest é pendente"
+      ]
+    }
+  ]
+}

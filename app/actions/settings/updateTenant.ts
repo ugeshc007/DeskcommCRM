@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { tenantSchema, type TenantInput } from "@/lib/schemas/settings";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
@@ -58,7 +57,7 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
   // Read current settings jsonb to merge `lost_reasons_extra` non-destructively.
   const { data: orgRow, error: readErr } = await supabase
     .from("organizations")
-    .select("settings")
+    .select("settings, onboarding_state")
     .eq("id", activeOrg.orgId)
     .maybeSingle();
   if (readErr) return { ok: false, error: readErr.message };
@@ -68,6 +67,12 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
     ...currentSettings,
     lost_reasons_extra: parsed.data.lost_reasons_extra,
   };
+  const currentOnboarding = (orgRow?.onboarding_state as Record<string, unknown> | null) ?? {};
+  const currentWelcome = (currentOnboarding.welcome as Record<string, unknown> | null) ?? {};
+  const nextOnboarding = parsed.data.country_code ? {
+    ...currentOnboarding,
+    welcome: { ...currentWelcome, country_code: parsed.data.country_code },
+  } : currentOnboarding;
 
   const { error } = await supabase
     .from("organizations")
@@ -76,6 +81,7 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
       legal_name: parsed.data.legal_name,
       cnpj: parsed.data.cnpj ?? null,
       timezone: parsed.data.timezone,
+      ...(parsed.data.country_code ? { onboarding_state: nextOnboarding } : {}),
       locale: parsed.data.locale,
       currency: parsed.data.currency,
       media_retention_days: parsed.data.media_retention_days,

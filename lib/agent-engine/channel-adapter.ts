@@ -1,4 +1,6 @@
 import type { AgentOperationContext } from '@/lib/ai/agents/operation';
+import type { FlowMediaAsset } from '@/lib/messaging/media/flow-media';
+import type { InteractiveMessage } from '@/lib/messaging/interactive';
 import type { JobClaim } from './queue/claim';
 /**
  * Contrato agnóstico de canal (F2-25; blueprint risco nº 1 + veredito executivo).
@@ -26,6 +28,8 @@ export interface ChannelSendInput {
   /** referência da conversa no canal (conversation_id do CRM na v1) */
   conversationId: string;
   body: string;
+  media?: FlowMediaAsset;
+  interactive?: InteractiveMessage;
   /**
    * Presente = este envio é um TEMPLATE aprovado, não texto livre.
    *

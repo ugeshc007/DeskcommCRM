@@ -75,6 +75,16 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "crm_retail_store_assignments", razao: "tests/invariants/retail-lead-events.test.ts — JWT do manager B lê zero atribuições da organização A; agente não pode escrever diretamente." },
+  { tabela: "crm_retail_leads", razao: "tests/invariants/retail-lead-events.test.ts — JWT do vendedor B lê zero perfis de Event ID da organização A; escrita direta negada." },
+  { tabela: "crm_retail_followup_actions", razao: "tests/invariants/retail-lead-events.test.ts — JWT do manager B lê zero ações de follow-up da organização A." },
+  { tabela: "channel_contact_identities", razao: "tests/invariants/native-page-channel.test.ts — SELECT real sob anon/authenticated negado, mesmo para administrador do tenant; ingestão rejeita organização estrangeira." },
+  { tabela: "inbound_dispatch_receipts", razao: "tests/invariants/native-page-channel.test.ts — SELECT real sob anon/authenticated negado; dispatch rejeita mensagem de outra organização e mantém recibo idempotente." },
+  { tabela: "integration_connections", razao: "tests/invariants/integration-ledger.test.ts — JWT de manager lê apenas conexão própria entre duas organizações; viewer não lê nenhuma." },
+  { tabela: "integration_credentials", razao: "tests/invariants/integration-ledger.test.ts — SELECT real sob anon/authenticated é negado, ACLs de escrita revogadas; executor recusa organização estrangeira." },
+  { tabela: "integration_executions", razao: "tests/invariants/integration-ledger.test.ts — SELECT real sob anon/authenticated é negado; ledger valida organização e lease no claim/finish." },
+  { tabela: "integration_oauth_states", razao: "tests/invariants/integration-management.test.ts — SELECT real sob anon/authenticated é negado; consumo vincula browser e revalida associação ativa." },
+  { tabela: "billing_webhook_receipts", razao: "tests/invariants/saas-subscription-ledger.test.ts — administrador autenticado não lê recibos globais nem executa ingestão; referência desconhecida não escolhe tenant." },
   {
     tabela: "organization_subscriptions",
     razao:

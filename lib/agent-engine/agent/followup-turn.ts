@@ -1,6 +1,10 @@
 import {claimOfJob,type JobClaim} from "../queue/claim";
 import {resultadoDoEnvioDoFollowup} from "../edge/crm/send-ledger";
 import { parseServiceBoundary } from "@/lib/atendimento/fronteira";
+import { flowMediaAssetSchema, type FlowMediaAsset } from "@/lib/messaging/media/flow-media";
+import { interactiveMessageSchema, type InteractiveMessage } from '@/lib/messaging/interactive';
+import { reconcileAcceptedSend } from "../edge/crm/send-ledger";
+import { rescheduleJob } from "../queue/queue";
 import { requireCurrentServiceBoundary } from "@/lib/atendimento/fronteira-server";
 /**
  * Handler do job `followup_turn` (F3-03; blueprint 1.3) — a peça BUILD da
@@ -78,6 +82,8 @@ export const followupTurnPayloadSchema = z
     prompt_hint: z.string().optional(),
     /** action mode `text` — enviado pela cadeia de guardrails, sem LLM. */
     fixed_body: z.string().min(1).max(4000).optional(),
+    media_assets: z.array(flowMediaAssetSchema).min(1).max(10).optional(),
+    interactive: interactiveMessageSchema.optional(),
     /** action mode `template` — corpo em `message_templates`. */
     template_id: z.string().uuid().optional(),
     volta_index: z.number().int().optional(),
@@ -97,7 +103,10 @@ export const followupTurnPayloadSchema = z
       )
       .optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine(payload => !payload.interactive || (!!payload.fixed_body && !payload.media_assets && !payload.template_id && payload.purpose === 'send_message'), {
+    message: 'Interactive jobs require a fixed message and cannot mix media or templates.',
+  });
 
 /** Resultado de um turno dirigido por fluxo — espelha `TurnResult` de lib/followup/turn-bridge.ts
  *  (agent-engine não importa followup/* — regra dura de dependência numa direção só). */
@@ -269,6 +278,8 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         purpose: payload.purpose,
         promptHint: payload.prompt_hint,
         fixedBody: payload.fixed_body,
+        mediaAssets: payload.media_assets,
+        interactive: payload.interactive,
         templateId: payload.template_id,
         voltaIndex: payload.volta_index,
         voltaTotal: payload.volta_total,
@@ -336,6 +347,8 @@ async function runFlowDrivenTurn(
     purpose: 'send_message' | 'classify' | 'plan_timing' | undefined;
     promptHint: string | undefined;
     fixedBody: string | undefined;
+    mediaAssets: FlowMediaAsset[] | undefined;
+    interactive?: InteractiveMessage;
     templateId: string | undefined;
     voltaIndex: number | undefined;
     voltaTotal: number | undefined;
@@ -357,10 +370,27 @@ async function runFlowDrivenTurn(
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: target.tenantId, lead_id: target.leadId, enrollment_id: enrollmentId });
 
   if (input.purpose === 'send_message') {
+    if (input.mediaAssets) {
+      for (const [index, asset] of input.mediaAssets.entries()) {
+        const seq = index * 2 + 2; // odd slot reserved for an audio's accompanying text/disclosure
+        // A retry must not reevaluate send limits for files already accepted by the channel.
+        if (await reconcileAcceptedSend(pool, { tenantId: target.tenantId, jobId: job.id, seq })) continue;
+        const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, asset.caption, false, { asset, seq });
+        if (sent === 'deferred') return;
+        if (sent === 'skipped') {
+          await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId,
+            enrollmentId, nodeId, result: { kind: 'skipped', reason: 'Media delivery stopped by conversation safeguards.' } });
+          return;
+        }
+      }
+      await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId,
+        enrollmentId, nodeId, result: { kind: 'sent' } });
+      return;
+    }
     const body = await resolveFlowSendBody(pool, target.tenantId, input);
     if (body !== null) {
       // Texto do operador: sem camada semântica (ver o cabeçalho de sendFixedOutbound).
-      const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false);
+      const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false, undefined, input.interactive);
       if (sent === 'sent') {
         await complete(pool, { jobId:job.id,jobClaim:claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'sent' } });
       } else if(sent === 'skipped') {
@@ -544,6 +574,8 @@ async function sendFixedOutbound(
   body: string,
   /** `true` só na re-entrada por template — ver o cabeçalho. */
   comCamadaSemantica: boolean,
+  media?: { asset: FlowMediaAsset; seq: number },
+  interactive?: InteractiveMessage,
 ): Promise<"sent" | "deferred" | "skipped"> {
   const { tenantId, leadId, channelSessionId, conversationId } = target;
   const runLog = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId });
@@ -601,11 +633,31 @@ async function sendFixedOutbound(
             ),
         }
       : {}),
-    send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq: 1, conversationId, body: finalBody }),
+    send: async (finalBody) => {
+      const base = { tenantId, leadId, jobId: job.id, jobClaim: claimOfJob(job), conversationId };
+      if (media?.asset.kind === 'audio' && finalBody.trim()) {
+        // WhatsApp audio has no caption. Preserve mandatory disclosure as a separate, ledgered text.
+        const textResult = await channel.send({ ...base, seq: media.seq - 1, body: finalBody });
+        if (textResult.kind !== 'sent' && textResult.kind !== 'already_sent') return textResult;
+      }
+      if (media && media.asset.kind !== 'audio' && finalBody.length > 1024)
+        throw new Error('flow_media_caption_too_long_after_safeguards');
+      return channel.send({ ...base, seq: media?.seq ?? 1,
+        ...(interactive ? { interactive } : {}),
+        body: media?.asset.kind === 'audio' ? '' : finalBody, ...(media ? { media: media.asset } : {}) });
+    },
   });
 
   if (chain.status === 'vetoed') {
     if (chain.code === 'outside_window' && chain.nextAllowedAt !== undefined) {
+      if (media) {
+        // Keep job identity + per-file ledger across a partial album pause.
+        await rescheduleJob(pool, job.id, ctx.workerId, {
+          acquiredAt: claimOfJob(job)?.acquired_at, delayMs: Math.max(0, chain.nextAllowedAt.getTime() - clock().getTime()),
+          reason: 'Media delivery waiting for allowed sending time.',
+        });
+        throw new JobSettledError('Media delivery deferred without changing its send identity.');
+      }
       await rescheduleReentry(pool, {
         tenantId,
         leadId,

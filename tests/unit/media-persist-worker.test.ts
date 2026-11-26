@@ -105,10 +105,33 @@ describe("persistMessageMedia", () => {
     );
   });
 
-  it("pula mensagem já persistida (idempotência)", async () => {
+  it("retoma a derivação da mensagem já persistida sem novo upload", async () => {
     messageRow.media_storage_path = "org1/conv1/msg1.jpg";
     const result = await persistMessageMedia(eventRow());
-    expect(result.status).toBe("skipped");
+    expect(result.status).toBe("ok");
+    expect(uploadMock).not.toHaveBeenCalled();
+    expect(rpcMock).toHaveBeenCalledWith("emit_event", expect.objectContaining({
+      p_event_type: "media.derive_requested", p_entity_id: "msg1", p_organization_id: "org1",
+    }));
+  });
+
+  it("retry de enqueue não perde os bytes nem revela o erro do provider", async () => {
+    rpcMock.mockResolvedValueOnce({ error: { message: "private provider failure" } });
+    expect(await persistMessageMedia(eventRow())).toMatchObject({
+      status: "error", detail: "media_derivation_enqueue_failed",
+    });
+    messageRow.media_storage_path = "org1/conv1/msg1.jpg";
+    uploadMock.mockClear();
+    expect(await persistMessageMedia(eventRow(1))).toMatchObject({ status: "ok" });
+    expect(uploadMock).not.toHaveBeenCalled();
+  });
+
+  it("falha de transporte ao enfileirar continua recuperável", async () => {
+    messageRow.media_storage_path = "org1/conv1/msg1.jpg";
+    rpcMock.mockRejectedValueOnce(new Error("private provider failure"));
+    expect(await persistMessageMedia(eventRow(1))).toMatchObject({
+      status: "error", detail: "media_derivation_enqueue_failed",
+    });
     expect(uploadMock).not.toHaveBeenCalled();
   });
 

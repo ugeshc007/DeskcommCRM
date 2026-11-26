@@ -16,7 +16,9 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
-import { loadAuthUser } from "@/lib/auth/server";
+import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isServiceRoleConfigured } from "@/lib/audit";
 import { traduzir } from "@/lib/i18n/dicionario";
 import {
   roteiaProximasAcoes,
@@ -358,6 +360,8 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
   const authUser = await loadAuthUser();
+  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
+  if (!activeOrg) return fail("forbidden_tenant", "No active organization.", 403, { requestId });
   const t = (texto: string) => traduzir(texto, authUser?.idioma ?? "pt-BR");
 
   const [
@@ -365,18 +369,24 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     { data: stages, error: stagesErr },
     { data: leads, error: leadsErr },
   ] = await Promise.all([
-    supabase.from("crm_pipelines").select("*").eq("id", pipelineId).maybeSingle(),
+    supabase.from("crm_pipelines").select("*").eq("organization_id", activeOrg.orgId).eq("id", pipelineId).maybeSingle(),
     supabase
       .from("crm_stages")
       .select("*")
+      .eq("organization_id", activeOrg.orgId)
       .eq("pipeline_id", pipelineId)
       .eq("is_archived", false)
       .order("position"),
     supabase
       .from("crm_leads")
-      .select("*")
+      .select("*, recent_notes:crm_lead_activities!crm_lead_activities_lead_id_fkey(id, reason, performed_at, performed_by_user_id)")
+      .eq("organization_id", activeOrg.orgId)
       .eq("pipeline_id", pipelineId)
       .neq("status", "archived")
+      .eq("recent_notes.type", "note")
+      .order("performed_at", { referencedTable: "recent_notes", ascending: false })
+      .order("id", { referencedTable: "recent_notes", ascending: false })
+      .limit(1, { referencedTable: "recent_notes" })
       .order("position_in_stage"),
   ]);
 
@@ -385,10 +395,37 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (leadsErr) return fail("internal_error", leadsErr.message, 500, { requestId });
   if (!pipeline) return fail("resource_not_found", t("Pipeline não encontrado."), 404, { requestId });
 
+  type Nota = { id: string; reason: string | null; performed_at: string; performed_by_user_id: string | null };
+  const leadRows = (leads ?? []) as Array<Lead & { recent_notes?: Nota[] }>;
+  const noteAuthorIds = [...new Set(leadRows.flatMap((lead) =>
+    lead.recent_notes?.[0]?.performed_by_user_id ? [lead.recent_notes[0].performed_by_user_id] : [],
+  ))];
+  const authorNames = new Map<string, string>();
+  if (noteAuthorIds.length > 0 && isServiceRoleConfigured()) {
+    const admin = createAdminClient();
+    await Promise.all(noteAuthorIds.map(async (id) => {
+      const { data } = await admin.auth.admin.getUserById(id);
+      const name = data?.user?.user_metadata?.full_name;
+      if (typeof name === "string" && name.trim()) authorNames.set(id, name.trim());
+    }));
+  }
+  const leadsWithNotes: Lead[] = leadRows.map(({ recent_notes, ...lead }) => {
+    const note = recent_notes?.[0];
+    return {
+      ...lead,
+      recent_note: note ? {
+        id: note.id,
+        text: note.reason ?? "",
+        at: note.performed_at,
+        by: note.performed_by_user_id ? (authorNames.get(note.performed_by_user_id) ?? null) : null,
+      } : null,
+    };
+  });
+
   const leadsWithOwner = await withOwnerAgents(
     supabase,
     (pipeline as Pipeline).organization_id,
-    (leads ?? []) as Lead[],
+    leadsWithNotes,
   );
   if (leadsWithOwner.error) {
     return fail("internal_error", leadsWithOwner.error, 500, { requestId });

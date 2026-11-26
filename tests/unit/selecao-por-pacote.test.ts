@@ -41,6 +41,13 @@ const FIXTURE: ReadonlyArray<CapacidadeSelecionavel> = [
 ];
 
 describe("o que um pacote liga", () => {
+  it("módulos opt-in não entram no onboarding nem no toggle genérico", () => {
+    const optional: CapacidadeSelecionavel = { name: 'store_optional', risco: 'seguro', pacotes: ['vender'], opt_in_only: true };
+    expect(ligarPacote([], [optional], 'vender')).toEqual([]);
+    expect(ligarPacote(['store_optional'], [optional], 'vender')).toEqual(['store_optional']);
+    expect(capacidadesAutomaticasDoPacote(TOOL_CATALOG, 'vender')).not.toContain('crm_quote_store_checkout');
+    expect(capacidadesAutomaticasDoPacote(TOOL_CATALOG, 'vender')).not.toContain('crm_search_store_products');
+  });
   it("as automáticas do pacote deixam a crítica de fora", () => {
     expect(capacidadesAutomaticasDoPacote(FIXTURE, "atender")).toEqual([
       "ler_a",

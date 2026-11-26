@@ -70,6 +70,20 @@ function fakeDb(pointer: Row) {
 }
 
 describe("enrollFollowupFlow", () => {
+  it.each([
+    { organization_id: "another-org", contact_id: CONTACT },
+    { organization_id: ORG, contact_id: "another-contact" },
+  ])("rejects a boundary outside the enrollment identity: %j", async (identity) => {
+    const db = fakeDb({ id: POINTER, organization_id: ORG, status: "active", active_version_id: VERSION });
+    const from = vi.spyOn(db, "from");
+    const result = await enrollFollowupFlow(db as never, {
+      organizationId: ORG, pointerId: POINTER, contactId: CONTACT,
+      actorUserId: null, requestId: "boundary-test",
+      resolveServiceBoundary: async () => ({ ...identity, conversation_id: "conv-1", service_revision: 1, demanda_id: null, demanda_revision: null }),
+    });
+    expect(result).toMatchObject({ ok: false, code: "not_found" });
+    expect(from).not.toHaveBeenCalledWith("followup_enrollments");
+  });
   it("inscreve contato em fluxo ativo publicado", async () => {
     const db = fakeDb({
       id: POINTER,

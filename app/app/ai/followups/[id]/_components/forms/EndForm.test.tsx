@@ -6,7 +6,8 @@
  *
  * `tests/e2e/followup-journey.spec.ts` escolhe "Convertido" pelo nome exato.
  */
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { render } from '@/tests/helpers/render-portuguese';
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it } from "vitest";
 

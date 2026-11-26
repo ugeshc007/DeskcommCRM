@@ -335,6 +335,8 @@ export function descreveEvento(
   const cliente = { onde, autor: "cliente" as const };
 
   switch (evento.event_type) {
+    case 'variable_set':
+      return { titulo: 'Session variable updated', detalhe: texto(p.key) ? `${texto(p.key)} · ${texto(p.value_type) ?? ''}` : null, ...motor };
     case "node_advanced":
       return { titulo: "Seguiu em frente", detalhe: `foi para ${refDoNo(texto(p.next_node_id), nos)}`, ...motor };
     case "wait_started": {

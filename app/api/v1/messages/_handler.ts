@@ -1,4 +1,6 @@
 import { assertAgentOperationSupabase } from "@/lib/ai/agents/operation";
+import { supportsInteractiveChoices } from '@/lib/channels/capabilities';
+import { interactiveMessageSchema } from '@/lib/messaging/interactive';
 import {
   assertApprovedReplySupabase,
   recordApprovedReplyReceiptSupabase,
@@ -314,12 +316,14 @@ export async function sendMessageHandler(
       supabase
         .from("conversations")
         .select(convSelect(true))
+        .eq('organization_id', ctx.organization_id)
         .eq("id", input.conversation_id)
         .maybeSingle(),
     () =>
       supabase
         .from("conversations")
         .select(convSelect(false))
+        .eq('organization_id', ctx.organization_id)
         .eq("id", input.conversation_id)
         .maybeSingle(),
   );
@@ -357,6 +361,14 @@ export async function sendMessageHandler(
   };
   const c = conv as unknown as Joined;
 
+  const interactive = input.interactive === undefined ? undefined : interactiveMessageSchema.safeParse(input.interactive);
+  if (interactive && (!interactive.success || input.type !== 'text' || !input.body?.trim() || input.body.length > 1024 || input.media_url || input.media_storage_path)) {
+    throw new ApiError(422, 'validation_error', undefined, ctx.requestId, 'Invalid interactive message.');
+  }
+  if (interactive && !supportsInteractiveChoices(c.channel_sessions?.provider)) {
+    throw new ApiError(422, 'validation_error', undefined, ctx.requestId, 'This channel does not support native buttons or lists.');
+  }
+
   if (c.contacts?.is_blocked) {
     throw new ApiError(
       403,
@@ -382,6 +394,17 @@ export async function sendMessageHandler(
 
   let outboundBody = input.body ?? null;
   let outboundMetadata: Record<string, unknown> = { ...(input.metadata ?? {}) };
+  // Identidade do prompt vem do contexto interno, nunca do metadata público.
+  delete outboundMetadata.followup_enrollment_id;
+  delete outboundMetadata.followup_node_id;
+  delete outboundMetadata.interactive;
+  if (interactive?.success) {
+    outboundMetadata.interactive = interactive.data;
+    if (ctx.proactiveContext?.enrollmentId && ctx.proactiveContext.nodeId) {
+      outboundMetadata.followup_enrollment_id = ctx.proactiveContext.enrollmentId;
+      outboundMetadata.followup_node_id = ctx.proactiveContext.nodeId;
+    }
+  }
 
   if (input.type === "contact") {
     const sharedId = input.metadata?.shared_contact_id;
@@ -530,7 +553,7 @@ export async function sendMessageHandler(
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
-      ...(input.metadata ?? {}),
+      ...outboundMetadata,
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
     },
   };
@@ -576,6 +599,7 @@ export async function sendMessageHandler(
   // e ainda assim mantido para não trocar o desfecho desse ramo defensivo.
   const adapter = getAdapter(c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER);
   const chatId = adapter.resolveRecipient({
+    providerConversationId: c.provider_conversation_id,
     isGroup: c.is_group,
     groupChatId: c.group_chat_id,
     phoneNumber: c.contacts?.phone_number,
@@ -791,6 +815,7 @@ export async function sendMessageHandler(
           providerConversationId: c.provider_conversation_id,
           kind: input.type,
           body: input.body ?? "",
+          ...(interactive?.success ? { interactive: interactive.data } : {}),
           replyToExternalId: citada?.external_id ?? null,
         }));
       }

@@ -1,7 +1,7 @@
 ---
 impacto: capacidade_nova
 secao: alterado
-titulo: Sem email
+titulo: Equipe
 ---
 
-Promotor usa Android.
+Promotor sem email; export só ativos.

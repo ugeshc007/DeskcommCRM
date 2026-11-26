@@ -552,6 +552,12 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   await page.getByRole('tab', { name: 'Team', exact: true }).click();
   await page.getByRole('button', { name: /Other staff \(/ }).click();
   await teamAction(page, officerCard, 'Attendance');
+  const inactiveEmployee = randomUUID(), inactiveSession = randomUUID();
+  await pool.query('insert into auth.users(id,email) values($1,$2)', [inactiveEmployee, `${inactiveEmployee}@synthetic.test`]);
+  await pool.query("insert into user_organizations(user_id,organization_id,role,accepted_at) values($1,$2,'agent',now())", [inactiveEmployee, org]);
+  await pool.query("insert into field_sales_employees(organization_id,user_id,display_name,active) values($1,$2,'Inactive salesperson',false)", [org, inactiveEmployee]);
+  await pool.query(`insert into field_sales_sessions(organization_id,id,employee_id,project_id,local_date,status,punched_in_at,punched_out_at,last_event_at)
+    values($1,$2,$3,$4,$5::date,'off_duty',$6,$7,$7)`, [org, inactiveSession, inactiveEmployee, project, day, secondStart, secondEnd]);
   const [teamDownload] = await Promise.all([
     page.waitForEvent('download'), monthly.getByRole('button', { name: 'Export all employees Excel' }).click(),
   ]);
@@ -560,6 +566,7 @@ test('weekly project assignment, scoped activity and narrow-screen layout', asyn
   const workbookManifest = strFromU8(teamArchive['xl/workbook.xml']!);
   expect(workbookManifest).toContain('name="Aardvark salesperson"');
   expect(workbookManifest).toContain('name="Synthetic salesperson"');
+  expect(workbookManifest).not.toContain('Inactive salesperson');
   expect(strFromU8(teamArchive['xl/worksheets/sheet1.xml']!)).toContain('<t>Aardvark salesperson</t>');
   expect(strFromU8(teamArchive['xl/worksheets/sheet2.xml']!)).toContain('<t>Synthetic salesperson</t>');
   await page.screenshot({ path: testInfo.outputPath('field-attendance-team-export.png'), fullPage: true });

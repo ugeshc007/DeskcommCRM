@@ -25,7 +25,10 @@ export async function GET(req: Request) {
     const data = await readFieldOperations(pool, auth.org.orgId, auth.user.id, date,
       query.get('session_id'), query.get('employee_id'), employeeIds.length ? employeeIds : null);
     if (report === 'daily') {
-      const csv = dailyFieldReport(date, data.region.timezone, data.sessions, data.visits);
+      const activeIds = new Set(data.people.filter(person => person.active).map(person => person.user_id));
+      const csv = dailyFieldReport(date, data.region.timezone,
+        data.sessions.filter(session => activeIds.has(session.employee_id)),
+        data.visits.filter(visit => activeIds.has(visit.employee_id)));
       await fieldTransaction(pool, auth.org.orgId, auth.user.id, db => fieldAudit(db, auth.org.orgId, auth.user.id, 'field_sales.daily_report_exported', auth.user.id));
       return ok({ csv, filename: `field-sales-${date}.csv` }, { headers });
     }

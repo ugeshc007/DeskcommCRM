@@ -71,7 +71,7 @@ export async function readAttendanceMonth(pool: Pick<pg.Pool, 'connect'>, org: s
   return reports[0]!;
 }
 
-/** Manager-only, bounded export of the whole enrolled team in one tenant-scoped read. */
+/** Manager-only, bounded export of active team members in one tenant-scoped read. */
 export async function readAttendanceTeamMonth(pool: Pick<pg.Pool, 'connect'>, org: string, actor: string, month: string) {
   return readAttendanceMonths(pool, org, actor, month);
 }
@@ -86,7 +86,7 @@ async function readAttendanceMonths(pool: Pick<pg.Pool, 'connect'>, org: string,
     const sessionLimit = employeeId ? 1000 : 10000;
     const eventLimit = employeeId ? 10000 : 50000;
     const people = (await db.query(`select user_id,display_name,active from public.field_sales_employees
-      where organization_id=$1 ${employeeId ? 'and user_id=$2' : ''}
+      where organization_id=$1 ${employeeId ? 'and user_id=$2' : 'and active=true'}
       order by display_name,user_id limit ${employeeId ? '2' : '201'}`, employeeId ? [org, employeeId] : [org])).rows;
     if (people.length > 200) throw new Error('field_operations_too_large');
     if (!people.length && employeeId) throw new Error('field_forbidden');

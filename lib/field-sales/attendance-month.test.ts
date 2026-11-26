@@ -128,4 +128,12 @@ describe('team monthly attendance workbook', () => {
     await expect(readAttendanceTeamMonth(pool as never, org, officer, '2026-09')).rejects.toThrow('field_forbidden');
     expect(query.mock.calls.some(([sql]) => sql.includes('from public.field_sales_employees'))).toBe(false);
   });
+
+  it('selects only active employees for the all-employees export', async () => {
+    const { pool, query } = fakePool('manager');
+    await readAttendanceTeamMonth(pool as never, org, manager, '2026-09');
+    const employeeQuery = query.mock.calls.find(([sql]) => sql.includes('from public.field_sales_employees'))!;
+    expect(employeeQuery[0]).toContain('where organization_id=$1 and active=true');
+    expect(employeeQuery[1]).toEqual([org]);
+  });
 });
